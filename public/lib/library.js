@@ -7,7 +7,6 @@ const path = require("path");
 const runCron = require("./run_cron/crons.js");
 // const auth = require('./authentication/connect.js');
 
-const { sendNotification } = require("./firebase_notification/fb_connect.js");
 // var fs = require('fs');
 // const fetch = require('node-fetch');
 // const db_connector = require('./connect_db/config.js');

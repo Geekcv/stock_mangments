@@ -89,7 +89,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 });
 
 app.get("/createUsers", () => {
-  console.log("connection ..................");
+  console.log("Stock Mangement System Backend live  ..................");
 });
 
 app.listen(PORT, function () {

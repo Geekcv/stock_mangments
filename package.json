@@ -7,13 +7,7 @@
     "start": "nodemon server.js"
   },
   "keywords": [],
-  "author": "FINTECH IT SOLUTIONS LLP",
-  "contributors": [
-    {
-      "name": "Aafreen Ali",
-      "email": "aafreen.fintech@gmail.com"
-    }
-  ],
+  "author": "Abhishek",
   "license": "ISC",
   "dependencies": {
     "aes256": "^1.0.4",

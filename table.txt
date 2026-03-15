@@ -1,0 +1,115 @@
+CREATE TABLE prosys.organization_payment (
+    id SERIAL NOT NULL,
+    row_id TEXT NOT NULL PRIMARY KEY,
+    bill_start_date DATE ,
+    per_month_billing text ,
+    payment_status int DEFAULT 0,  
+	organizationid text,
+    cr_on timestamp without time zone DEFAULT now() NOT NULL,
+    up_on timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+INSERT INTO prosys.organization_payment (row_id, organizationid)
+VALUES 
+  ('1756354505352_S5F0', '1739802996750_AcRb'),
+  ('1756367507551_YuK7', '1739861234068_66iA'),
+  ('1756367560559_eDBj', '1753174292745_lpjf'),
+  ('1756367767949_w3o4', '1753699978321_VsdS'),
+  ('1756367823023_hbHk', '1754890641170_1LKY'),
+  ('1756367879470_YujL', '1754990058095_eJVz'),
+  ('1756367896543_zLvZ', '1755330557069_8jFK'),
+  ('1756721794238_E5NO', '1755358119167_PZSK'),
+  ('1756793258383_LM3t', '1755503281599_jE3Z'),
+  ('1756793373282_umkE', '1755603805338_78xZ'),
+  ('1756794041606_nyhI', '1756045118497_rFsP'),
+  ('1756797392964_grMF', '1756191731327_jiOU');
+
+
+  INSERT INTO prosys.users (name,email,password,mobilenumber,organizationid,role,row_id)
+VALUES ('admin','admin@gmail.com','1234','4589123456',0,9,'1756805284438_no3w');
+
+
+  CREATE TABLE prosys.whatsapp_log (
+    id SERIAL NOT NULL,
+    row_id TEXT NOT NULL PRIMARY KEY,
+    mobilenumber TEXT,
+    receiver_user TEXT,
+    template_name TEXT,
+    request_data JSONB ,
+    response_data JSONB,
+    status TEXT DEFAULT 'PENDING',
+    others_details JSONB,
+    organizationid text
+    cr_on timestamp without time zone DEFAULT now() NOT NULL,
+    up_on timestamp without time zone DEFAULT now() NOT NULL,
+);
+
+
+
+ALTER TABLE prosys.whatsapp_log
+ADD COLUMN others_details JSONB;
+
+ALTER TABLE prosys.whatsapp_log
+RENAME COLUMN username TO receiver_user;
+
+
+--------------------not deploy -----------
+
+ALTER TABLE prosys.whatsapp_log
+ADD COLUMN organizationid text;
+
+
+
+
+
+
+
+  CREATE TABLE prosys.imported_task_history (
+    id SERIAL NOT NULL,
+    row_id TEXT NOT NULL PRIMARY KEY,
+    organizationid text,
+    validTasks JSONB ,
+    invalidTasks JSONB,   
+    cr_on timestamp without time zone DEFAULT now() NOT NULL,
+    up_on timestamp without time zone DEFAULT now() NOT NULL
+)
+
+
+ALTER TABLE prosys.imported_task_history
+ADD COLUMN validcount int;
+
+ALTER TABLE prosys.imported_task_history
+ADD COLUMN invalidcount int;
+
+
+-------------------  maked new table for status log ------------------
+
+
+
+CREATE TABLE prosys.task_status_logs (
+    id SERIAL NOT NULL,
+    row_id TEXT NOT NULL PRIMARY KEY,
+    task_ids  JSONB,
+    changed_by TEXT NOT NULL,                
+    organizationid TEXT NOT NULL,
+    change_reason TEXT,                    
+	  cr_on timestamp without time zone DEFAULT now() NOT NULL,
+    up_on timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+
+ALTER TABLE prosys.tasks
+ADD COLUMN remarks text;
+
+
+ALTER TABLE prosys.tasks
+ADD COLUMN bulk_id text;
+
+
+
+---- reports work 
+install package 
+- pdfkit
+- moment-timezone

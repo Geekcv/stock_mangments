@@ -40,19 +40,23 @@ let common_fn = {
 
   // shop
   cr_shop:createShop,
+  fe_shop:fetchShops,
 
 
   // counter
   cr_counter:createCounter,
+  fe_counter:fetchCounters,
 
   // supplier
-  cr_supplier:createSupplier
+  cr_supplier:createSupplier,
+  fe_supplier:fetchSuppliers
 };
 
 
 const schema = "sms";
 async function registerUser(req, res) {
-  console.log("request", req);
+  console.log("request",req)
+
   const tablename = schema + ".users";
 
   const name = req.data.name;
@@ -213,6 +217,8 @@ async function loginUser(req, res) {
 
 async function createShop(req, res) {
 
+  console.log("request",req)
+
   const tablename = schema + ".shops";
 
   const shop_name = req.data.shop_name;
@@ -240,6 +246,8 @@ async function createShop(req, res) {
 }
 
 async function createCounter(req, res) {
+  console.log("request",req)
+
 
   const counterTable = schema + ".counters";
   const userTable = schema + ".users";
@@ -292,6 +300,8 @@ async function createCounter(req, res) {
 
 
 async function createSupplier(req, res) {
+  console.log("request",req)
+
 
   const supplierTable = schema + ".suppliers";
   const userTable = schema + ".users";
@@ -339,5 +349,83 @@ async function createSupplier(req, res) {
   return libFunc.sendResponse(res, {
     status: 0,
     msg: "Supplier and supplier login created successfully"
+  });
+}
+
+async function fetchShops(req, res) {
+  console.log("request",req)
+
+  const tablename = schema + ".shops";
+
+  const query = `
+    SELECT 
+      row_id,
+      shop_name,
+      address,
+      cr_on
+    FROM ${tablename}
+    ORDER BY shop_name ASC
+  `;
+
+  const result = await db_query.customQuery(query,"Shop Fetch");
+  console.log("results-->",result)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: result.rows
+  });
+}
+
+
+async function fetchCounters(req, res) {
+  console.log("request",req)
+
+
+  const query = `
+    SELECT
+      c.row_id,
+      c.counter_name,
+      c.location,
+      c.shop_id,
+      s.shop_name
+    FROM ${schema}.counters c
+    LEFT JOIN ${schema}.shops s
+      ON s.row_id = c.shop_id
+    ORDER BY c.counter_name ASC
+  `;
+
+  const result = await db_query.customQuery(query,"Counter fetch");
+  console.log("results-->",result)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: result.rows
+  });
+}
+
+
+async function fetchSuppliers(req, res) {
+  console.log("request",req)
+
+
+  const tablename = schema + ".suppliers";
+
+  const query = `
+    SELECT
+      row_id,
+      supplier_name,
+      phone,
+      email,
+      address
+    FROM ${tablename}
+    ORDER BY supplier_name ASC
+  `;
+
+  const result = await db_query.customQuery(query,"Supplier fetch");
+  console.log("results->",result)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: result.rows
   });
 }

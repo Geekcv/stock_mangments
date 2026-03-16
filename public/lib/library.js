@@ -18,6 +18,7 @@ const ExcelJS = require("exceljs");
 // const moment = require('moment-timezone');
 const queries = require("./connect_db/queries.js");
 const PDFDocument = require("pdfkit");
+const functions = require("./functions.js");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -36,6 +37,16 @@ let common_fn = {
 
   re_user: registerUser,
   lo_ap_us: loginUser,
+
+  // shop
+  cr_shop:createShop,
+
+
+  // counter
+  cr_counter:createCounter,
+
+  // supplier
+  cr_supplier:createSupplier
 };
 
 
@@ -197,4 +208,136 @@ async function loginUser(req, res) {
       msg: "Server error",
     });
   }
+}
+
+
+async function createShop(req, res) {
+
+  const tablename = schema + ".shops";
+
+  const shop_name = req.data.shop_name;
+  const address = req.data.address || "";
+
+  if (!shop_name) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Shop name is required"
+    });
+  }
+
+  const columns = {
+    row_id : libFunc.randomid(),
+    shop_name: shop_name.trim().replaceAll("'", "`"),
+    address: address.trim()
+  };
+
+  const resp = await db_query.addData(
+    tablename,
+    columns
+  );
+
+  return libFunc.sendResponse(res, resp);
+}
+
+async function createCounter(req, res) {
+
+  const counterTable = schema + ".counters";
+  const userTable = schema + ".users";
+
+  const { shop_id, counter_name, location, name, email, phone, password } = req.data;
+
+  if (!shop_id || !counter_name || !name || !email || !phone || !password) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Required fields missing"
+    });
+  }
+
+  const counterRowId = libFunc.randomid();
+
+  const counterColumns = {
+    row_id: counterRowId,
+    shop_id: shop_id.trim(),
+    counter_name: counter_name.trim().replaceAll("'", "`"),
+    location: location ? location.trim() : ""
+  };
+
+  const counterResp = await db_query.addData(counterTable, counterColumns);
+
+  if (counterResp.status !== 0) {
+    return libFunc.sendResponse(res, counterResp);
+  }
+
+  const userColumns = {
+    row_id: libFunc.randomid(),
+    name: name.trim(),
+    email: email.trim(),
+    phone: phone.trim(),
+    password: password.trim(),
+    role: "COUNTER_USER",
+    counter_id: counterRowId
+  };
+
+  const userResp = await db_query.addData(userTable, userColumns);
+
+  if (userResp.status !== 0) {
+    return libFunc.sendResponse(res, userResp);
+  }
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    msg: "Counter and counter user created successfully"
+  });
+}
+
+
+async function createSupplier(req, res) {
+
+  const supplierTable = schema + ".suppliers";
+  const userTable = schema + ".users";
+
+  const { supplier_name, phone, email, address, password } = req.data;
+
+  if (!supplier_name || !email || !phone || !password) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Required fields missing"
+    });
+  }
+
+  const supplierRowId = libFunc.randomid();
+
+  const supplierColumns = {
+    row_id: supplierRowId,
+    supplier_name: supplier_name.trim().replaceAll("'", "`"),
+    phone: phone.trim(),
+    email: email.trim(),
+    address: address ? address.trim() : ""
+  };
+
+  const supplierResp = await db_query.addData(supplierTable, supplierColumns);
+
+  if (supplierResp.status !== 0) {
+    return libFunc.sendResponse(res, supplierResp);
+  }
+
+  const userColumns = {
+    row_id: libFunc.randomid(),
+    name: supplier_name.trim(),
+    email: email.trim(),
+    phone: phone.trim(),
+    password: password.trim(),
+    role: "SUPPLIER"
+  };
+
+  const userResp = await db_query.addData(userTable, userColumns);
+
+  if (userResp.status !== 0) {
+    return libFunc.sendResponse(res, userResp);
+  }
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    msg: "Supplier and supplier login created successfully"
+  });
 }

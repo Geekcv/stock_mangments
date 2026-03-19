@@ -32,30 +32,40 @@ module.exports = function () {
 let common_fn = {
   /**
    * New API Creation
-   * 
+   *
    */
 
   re_user: registerUser,
   lo_ap_us: loginUser,
 
   // shop
-  cr_shop:createShop,
-  fe_shop:fetchShops,
-
+  cr_shop: createShop,
+  fe_shop: fetchShops,
 
   // counter
-  cr_counter:createCounter,
-  fe_counter:fetchCounters,
+  cr_counter: createCounter,
+  fe_counter: fetchCounters,
 
   // supplier
-  cr_supplier:createSupplier,
-  fe_supplier:fetchSuppliers
-};
+  cr_supplier: createSupplier,
+  fe_supplier: fetchSuppliers,
 
+  // Department
+  cr_dep: createDepartment,
+  fe_dep:fetchDepartments,
+
+  //Category
+  cr_cat:createCategory,
+  fe_cat:fetchAllCategories,
+
+  // Products
+  cr_sweets:createSweet,
+  fe_sweets:fetchAllSweets
+};
 
 const schema = "sms";
 async function registerUser(req, res) {
-  console.log("request",req)
+  console.log("request", req);
 
   const tablename = schema + ".users";
 
@@ -214,10 +224,8 @@ async function loginUser(req, res) {
   }
 }
 
-
 async function createShop(req, res) {
-
-  console.log("request",req)
+  console.log("request", req);
 
   const tablename = schema + ".shops";
 
@@ -227,37 +235,34 @@ async function createShop(req, res) {
   if (!shop_name) {
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Shop name is required"
+      msg: "Shop name is required",
     });
   }
 
   const columns = {
-    row_id : libFunc.randomid(),
+    row_id: libFunc.randomid(),
     shop_name: shop_name.trim().replaceAll("'", "`"),
-    address: address.trim()
+    address: address.trim(),
   };
 
-  const resp = await db_query.addData(
-    tablename,
-    columns
-  );
+  const resp = await db_query.addData(tablename, columns);
 
   return libFunc.sendResponse(res, resp);
 }
 
 async function createCounter(req, res) {
-  console.log("request",req)
-
+  console.log("request", req);
 
   const counterTable = schema + ".counters";
   const userTable = schema + ".users";
 
-  const { shop_id, counter_name, location, name, email, phone, password } = req.data;
+  const { shop_id, counter_name, location, name, email, phone, password } =
+    req.data;
 
   if (!shop_id || !counter_name || !name || !email || !phone || !password) {
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Required fields missing"
+      msg: "Required fields missing",
     });
   }
 
@@ -267,7 +272,7 @@ async function createCounter(req, res) {
     row_id: counterRowId,
     shop_id: shop_id.trim(),
     counter_name: counter_name.trim().replaceAll("'", "`"),
-    location: location ? location.trim() : ""
+    location: location ? location.trim() : "",
   };
 
   const counterResp = await db_query.addData(counterTable, counterColumns);
@@ -283,7 +288,7 @@ async function createCounter(req, res) {
     phone: phone.trim(),
     password: password.trim(),
     role: "COUNTER_USER",
-    counter_id: counterRowId
+    counter_id: counterRowId,
   };
 
   const userResp = await db_query.addData(userTable, userColumns);
@@ -294,14 +299,12 @@ async function createCounter(req, res) {
 
   return libFunc.sendResponse(res, {
     status: 0,
-    msg: "Counter and counter user created successfully"
+    msg: "Counter and counter user created successfully",
   });
 }
 
-
 async function createSupplier(req, res) {
-  console.log("request",req)
-
+  console.log("request", req);
 
   const supplierTable = schema + ".suppliers";
   const userTable = schema + ".users";
@@ -311,7 +314,7 @@ async function createSupplier(req, res) {
   if (!supplier_name || !email || !phone || !password) {
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Required fields missing"
+      msg: "Required fields missing",
     });
   }
 
@@ -322,7 +325,7 @@ async function createSupplier(req, res) {
     supplier_name: supplier_name.trim().replaceAll("'", "`"),
     phone: phone.trim(),
     email: email.trim(),
-    address: address ? address.trim() : ""
+    address: address ? address.trim() : "",
   };
 
   const supplierResp = await db_query.addData(supplierTable, supplierColumns);
@@ -337,7 +340,7 @@ async function createSupplier(req, res) {
     email: email.trim(),
     phone: phone.trim(),
     password: password.trim(),
-    role: "SUPPLIER"
+    role: "SUPPLIER",
   };
 
   const userResp = await db_query.addData(userTable, userColumns);
@@ -348,12 +351,12 @@ async function createSupplier(req, res) {
 
   return libFunc.sendResponse(res, {
     status: 0,
-    msg: "Supplier and supplier login created successfully"
+    msg: "Supplier and supplier login created successfully",
   });
 }
 
 async function fetchShops(req, res) {
-  console.log("request",req)
+  console.log("request", req);
 
   const tablename = schema + ".shops";
 
@@ -367,19 +370,17 @@ async function fetchShops(req, res) {
     ORDER BY shop_name ASC
   `;
 
-  const result = await db_query.customQuery(query,"Shop Fetch");
-  console.log("results-->",result)
+  const result = await db_query.customQuery(query, "Shop Fetch");
+  console.log("results-->", result);
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows
+    data: result.rows,
   });
 }
 
-
 async function fetchCounters(req, res) {
-  console.log("request",req)
-
+  console.log("request", req);
 
   const query = `
     SELECT
@@ -394,19 +395,17 @@ async function fetchCounters(req, res) {
     ORDER BY c.counter_name ASC
   `;
 
-  const result = await db_query.customQuery(query,"Counter fetch");
-  console.log("results-->",result)
+  const result = await db_query.customQuery(query, "Counter fetch");
+  console.log("results-->", result);
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows
+    data: result.rows,
   });
 }
 
-
 async function fetchSuppliers(req, res) {
-  console.log("request",req)
-
+  console.log("request", req);
 
   const tablename = schema + ".suppliers";
 
@@ -421,11 +420,436 @@ async function fetchSuppliers(req, res) {
     ORDER BY supplier_name ASC
   `;
 
-  const result = await db_query.customQuery(query,"Supplier fetch");
-  console.log("results->",result)
+  const result = await db_query.customQuery(query, "Supplier fetch");
+  console.log("results->", result);
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows
+    data: result.rows,
   });
 }
+
+async function createDepartment(req, res) {
+  const tablename = schema + ".departments";
+
+  const department_name = req.data.department_name;
+  const description = req.data.description || "";
+
+  if (!department_name) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Department name is required",
+    });
+  }
+
+  const columns = {
+    row_id: libFunc.randomid(),
+    department_name: department_name.trim().replaceAll("'", "`"),
+    description: description.trim(),
+  };
+
+  const resp = await db_query.addData(tablename, columns);
+
+  return libFunc.sendResponse(res, resp);
+}
+
+
+async function fetchDepartments(req, res) {
+
+  const table = `${schema}.departments`;
+
+  const sql = `
+    SELECT
+      d.row_id,
+      d.department_name,
+      d.description,
+      d.cr_on
+    FROM ${table} d
+    ORDER BY d.department_name
+  `;
+
+  const dbRes = await db_query.customQuery(sql, "Fetch Departments");
+  console.log("dbres",dbRes)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: dbRes || []
+  });
+}
+
+async function createCategory(req, res) {
+  const tablename = schema + ".categories";
+
+  const department_id = req.data.department_id;
+  const category_name = req.data.category_name;
+
+  if (!department_id || !category_name) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Department and Category name required",
+    });
+  }
+
+  const columns = {
+    row_id: libFunc.randomid(),
+    department_id: department_id.trim(),
+    category_name: category_name.trim().replaceAll("'", "`"),
+  };
+
+  const resp = await db_query.addData(tablename, columns);
+
+  return libFunc.sendResponse(res, resp);
+}
+
+async function fetchAllCategories(req, res) {
+
+  const sql = `
+    SELECT
+      c.row_id,
+      c.category_name,
+      c.department_id,
+      d.department_name,
+      c.cr_on
+    FROM ${schema}.categories c
+    LEFT JOIN ${schema}.departments d
+      ON d.row_id = c.department_id
+    ORDER BY c.category_name ASC
+  `;
+
+  const result = await db_query.customQuery(sql, "Fetch All Categories");
+  console.log("results",result)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: result.rows || []
+  });
+}
+
+async function createSweet(req, res) {
+
+  const tablename = schema + ".sweets";
+
+  const category_id = req.data.category_id;
+  const sweet_name = req.data.sweet_name;
+  const shelf_life_days = req.data.shelf_life_days || 0;
+
+  if (!category_id || !sweet_name) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Category and Sweet name required"
+    });
+  }
+
+  const columns = {
+    row_id: libFunc.randomid(),
+    category_id: category_id.trim(),
+    sweet_name: sweet_name.trim().replaceAll("'", "`"),
+    shelf_life_days: shelf_life_days
+  };
+
+  const resp = await db_query.addData(tablename, columns);
+
+  return libFunc.sendResponse(res, resp);
+}
+async function fetchAllSweets(req, res) {
+
+  const sql = `
+    SELECT
+      s.row_id,
+      s.sweet_name,
+      s.shelf_life_days,
+      s.category_id,
+      c.category_name,
+      d.row_id AS department_id,
+      d.department_name,
+      s.cr_on
+    FROM ${schema}.sweets s
+    LEFT JOIN ${schema}.categories c
+      ON c.row_id = s.category_id
+    LEFT JOIN ${schema}.departments d
+      ON d.row_id = c.department_id
+    ORDER BY s.sweet_name ASC
+  `;
+
+  const result = await db_query.customQuery(sql, "Fetch All Sweets");
+  console.log("results",result)
+
+  return libFunc.sendResponse(res, {
+    status: 0,
+    data: result || []
+  });
+}
+
+// async function addInventory(req, res) {
+
+//   const tablename = schema + ".inventory";
+
+//   const counter_id = req.data.counter_id;
+//   const sweet_id = req.data.sweet_id;
+//   const quantity = req.data.quantity || 0;
+//   const expiry_date = req.data.expiry_date || null;
+
+//   if (!counter_id || !sweet_id) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Counter and Sweet required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     counter_id: counter_id.trim(),
+//     sweet_id: sweet_id.trim(),
+//     quantity: quantity,
+//     expiry_date: expiry_date
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function createStockTransaction(req, res) {
+
+//   const tablename = schema + ".stock_transactions";
+
+//   const counter_id = req.data.counter_id;
+//   const sweet_id = req.data.sweet_id;
+//   const transaction_type = req.data.transaction_type;
+//   const quantity = req.data.quantity;
+//   const reference_id = req.data.reference_id || "";
+//   const notes = req.data.notes || "";
+
+//   if (!counter_id || !sweet_id || !transaction_type || !quantity) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Missing required fields"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     counter_id: counter_id.trim(),
+//     sweet_id: sweet_id.trim(),
+//     transaction_type: transaction_type,
+//     quantity: quantity,
+//     reference_id: reference_id,
+//     notes: notes
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function fetchDepartments(req, res) {
+
+//   const query = `
+//     SELECT row_id, department_name
+//     FROM ${schema}.departments
+//     ORDER BY department_name
+//   `;
+
+//   const result = await db_query.customQuery(query);
+
+//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
+// }
+
+// async function fetchCategories(req, res) {
+
+//   const { department_id } = req.data;
+
+//   const query = `
+//     SELECT row_id, category_name
+//     FROM ${schema}.categories
+//     WHERE department_id='${department_id}'
+//     ORDER BY category_name
+//   `;
+
+//   const result = await db_query.customQuery(query);
+
+//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
+// }
+
+// async function fetchSweets(req, res) {
+
+//   const query = `
+//     SELECT
+//       s.row_id,
+//       s.sweet_name,
+//       c.category_name,
+//       d.department_name
+//     FROM ${schema}.sweets s
+//     LEFT JOIN ${schema}.categories c ON c.row_id = s.category_id
+//     LEFT JOIN ${schema}.departments d ON d.row_id = c.department_id
+//   `;
+
+//   const result = await db_query.customQuery(query);
+
+//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
+// }
+
+// async function createOrder(req, res) {
+
+//   const tablename = schema + ".orders";
+
+//   const counter_id = req.data.counter_id;
+//   const supplier_id = req.data.supplier_id;
+
+//   if (!counter_id || !supplier_id) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Counter and Supplier required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     counter_id: counter_id.trim(),
+//     supplier_id: supplier_id.trim(),
+//     order_status: "PENDING"
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function addOrderItem(req, res) {
+
+//   const tablename = schema + ".order_items";
+
+//   const order_id = req.data.order_id;
+//   const sweet_id = req.data.sweet_id;
+//   const quantity = req.data.quantity;
+
+//   if (!order_id || !sweet_id || !quantity) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Order, Sweet and Quantity required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     order_id: order_id.trim(),
+//     sweet_id: sweet_id.trim(),
+//     quantity: quantity
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function createChalan(req, res) {
+
+//   const tablename = schema + ".chalans";
+
+//   const order_id = req.data.order_id;
+//   const supplier_id = req.data.supplier_id;
+//   const dispatch_date = req.data.dispatch_date;
+//   const transport_details = req.data.transport_details || "";
+
+//   if (!order_id || !supplier_id) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Order and Supplier required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     order_id: order_id.trim(),
+//     supplier_id: supplier_id.trim(),
+//     dispatch_date: dispatch_date,
+//     transport_details: transport_details.trim()
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function createReturn(req, res) {
+
+//   const tablename = schema + ".returns";
+
+//   const order_id = req.data.order_id;
+//   const sweet_id = req.data.sweet_id;
+//   const quantity = req.data.quantity;
+//   const reason = req.data.reason || "";
+
+//   if (!order_id || !sweet_id || !quantity) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Order, Sweet and Quantity required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     order_id: order_id.trim(),
+//     sweet_id: sweet_id.trim(),
+//     quantity: quantity,
+//     reason: reason.trim()
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function createExpiryLog(req, res) {
+
+//   const tablename = schema + ".expiry_logs";
+
+//   const counter_id = req.data.counter_id;
+//   const sweet_id = req.data.sweet_id;
+//   const quantity = req.data.quantity;
+//   const reason = req.data.reason || "Expired";
+
+//   if (!counter_id || !sweet_id || !quantity) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Counter, Sweet and Quantity required"
+//     });
+//   }
+
+//   const columns = {
+//     row_id: libFunc.randomid(),
+//     counter_id: counter_id.trim(),
+//     sweet_id: sweet_id.trim(),
+//     quantity: quantity,
+//     reason: reason.trim()
+//   };
+
+//   const resp = await db_query.addData(tablename, columns);
+
+//   return libFunc.sendResponse(res, resp);
+// }
+
+// async function fetchOrders(req, res) {
+
+//   const query = `
+//     SELECT
+//       o.row_id,
+//       o.order_status,
+//       o.order_date,
+//       c.counter_name,
+//       s.supplier_name
+//     FROM ${schema}.orders o
+//     LEFT JOIN ${schema}.counters c
+//       ON c.row_id = o.counter_id
+//     LEFT JOIN ${schema}.suppliers s
+//       ON s.row_id = o.supplier_id
+//     ORDER BY o.order_date DESC
+//   `;
+
+//   const result = await db_query.runQuery(query);
+
+//   return libFunc.sendResponse(res, {
+//     status: 0,
+//     data: result.rows
+//   });
+// }

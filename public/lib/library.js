@@ -626,10 +626,7 @@ async function fetchCounters(req, res) {
   const result = await db_query.customQuery(query, "Counter fetch");
   console.log("results-->", result);
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: result,
-  });
+  return libFunc.sendResponse(res,result);
 }
 
 async function fetchSuppliers(req, res) {
@@ -651,10 +648,7 @@ async function fetchSuppliers(req, res) {
   const result = await db_query.customQuery(query, "Supplier fetch");
   console.log("results->", result);
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: result,
-  });
+  return libFunc.sendResponse(res, result);
 }
 
 async function createDepartment(req, res) {
@@ -697,10 +691,7 @@ async function fetchDepartments(req, res) {
   const dbRes = await db_query.customQuery(sql, "Fetch Departments");
   console.log("dbres", dbRes);
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: dbRes || [],
-  });
+  return libFunc.sendResponse(res, dbRes);
 }
 
 async function createCategory(req, res) {
@@ -744,10 +735,7 @@ async function fetchAllCategories(req, res) {
   const result = await db_query.customQuery(sql, "Fetch All Categories");
   console.log("results", result);
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: result || [],
-  });
+  return libFunc.sendResponse(res, result);
 }
 
 async function createSweet(req, res) {
@@ -890,10 +878,7 @@ async function fetchAllSweets(req, res) {
     const result = await db_query.customQuery(sql, "Fetch All Sweets");
     console.log("results", result);
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      data: result || [],
-    });
+    return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchAllSweets error:", error);
 

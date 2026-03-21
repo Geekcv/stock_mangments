@@ -1,108 +1,99 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const libFunc = require('./functions.js');
-const path = require('path');
-var atob = require('atob');
-const multer = require('multer');
-var fs = require('fs');
-require('./library.js')();
+const jwt = require("jsonwebtoken");
+const libFunc = require("./functions.js");
+const path = require("path");
+var atob = require("atob");
+const multer = require("multer");
+var fs = require("fs");
+require("./library.js")();
 
 // secret key
 const JWT_SECRET = process.env.JWT_SECRET;
-
-
 
 /**
  * Common Function Commnunication
  */
 
 function verifyToken(req, res, next) {
-  const token = req.headers.authorization.split(' ')[1];
+  const token = req.headers.authorization.split(" ")[1];
   const secret = JWT_SECRET;
 
   jwt.verify(token, secret, function (err, decoded) {
     if (err) {
-      var errr = { "msg": "Invalid Token", "status": 2 };
-      var enErr = btoa((JSON.stringify(errr)));
+      var errr = { msg: "Invalid Token", status: 2 };
+      var enErr = btoa(JSON.stringify(errr));
       res.send(enErr);
     } else {
       req.userId = decoded.userId;
-      req.orgId = decoded.orgId;
       req.role = decoded.role;
-      req.depId = decoded.depId;
+      req.counterId = decoded.counterId;
       req.token = token;
       next();
     }
   });
 }
-const ACUBE_WEBHOOK_SECRET = 'Ip!@zvHbhrAGadjco'
-router.post('/acube-24', async function (req, res) {
+const ACUBE_WEBHOOK_SECRET = "Ip!@zvHbhrAGadjco";
+router.post("/acube-24", async function (req, res) {
   console.log("Acube WEbhook");
   // console.log(req);
   console.log(req.body);
-  if (req.body.type == 'message_api_clicked') {
-
+  if (req.body.type == "message_api_clicked") {
     var messageTemplateData = JSON.parse(req.body.data.message.message);
-    var customerMobile = req.body.data.customer.phone_number
-    await common_fn.markAsDone(messageTemplateData, customerMobile,res);
+    var customerMobile = req.body.data.customer.phone_number;
+    await common_fn.markAsDone(messageTemplateData, customerMobile, res);
   } else {
     res.status(200).json({
-      message: 'Done',
-
+      message: "Done",
     });
   }
-})
+});
 
-
-router.post('/', verifyToken, function (req, res, next) {
-  let data = JSON.parse((atob(req.body.payload)));
+router.post("/", verifyToken, function (req, res, next) {
+  let data = JSON.parse(atob(req.body.payload));
   // console.log("data=======direct=====");
   console.log(data);
   data.data.userId = req.userId;
-  data.data.orgId = req.orgId;
-  data.data.user_role = req.role;//if loggedin user is admin or dept admin then needed
+  data.data.user_role = req.role; //if loggedin user is admin or dept admin then needed
   data.data.token = req.token;
-  data.data.depId = req.depId;
-  let fn = "common_fn", se = data.se;
+  data.data.counterId = req.counterId;
+  let fn = "common_fn",
+    se = data.se;
 
-  eval(fn + '.' + se)(data, res);
+  eval(fn + "." + se)(data, res);
 });
-router.post('/create-user', function (req, res, next) {
+router.post("/create-user", function (req, res, next) {
   // console.log(req);
-  let data = JSON.parse(((atob(req.body.payload))));
+  let data = JSON.parse(atob(req.body.payload));
   // console.log("data========createuser====");
   // console.log(data);
   // data.data.userId = req.userId;
   // data.data.token = req.token;
-  let fn = "common_fn", se = data.se;
+  let fn = "common_fn",
+    se = data.se;
   // let fn = data.fn, se = data.se;
-  eval(fn + '.' + se)(data, res);
+  eval(fn + "." + se)(data, res);
 });
 
 //==========================================================================================//
 
-
-
 /**
- * 
+ *
  *File Uploading
  */
 //-------------------------------------------------------------------///
 var fpath = `./public/uploads/`;
 
-
 /**
- * upload with some data 
+ * upload with some data
  */
 
 // // Configure multer storage
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
-
     // console.log("upload folder",req.user.OrganizationId);
 
-    const fpath = path.join('./public/uploads/', req.orgId); // Adjust path as necessary
+    const fpath = path.join("./public/uploads/", "ShopMedia"); // Adjust path as necessary
     // console.log("directry name---",__dirname)
     // Create the directory if it doesn't exist
     if (!fs.existsSync(fpath)) {
@@ -119,14 +110,15 @@ var storage = multer.diskStorage({
 // Initialize multer with storage configuration
 var upload = multer({
   storage: storage,
-  limits: { fileSize: 2000000000 } // Limit file size to 2GB
+  limits: { fileSize: 2000000000 }, // Limit file size to 2GB
 });
 
 // POST route for multiple file uploads
-router.post('/uploads', verifyToken, upload.any(), async (req, res) => {
+router.post("/uploads", verifyToken, upload.any(), async (req, res) => {
   try {
     const files = req.files;
-    const foldername = req.orgId || 'default'; // Use default if not provided
+    console.log("files", files);
+    const foldername = "Shop"; // Use default if not provided
     var respFiles = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -140,15 +132,14 @@ router.post('/uploads', verifyToken, upload.any(), async (req, res) => {
 
     var resp = {
       status: true,
-      message: 'Files uploaded successfully.',
+      message: "Files uploaded successfully.",
       data: {
         filesInfo: respFiles,
       },
     };
 
     // console.log("Response:", resp);
-    res.send({ "rsp": resp }).status(200);
-
+    res.send({ rsp: resp }).status(200);
   } catch (err) {
     console.error("Error during upload:", err);
     var resp = {
@@ -157,7 +148,7 @@ router.post('/uploads', verifyToken, upload.any(), async (req, res) => {
       error: err.message,
     };
     // console.log("Response:", resp);
-    res.send({ "rsp": resp }).status(200);
+    res.send({ rsp: resp }).status(200);
   }
 });
 

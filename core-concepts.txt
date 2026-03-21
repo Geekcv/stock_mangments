@@ -1,0 +1,151 @@
+🧠 SYSTEM MODULES (Understand First)
+
+Tumhara system 6 main parts me divide hota hai:
+
+🏪 Shop & Counter
+👤 User Management
+🍬 Product Management
+📦 Inventory
+📑 Purchase (Order → Chalan)
+💰 Sales (future)
+🔥 1. SHOP & COUNTER MODULE
+✅ APIs
+🏪 Shop
+createShop
+updateShop
+deleteShop
+getAllShops
+getShopById
+🧾 Counter
+createCounter
+updateCounter
+deleteCounter
+getCountersByShop
+getCounterDetails
+👤 2. USER MODULE
+✅ APIs
+createUser
+loginUser
+updateUser
+changePassword
+getUsersByCounter
+getProfile
+🍬 3. PRODUCT MODULE
+✅ Department
+createDepartment
+getDepartments
+✅ Category
+createCategory
+getCategoriesByDepartment
+✅ Sweets
+createSweet
+updateSweet
+getAllSweets
+getSweetsByCategory
+searchSweets
+📦 4. INVENTORY MODULE (VERY IMPORTANT)
+✅ Core APIs
+🔥 (Already built by you)
+addStock ✅ (IN / OUT / ADJUST)
+📊 Inventory APIs
+getInventory
+getInventoryByCounter
+getLowStock
+getExpiryAlerts
+getStockHistory
+🔍 Advanced
+getStockBySweet
+getStockSummary (total stock value)
+📑 5. PURCHASE MODULE (ORDER SYSTEM)
+✅ Order APIs
+createOrderWithItems ✅
+getOrdersByCounter
+getOrdersBySupplier ✅
+getOrderDetails
+updateOrderStatus
+cancelOrder
+🚚 Chalan APIs
+createChalan ✅
+getChalansBySupplier
+getChalansByOrder
+trackDispatch
+📥 MOST IMPORTANT (Missing अभी)
+🔥 receiveOrder (MUST BUILD)
+
+👉 ये करेगा:
+
+order_status → COMPLETED
+stock_transactions → IN
+inventory → update
+🔁 6. RETURN MODULE
+
+(तुमने table पहले बनाया था)
+
+✅ APIs
+createReturn
+getReturnsByOrder
+getReturnHistory
+
+👉 + stock OUT करना होगा
+
+💰 7. SALES MODULE (FUTURE - VERY IMPORTANT)
+
+👉 POS system का main part
+
+🧾 Tables (future add)
+sales
+sale_items
+payments
+✅ APIs
+createSale
+getSales
+getSaleDetails
+refundSale
+
+👉 ये करेगा:
+
+stock OUT
+billing
+📊 8. DASHBOARD / REPORTS
+✅ APIs
+getDashboardStats
+total sales
+total stock
+low stock count
+getSalesReport
+getPurchaseReport
+getProfitReport
+🔐 9. AUTH & SECURITY
+✅ APIs
+login
+logout
+refreshToken
+roleBasedAccess
+🎯 COMPLETE FLOW (FINAL SYSTEM)
+1. Shop create
+2. Counter create
+3. User login
+
+4. Department → Category → Sweets
+
+5. Create Order
+6. Supplier sees order
+7. Create Chalan (dispatch)
+8. Receive Order → Stock IN
+
+9. Sale → Stock OUT
+
+10. Return → Stock OUT
+
+11. Dashboard / Reports
+🚨 MOST IMPORTANT APIs (Focus First)
+
+👉 Agar tum sirf ये 5 बना लो:
+
+✅ createOrderWithItems
+✅ createChalan
+🔥 receiveOrder (NEXT)
+✅ addStock
+🔥 createSale
+
+👉 System fully functional हो जाएगा

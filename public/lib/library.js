@@ -49,7 +49,7 @@ let common_fn = {
   // supplier
   cr_supplier: createSupplier,
   fe_supplier: fetchSuppliers,
-  fe_my_ord:getSupplierOrders,
+  fe_my_ord: getSupplierOrders,
 
   // Department
   cr_dep: createDepartment,
@@ -960,6 +960,8 @@ async function addStock(req, res) {
     let newQty = qty;
 
     if (existing.data && existing.data.length > 0) {
+      const existingRow = existing.data[0];
+      const inventoryRowId = existingRow.row_id;
       const currentQty = Number(existing.data[0].quantity);
 
       if (transaction_type === "IN") {
@@ -981,10 +983,8 @@ async function addStock(req, res) {
       await db_query.addData(
         inventoryTable,
         { quantity: newQty, expiry_date },
-        {
-          counter_id: counter_id,
-          sweet_id: sweet_id,
-        }
+        existingRow.row_id,
+        "Inventory"
       );
     } else {
       //  New inventory row (only for IN)
@@ -1316,7 +1316,6 @@ async function createChalan(req, res) {
 //   }
 // }
 
-
 async function getSupplierOrders(req, res) {
   try {
     const orderTable = schema + ".orders";
@@ -1330,7 +1329,7 @@ async function getSupplierOrders(req, res) {
     if (!supplier_id) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Supplier ID required"
+        msg: "Supplier ID required",
       });
     }
 
@@ -1372,7 +1371,7 @@ async function getSupplierOrders(req, res) {
           order_date: row.order_date,
           counter_name: row.counter_name,
           location: row.location,
-          items: []
+          items: [],
         };
       }
 
@@ -1380,30 +1379,28 @@ async function getSupplierOrders(req, res) {
         sweet_id: row.sweet_id,
         sweet_name: row.sweet_name,
         unit: row.unit,
-        quantity: row.quantity
+        quantity: row.quantity,
       });
     }
 
     const finalData = Object.values(ordersMap);
-    console.log("find",finalData)
+    console.log("find", finalData);
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Supplier orders fetched successfully",
-      data: finalData
+      data: finalData,
     });
-
   } catch (error) {
     console.log("getSupplierOrders error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Something went wrong",
-      error: error.message
+      error: error.message,
     });
   }
 }
-
 
 // async function createReturn(req, res) {
 

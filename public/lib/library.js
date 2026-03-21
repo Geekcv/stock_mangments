@@ -282,108 +282,246 @@ async function createShop(req, res) {
 }
 
 async function createCounter(req, res) {
-  console.log("request", req);
+  try {
+    console.log("request", req.data);
 
-  const counterTable = schema + ".counters";
-  const userTable = schema + ".users";
+    const counterTable = schema + ".counters";
+    const userTable = schema + ".users";
 
-  const { shop_id, counter_name, location, name, email, phone, password } =
-    req.data;
+    const {
+      shop_id,
+      counter_name,
+      location = "",
+      name,
+      email,
+      phone,
+      password,
+    } = req.data || {};
 
-  if (!shop_id || !counter_name || !name || !email || !phone || !password) {
+    //  Validation
+    if (!shop_id || !counter_name || !name || !email || !phone || !password) {
+      console.log("Required fields missing");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Required fields missing",
+      });
+    }
+
+    //  Duplicate check (like supplier)
+    const existingUser = await db_query.customQuery(`
+      SELECT phone, email FROM ${userTable}
+      WHERE phone = '${phone.trim()}'
+      OR email = '${email.trim()}'
+    `);
+
+    console.log("existingUser", existingUser);
+
+    if (existingUser.data && existingUser.data.length > 0) {
+      const user = existingUser.data[0];
+
+      if (user.phone === phone.trim()) {
+        console.log("Phone already exists");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      if (user.email === email.trim()) {
+        console.log("Email already exists");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
+        });
+      }
+    }
+
+    //  BEGIN TRANSACTION
+    await connect_db.query("BEGIN TRANSACTION");
+
+    const counterRowId = libFunc.randomid();
+
+    //  Insert Counter
+    const counterColumns = {
+      row_id: counterRowId,
+      shop_id: shop_id.trim(),
+      counter_name: counter_name.trim().replaceAll("'", "`"),
+      location: location.trim(),
+    };
+
+    const counterResp = await db_query.addData(counterTable, counterColumns);
+
+    if (counterResp.status === 0) {
+      //  Insert User
+      const userColumns = {
+        row_id: libFunc.randomid(),
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password: password.trim(),
+        role: "COUNTER_USER",
+        counter_id: counterRowId,
+      };
+
+      const userResp = await db_query.addData(userTable, userColumns);
+
+      if (userResp.status === 0) {
+        //  SUCCESS
+        await connect_db.query("COMMIT");
+        console.log("Counter and counter user created successfully");
+
+        return libFunc.sendResponse(res, {
+          status: 0,
+          msg: "Counter and counter user created successfully",
+          data: {
+            counter_id: counterRowId,
+          },
+        });
+      } else {
+        //  User insert failed
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, userResp);
+      }
+    } else {
+      //  Counter insert failed
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, counterResp);
+    }
+  } catch (error) {
+    console.log("createCounter error:", error);
+
+    await connect_db.query("ROLLBACK");
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Required fields missing",
+      msg:
+        error.code === "23505"
+          ? "Duplicate entry (phone/email already exists)"
+          : "Something went wrong",
+      error: error.message,
     });
   }
-
-  const counterRowId = libFunc.randomid();
-
-  const counterColumns = {
-    row_id: counterRowId,
-    shop_id: shop_id.trim(),
-    counter_name: counter_name.trim().replaceAll("'", "`"),
-    location: location ? location.trim() : "",
-  };
-
-  const counterResp = await db_query.addData(counterTable, counterColumns);
-
-  if (counterResp.status !== 0) {
-    return libFunc.sendResponse(res, counterResp);
-  }
-
-  const userColumns = {
-    row_id: libFunc.randomid(),
-    name: name.trim(),
-    email: email.trim(),
-    phone: phone.trim(),
-    password: password.trim(),
-    role: "COUNTER_USER",
-    counter_id: counterRowId,
-  };
-
-  const userResp = await db_query.addData(userTable, userColumns);
-
-  if (userResp.status !== 0) {
-    return libFunc.sendResponse(res, userResp);
-  }
-
-  return libFunc.sendResponse(res, {
-    status: 0,
-    msg: "Counter and counter user created successfully",
-  });
 }
 
 async function createSupplier(req, res) {
-  console.log("request", req);
+  try {
+    console.log("request", req.data);
 
-  const supplierTable = schema + ".suppliers";
-  const userTable = schema + ".users";
+    const supplierTable = schema + ".suppliers";
+    const userTable = schema + ".users";
 
-  const { supplier_name, phone, email, address, password } = req.data;
+    const {
+      supplier_name,
+      phone,
+      email,
+      address = "",
+      password,
+    } = req.data || {};
 
-  if (!supplier_name || !email || !phone || !password) {
+    //  Validation
+    if (!supplier_name || !email || !phone || !password) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Required fields missing",
+      });
+    }
+
+    //  Duplicate check
+    const existingUser = await db_query.customQuery(`
+      SELECT phone, email FROM ${userTable}
+      WHERE phone = '${phone.trim()}'
+      OR email = '${email.trim()}'
+    `);
+
+    console.log("existingUser", existingUser);
+
+    if (existingUser.data && existingUser.data.length > 0) {
+      const user = existingUser.data[0];
+
+      if (user.phone === phone.trim()) {
+        console.log("Phone already exists");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      if (user.email === email.trim()) {
+        console.log("Email already exists");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
+        });
+      }
+    }
+
+    //  BEGIN TRANSACTION
+    await connect_db.query("BEGIN TRANSACTION");
+
+    const supplierRowId = libFunc.randomid();
+
+    //  Insert Supplier
+    const supplierColumns = {
+      row_id: supplierRowId,
+      supplier_name: supplier_name.trim().replaceAll("'", "`"),
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim()
+    };
+
+    const supplierResp = await db_query.addData(supplierTable, supplierColumns);
+
+    if (supplierResp.status === 0) {
+      //  Insert User
+      const userColumns = {
+        row_id: libFunc.randomid(),
+        name: supplier_name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password: password.trim(),
+        role: "SUPPLIER",
+      };
+
+      const userResp = await db_query.addData(userTable, userColumns);
+
+      if (userResp.status === 0) {
+        //  SUCCESS → COMMIT
+        await connect_db.query("COMMIT");
+
+        return libFunc.sendResponse(res, {
+          status: 0,
+          msg: "Supplier and supplier login created successfully",
+          data: {
+            supplier_id: supplierRowId,
+          },
+        });
+      } else {
+        //  User insert failed
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, userResp);
+      }
+    } else {
+      //  Supplier insert failed
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, supplierResp);
+    }
+  } catch (error) {
+    console.log("createSupplier error:", error);
+
+    //  Any error → rollback
+    await connect_db.query("ROLLBACK");
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Required fields missing",
+      msg:
+        error.code === "23505"
+          ? "Duplicate entry (phone/email already exists)"
+          : "Something went wrong",
+      error: error.message,
     });
   }
-
-  const supplierRowId = libFunc.randomid();
-
-  const supplierColumns = {
-    row_id: supplierRowId,
-    supplier_name: supplier_name.trim().replaceAll("'", "`"),
-    phone: phone.trim(),
-    email: email.trim(),
-    address: address ? address.trim() : "",
-  };
-
-  const supplierResp = await db_query.addData(supplierTable, supplierColumns);
-
-  if (supplierResp.status !== 0) {
-    return libFunc.sendResponse(res, supplierResp);
-  }
-
-  const userColumns = {
-    row_id: libFunc.randomid(),
-    name: supplier_name.trim(),
-    email: email.trim(),
-    phone: phone.trim(),
-    password: password.trim(),
-    role: "SUPPLIER",
-  };
-
-  const userResp = await db_query.addData(userTable, userColumns);
-
-  if (userResp.status !== 0) {
-    return libFunc.sendResponse(res, userResp);
-  }
-
-  return libFunc.sendResponse(res, {
-    status: 0,
-    msg: "Supplier and supplier login created successfully",
-  });
 }
 
 async function fetchShops(req, res) {
@@ -737,7 +875,7 @@ async function fetchAllSweets(req, res) {
     `;
 
     const result = await db_query.customQuery(sql, "Fetch All Sweets");
-    console.log("results",result)
+    console.log("results", result);
 
     return libFunc.sendResponse(res, {
       status: 0,

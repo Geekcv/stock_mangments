@@ -52,15 +52,15 @@ let common_fn = {
 
   // Department
   cr_dep: createDepartment,
-  fe_dep:fetchDepartments,
+  fe_dep: fetchDepartments,
 
   //Category
-  cr_cat:createCategory,
-  fe_cat:fetchAllCategories,
+  cr_cat: createCategory,
+  fe_cat: fetchAllCategories,
 
   // Products
-  cr_sweets:createSweet,
-  fe_sweets:fetchAllSweets
+  cr_sweets: createSweet,
+  fe_sweets: fetchAllSweets,
 };
 
 const schema = "sms";
@@ -240,7 +240,7 @@ async function createShop(req, res) {
       email = "",
       gst_number = "",
       owner_name = "",
-      logo_url = ""
+      logo_url = "",
     } = req.data || {};
 
     // Validation
@@ -264,20 +264,19 @@ async function createShop(req, res) {
       gst_number: gst_number.trim(),
       owner_name: owner_name.trim(),
       logo_url: logo_url.trim(),
-      is_active: true
+      is_active: true,
     };
 
     //  Insert Data
     const resp = await db_query.addData(tablename, columns);
 
     return libFunc.sendResponse(res, resp);
-
   } catch (error) {
     console.log("createShop error:", error);
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Something went wrong",
-      error: error.message
+      error: error.message,
     });
   }
 }
@@ -388,27 +387,73 @@ async function createSupplier(req, res) {
 }
 
 async function fetchShops(req, res) {
-  console.log("request", req);
+  try {
+    console.log("request", req.data);
 
-  const tablename = schema + ".shops";
+    const tablename = schema + ".shops";
 
-  const query = `
-    SELECT 
-      row_id,
-      shop_name,
-      address,
-      cr_on
-    FROM ${tablename}
-    ORDER BY shop_name ASC
-  `;
+    const { city, state, search } = req.data || {};
 
-  const result = await db_query.customQuery(query, "Shop Fetch");
-  console.log("results-->", result);
+    //  Dynamic WHERE conditions
+    let conditions = ["is_active = true"];
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: result.rows,
-  });
+    if (city) {
+      conditions.push(`LOWER(city) = LOWER('${city.replaceAll("'", "`")}')`);
+    }
+
+    if (state) {
+      conditions.push(`LOWER(state) = LOWER('${state.replaceAll("'", "`")}')`);
+    }
+
+    if (search) {
+      const safeSearch = search.replaceAll("'", "`");
+      conditions.push(`
+        (
+          LOWER(shop_name) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(address) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(city) LIKE LOWER('%${safeSearch}%')
+        )
+      `);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    const query = `
+      SELECT 
+        row_id,
+        shop_name,
+        address,
+        city,
+        state,
+        pincode,
+        phone,
+        email,
+        is_active,
+        cr_on,
+        up_on
+      FROM ${tablename}
+      ${whereClause}
+      ORDER BY shop_name ASC
+    `;
+
+    const result = await db_query.customQuery(query, "Shop Fetch");
+    console.log("res", result);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.log("fetchShops error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
 }
 
 async function fetchCounters(req, res) {
@@ -485,9 +530,7 @@ async function createDepartment(req, res) {
   return libFunc.sendResponse(res, resp);
 }
 
-
 async function fetchDepartments(req, res) {
-
   const table = `${schema}.departments`;
 
   const sql = `
@@ -501,11 +544,11 @@ async function fetchDepartments(req, res) {
   `;
 
   const dbRes = await db_query.customQuery(sql, "Fetch Departments");
-  console.log("dbres",dbRes)
+  console.log("dbres", dbRes);
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: dbRes || []
+    data: dbRes || [],
   });
 }
 
@@ -534,7 +577,6 @@ async function createCategory(req, res) {
 }
 
 async function fetchAllCategories(req, res) {
-
   const sql = `
     SELECT
       c.row_id,
@@ -549,11 +591,11 @@ async function fetchAllCategories(req, res) {
   `;
 
   const result = await db_query.customQuery(sql, "Fetch All Categories");
-  console.log("results",result)
+  console.log("results", result);
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows || []
+    data: result.rows || [],
   });
 }
 
@@ -571,14 +613,14 @@ async function createSweet(req, res) {
       price = 0,
       shelf_life_days = 0,
       description = "",
-      image_url = ""
+      image_url = "",
     } = req.data || {};
 
     // Validation
     if (!category_id || !sweet_name) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Category and Sweet name required"
+        msg: "Category and Sweet name required",
       });
     }
 
@@ -591,7 +633,7 @@ async function createSweet(req, res) {
     if (categoryCheck.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid or inactive category"
+        msg: "Invalid or inactive category",
       });
     }
 
@@ -605,7 +647,7 @@ async function createSweet(req, res) {
     if (existingSweet.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Sweet already exists in this category"
+        msg: "Sweet already exists in this category",
       });
     }
 
@@ -619,51 +661,97 @@ async function createSweet(req, res) {
       shelf_life_days: shelf_life_days,
       description: description.trim(),
       image_url: image_url.trim(),
-      is_active: true
+      is_active: true,
     };
 
     const resp = await db_query.addData(tablename, columns);
 
     return libFunc.sendResponse(res, resp);
-
   } catch (error) {
     console.log("createSweet error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Something went wrong",
-      error: error.message
+      error: error.message,
     });
   }
 }
 
 async function fetchAllSweets(req, res) {
+  try {
+    console.log("request", req.data);
 
-  const sql = `
-    SELECT
-      s.row_id,
-      s.sweet_name,
-      s.shelf_life_days,
-      s.category_id,
-      c.category_name,
-      d.row_id AS department_id,
-      d.department_name,
-      s.cr_on
-    FROM ${schema}.sweets s
-    LEFT JOIN ${schema}.categories c
-      ON c.row_id = s.category_id
-    LEFT JOIN ${schema}.departments d
-      ON d.row_id = c.department_id
-    ORDER BY s.sweet_name ASC
-  `;
+    const { category_id, department_id, search } = req.data || {};
 
-  const result = await db_query.customQuery(sql, "Fetch All Sweets");
-  console.log("results",result)
+    //  Conditions
+    let conditions = ["s.is_active = true"];
 
-  return libFunc.sendResponse(res, {
-    status: 0,
-    data: result || []
-  });
+    if (category_id) {
+      conditions.push(`s.category_id = '${category_id.replaceAll("'", "`")}'`);
+    }
+
+    if (department_id) {
+      conditions.push(`d.row_id = '${department_id.replaceAll("'", "`")}'`);
+    }
+
+    if (search) {
+      const safeSearch = search.replaceAll("'", "`");
+
+      conditions.push(`
+        (
+          LOWER(s.sweet_name) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(c.category_name) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(d.department_name) LIKE LOWER('%${safeSearch}%')
+        )
+      `);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    const sql = `
+      SELECT
+        s.row_id,
+        s.sweet_name,
+        s.unit,
+        s.price,
+        s.shelf_life_days,
+        s.description,
+        s.image_url,
+        s.category_id,
+        c.category_name,
+        d.row_id AS department_id,
+        d.department_name,
+        s.is_active,
+        s.cr_on,
+        s.up_on
+      FROM ${schema}.sweets s
+      LEFT JOIN ${schema}.categories c
+        ON c.row_id = s.category_id
+      LEFT JOIN ${schema}.departments d
+        ON d.row_id = c.department_id
+      ${whereClause}
+      ORDER BY s.sweet_name ASC
+    `;
+
+    const result = await db_query.customQuery(sql, "Fetch All Sweets");
+    console.log("results",result)
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      data: result || [],
+    });
+  } catch (error) {
+    console.log("fetchAllSweets error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
 }
 
 // async function addInventory(req, res) {

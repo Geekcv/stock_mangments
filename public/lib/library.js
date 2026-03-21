@@ -49,6 +49,7 @@ let common_fn = {
   // supplier
   cr_supplier: createSupplier,
   fe_supplier: fetchSuppliers,
+  fe_my_ord:getSupplierOrders,
 
   // Department
   cr_dep: createDepartment,
@@ -61,6 +62,15 @@ let common_fn = {
   // Products
   cr_sweets: createSweet,
   fe_sweets: fetchAllSweets,
+
+  //Inventory
+  add_in: addStock,
+
+  // order
+  cr_ord: createOrder,
+
+  //Challan
+  cr_challan: createChalan,
 };
 
 const schema = "sms";
@@ -466,7 +476,7 @@ async function createSupplier(req, res) {
       supplier_name: supplier_name.trim().replaceAll("'", "`"),
       phone: phone.trim(),
       email: email.trim(),
-      address: address.trim()
+      address: address.trim(),
     };
 
     const supplierResp = await db_query.addData(supplierTable, supplierColumns);
@@ -892,196 +902,508 @@ async function fetchAllSweets(req, res) {
   }
 }
 
-// async function addInventory(req, res) {
+async function addStock(req, res) {
+  try {
+    const inventoryTable = schema + ".inventory";
+    const transactionTable = schema + ".stock_transactions";
 
-//   const tablename = schema + ".inventory";
+    const {
+      counter_id,
+      sweet_id,
+      transaction_type, // IN / OUT / ADJUST
+      quantity,
+      expiry_date = null,
+      reference_id = "",
+      notes = "",
+    } = req.data || {};
 
-//   const counter_id = req.data.counter_id;
-//   const sweet_id = req.data.sweet_id;
-//   const quantity = req.data.quantity || 0;
-//   const expiry_date = req.data.expiry_date || null;
+    //  Validation
+    if (!counter_id || !sweet_id || !transaction_type || !quantity) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Missing required fields",
+      });
+    }
 
-//   if (!counter_id || !sweet_id) {
-//     return libFunc.sendResponse(res, {
-//       status: 1,
-//       msg: "Counter and Sweet required"
-//     });
+    const qty = Number(quantity);
+
+    if (qty <= 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Quantity must be greater than 0",
+      });
+    }
+
+    //  START TRANSACTION
+    await connect_db.query("BEGIN");
+
+    //  Insert transaction
+    const transactionData = {
+      row_id: libFunc.randomid(),
+      counter_id: counter_id.trim(),
+      sweet_id: sweet_id.trim(),
+      transaction_type,
+      quantity: qty,
+      reference_id,
+      notes,
+    };
+
+    await db_query.addData(transactionTable, transactionData);
+
+    //  Check existing inventory
+    const existing = await db_query.customQuery(`
+      SELECT * FROM ${inventoryTable}
+      WHERE counter_id = '${counter_id}'
+      AND sweet_id = '${sweet_id}'
+    `);
+
+    let newQty = qty;
+
+    if (existing.data && existing.data.length > 0) {
+      const currentQty = Number(existing.data[0].quantity);
+
+      if (transaction_type === "IN") {
+        newQty = currentQty + qty;
+      } else if (transaction_type === "OUT") {
+        if (currentQty < qty) {
+          await connect_db.query("ROLLBACK");
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "Insufficient stock",
+          });
+        }
+        newQty = currentQty - qty;
+      } else if (transaction_type === "ADJUST") {
+        newQty = qty;
+      }
+
+      //  Update inventory
+      await db_query.addData(
+        inventoryTable,
+        { quantity: newQty, expiry_date },
+        {
+          counter_id: counter_id,
+          sweet_id: sweet_id,
+        }
+      );
+    } else {
+      //  New inventory row (only for IN)
+      if (transaction_type !== "IN") {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "No stock available to deduct",
+        });
+      }
+
+      await db_query.addData(inventoryTable, {
+        row_id: libFunc.randomid(),
+        counter_id,
+        sweet_id,
+        quantity: qty,
+        expiry_date,
+      });
+    }
+
+    //  COMMIT
+    await connect_db.query("COMMIT");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Stock updated successfully",
+    });
+  } catch (error) {
+    console.log("addStock error:", error);
+
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (e) {}
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+// {
+//   fn: 'common_fn',
+//   se: 'add_in',
+//   data: {
+//     counter_id: '1774068978592_lPPR',
+//     sweet_id: '1774066038515_Ojcp',
+//     transaction_type: 'IN',
+//     quantity: 50,
+//     expiry_date: '2026-04-01',
+//     reference_id: 'purchase_001',
+//     notes: 'New stock added'
 //   }
-
-//   const columns = {
-//     row_id: libFunc.randomid(),
-//     counter_id: counter_id.trim(),
-//     sweet_id: sweet_id.trim(),
-//     quantity: quantity,
-//     expiry_date: expiry_date
-//   };
-
-//   const resp = await db_query.addData(tablename, columns);
-
-//   return libFunc.sendResponse(res, resp);
 // }
 
-// async function createStockTransaction(req, res) {
+async function getInventory(req, res) {
+  try {
+    const inventoryTable = schema + ".inventory";
+    const sweetTable = schema + ".sweets";
+    const counterTable = schema + ".counters";
 
-//   const tablename = schema + ".stock_transactions";
+    const data = await db_query.customQuery(`
+      SELECT 
+        i.row_id,
+        i.quantity,
+        i.expiry_date,
 
-//   const counter_id = req.data.counter_id;
-//   const sweet_id = req.data.sweet_id;
-//   const transaction_type = req.data.transaction_type;
-//   const quantity = req.data.quantity;
-//   const reference_id = req.data.reference_id || "";
-//   const notes = req.data.notes || "";
+        s.row_id AS sweet_id,
+        s.sweet_name,
+        s.unit,
+        s.price,
 
-//   if (!counter_id || !sweet_id || !transaction_type || !quantity) {
-//     return libFunc.sendResponse(res, {
-//       status: 1,
-//       msg: "Missing required fields"
-//     });
+        c.row_id AS counter_id,
+        c.counter_name,
+        c.location,
+
+        i.cr_on
+
+      FROM ${inventoryTable} i
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = i.sweet_id
+      LEFT JOIN ${counterTable} c 
+        ON c.row_id = i.counter_id
+
+      WHERE i.quantity > 0
+      ORDER BY i.cr_on DESC
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Inventory fetched successfully",
+      data: data.data,
+    });
+  } catch (error) {
+    console.log("getInventory error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function getInventoryAlerts(req, res) {
+  try {
+    const inventoryTable = schema + ".inventory";
+    const sweetTable = schema + ".sweets";
+
+    const lowStockLimit = 10; // you can change
+
+    const data = await db_query.customQuery(`
+      SELECT 
+        i.row_id,
+        i.quantity,
+        i.expiry_date,
+        s.sweet_name,
+        s.unit
+
+      FROM ${inventoryTable} i
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = i.sweet_id
+
+      WHERE 
+        i.quantity <= ${lowStockLimit}
+        OR i.expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+
+      ORDER BY i.quantity ASC
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Inventory alerts fetched",
+      data: data.data,
+    });
+  } catch (error) {
+    console.log("getInventoryAlerts error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function createOrder(req, res) {
+  try {
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+
+    const {
+      counter_id,
+      supplier_id,
+      items, // array [{ sweet_id, quantity }]
+    } = req.data || {};
+
+    //  Validation
+    if (!counter_id || !supplier_id || !items || items.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Counter, Supplier and items required",
+      });
+    }
+
+    await connect_db.query("BEGIN");
+
+    const orderRowId = libFunc.randomid();
+
+    //  Insert Order
+    await db_query.addData(orderTable, {
+      row_id: orderRowId,
+      counter_id: counter_id.trim(),
+      supplier_id: supplier_id.trim(),
+      order_status: "PENDING",
+    });
+
+    //  Insert Items
+    for (let item of items) {
+      if (!item.sweet_id || !item.quantity) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid item data",
+        });
+      }
+
+      await db_query.addData(itemTable, {
+        row_id: libFunc.randomid(),
+        order_id: orderRowId,
+        sweet_id: item.sweet_id.trim(),
+        quantity: item.quantity,
+      });
+    }
+
+    await connect_db.query("COMMIT");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Order created successfully",
+      data: {
+        order_id: orderRowId,
+      },
+    });
+  } catch (error) {
+    console.log("createOrder error:", error);
+
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (e) {}
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+// {
+//   fn: 'common_fn',
+//   se: 'cr_ord',
+//   data: {
+//     counter_id: '1774068978592_lPPR',
+//     supplier_id: '1774069330617_59r8',
+//     items: [ [Object], [Object] ]
 //   }
-
-//   const columns = {
-//     row_id: libFunc.randomid(),
-//     counter_id: counter_id.trim(),
-//     sweet_id: sweet_id.trim(),
-//     transaction_type: transaction_type,
-//     quantity: quantity,
-//     reference_id: reference_id,
-//     notes: notes
-//   };
-
-//   const resp = await db_query.addData(tablename, columns);
-
-//   return libFunc.sendResponse(res, resp);
 // }
 
-// async function fetchDepartments(req, res) {
+async function createChalan(req, res) {
+  try {
+    const chalanTable = schema + ".chalans";
+    const orderTable = schema + ".orders";
 
-//   const query = `
-//     SELECT row_id, department_name
-//     FROM ${schema}.departments
-//     ORDER BY department_name
-//   `;
+    const {
+      order_id,
+      supplier_id,
+      dispatch_date,
+      transport_details = "",
+    } = req.data || {};
 
-//   const result = await db_query.customQuery(query);
+    // 🔹 Validation
+    if (!order_id || !supplier_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order and Supplier required",
+      });
+    }
 
-//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
-// }
+    //  Check Order Exists
+    const orderCheck = await db_query.customQuery(`
+      SELECT order_status FROM ${orderTable}
+      WHERE row_id = '${order_id.trim()}'
+    `);
 
-// async function fetchCategories(req, res) {
+    if (!orderCheck.data || orderCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid order",
+      });
+    }
 
-//   const { department_id } = req.data;
+    const currentStatus = orderCheck.data[0].order_status;
 
-//   const query = `
-//     SELECT row_id, category_name
-//     FROM ${schema}.categories
-//     WHERE department_id='${department_id}'
-//     ORDER BY category_name
-//   `;
+    //  Prevent duplicate dispatch
+    if (currentStatus === "DISPATCHED") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order already dispatched",
+      });
+    }
 
-//   const result = await db_query.customQuery(query);
+    await connect_db.query("BEGIN");
 
-//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
-// }
+    //  Create Chalan
+    const chalanRowId = libFunc.randomid();
 
-// async function fetchSweets(req, res) {
+    await db_query.addData(chalanTable, {
+      row_id: chalanRowId,
+      order_id: order_id.trim(),
+      supplier_id: supplier_id.trim(),
+      dispatch_date: dispatch_date || new Date(),
+      transport_details: transport_details.trim(),
+    });
 
-//   const query = `
-//     SELECT
-//       s.row_id,
-//       s.sweet_name,
-//       c.category_name,
-//       d.department_name
-//     FROM ${schema}.sweets s
-//     LEFT JOIN ${schema}.categories c ON c.row_id = s.category_id
-//     LEFT JOIN ${schema}.departments d ON d.row_id = c.department_id
-//   `;
+    //  Update Order Status
+    const updateResp = await db_query.addData(
+      orderTable,
+      { order_status: "DISPATCHED" },
+      order_id.trim(),
+      "Order"
+    );
 
-//   const result = await db_query.customQuery(query);
+    console.log("Update Response:", updateResp);
 
-//   return libFunc.sendResponse(res, { status: 0, data: result.rows });
-// }
+    await connect_db.query("COMMIT");
 
-// async function createOrder(req, res) {
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Chalan created and order dispatched",
+      data: {
+        chalan_id: chalanRowId,
+      },
+    });
+  } catch (error) {
+    console.log("createChalan error:", error);
 
-//   const tablename = schema + ".orders";
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (e) {}
 
-//   const counter_id = req.data.counter_id;
-//   const supplier_id = req.data.supplier_id;
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
 
-//   if (!counter_id || !supplier_id) {
-//     return libFunc.sendResponse(res, {
-//       status: 1,
-//       msg: "Counter and Supplier required"
-//     });
+// {
+//   fn: 'common_fn',
+//   se: 'cr_challan',
+//   data: {
+//     order_id: '1774075290388_JnHQ',
+//     supplier_id: '1774069330617_59r8',
+//     dispatch_date: '2026-03-21',
+//     transport_details: 'Truck RJ14 AB 1234'
 //   }
-
-//   const columns = {
-//     row_id: libFunc.randomid(),
-//     counter_id: counter_id.trim(),
-//     supplier_id: supplier_id.trim(),
-//     order_status: "PENDING"
-//   };
-
-//   const resp = await db_query.addData(tablename, columns);
-
-//   return libFunc.sendResponse(res, resp);
 // }
 
-// async function addOrderItem(req, res) {
 
-//   const tablename = schema + ".order_items";
+async function getSupplierOrders(req, res) {
+  try {
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+    const sweetTable = schema + ".sweets";
+    const counterTable = schema + ".counters";
 
-//   const order_id = req.data.order_id;
-//   const sweet_id = req.data.sweet_id;
-//   const quantity = req.data.quantity;
+    const { supplier_id } = req.data || {};
 
-//   if (!order_id || !sweet_id || !quantity) {
-//     return libFunc.sendResponse(res, {
-//       status: 1,
-//       msg: "Order, Sweet and Quantity required"
-//     });
-//   }
+    // 🔹 Validation
+    if (!supplier_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Supplier ID required"
+      });
+    }
 
-//   const columns = {
-//     row_id: libFunc.randomid(),
-//     order_id: order_id.trim(),
-//     sweet_id: sweet_id.trim(),
-//     quantity: quantity
-//   };
+    // 🔹 Fetch Orders + Items
+    const result = await db_query.customQuery(`
+      SELECT 
+        o.row_id AS order_id,
+        o.order_status,
+        o.order_date,
 
-//   const resp = await db_query.addData(tablename, columns);
+        c.counter_name,
+        c.location,
 
-//   return libFunc.sendResponse(res, resp);
-// }
+        oi.sweet_id,
+        s.sweet_name,
+        s.unit,
+        oi.quantity
 
-// async function createChalan(req, res) {
+      FROM ${orderTable} o
+      LEFT JOIN ${counterTable} c 
+        ON c.row_id = o.counter_id
+      LEFT JOIN ${itemTable} oi 
+        ON oi.order_id = o.row_id
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = oi.sweet_id
 
-//   const tablename = schema + ".chalans";
+      WHERE o.supplier_id = '${supplier_id.trim()}'
+      ORDER BY o.order_date DESC
+    `);
 
-//   const order_id = req.data.order_id;
-//   const supplier_id = req.data.supplier_id;
-//   const dispatch_date = req.data.dispatch_date;
-//   const transport_details = req.data.transport_details || "";
+    // 🔹 Group data (order-wise)
+    const ordersMap = {};
 
-//   if (!order_id || !supplier_id) {
-//     return libFunc.sendResponse(res, {
-//       status: 1,
-//       msg: "Order and Supplier required"
-//     });
-//   }
+    for (let row of result.data) {
+      if (!ordersMap[row.order_id]) {
+        ordersMap[row.order_id] = {
+          order_id: row.order_id,
+          order_status: row.order_status,
+          order_date: row.order_date,
+          counter_name: row.counter_name,
+          location: row.location,
+          items: []
+        };
+      }
 
-//   const columns = {
-//     row_id: libFunc.randomid(),
-//     order_id: order_id.trim(),
-//     supplier_id: supplier_id.trim(),
-//     dispatch_date: dispatch_date,
-//     transport_details: transport_details.trim()
-//   };
+      ordersMap[row.order_id].items.push({
+        sweet_id: row.sweet_id,
+        sweet_name: row.sweet_name,
+        unit: row.unit,
+        quantity: row.quantity
+      });
+    }
 
-//   const resp = await db_query.addData(tablename, columns);
+    const finalData = Object.values(ordersMap);
+    console.log("find",finalData)
 
-//   return libFunc.sendResponse(res, resp);
-// }
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Supplier orders fetched successfully",
+      data: finalData
+    });
+
+  } catch (error) {
+    console.log("getSupplierOrders error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message
+    });
+  }
+}
+
 
 // async function createReturn(req, res) {
 

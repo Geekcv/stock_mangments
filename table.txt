@@ -113,8 +113,8 @@ CREATE TABLE sms.orders (
  supplier_id TEXT REFERENCES sms.suppliers(row_id),
  order_status TEXT DEFAULT 'PENDING',
  order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  cr_on timestamp without time zone DEFAULT now() NOT NULL,
-    up_on timestamp without time zone DEFAULT now() NOT NULL
+ cr_on timestamp without time zone DEFAULT now() NOT NULL,
+ up_on timestamp without time zone DEFAULT now() NOT NULL
 
 );
 
@@ -124,8 +124,8 @@ CREATE TABLE sms.order_items (
  order_id TEXT REFERENCES sms.orders(row_id) ON DELETE CASCADE,
  sweet_id TEXT REFERENCES sms.sweets(row_id),
  quantity TEXT,
-cr_on timestamp without time zone DEFAULT now() NOT NULL,
-    up_on timestamp without time zone DEFAULT now() NOT NULL
+ cr_on timestamp without time zone DEFAULT now() NOT NULL,
+ up_on timestamp without time zone DEFAULT now() NOT NULL
 
 );
 
@@ -136,8 +136,8 @@ CREATE TABLE sms.chalans (
  supplier_id TEXT REFERENCES sms.suppliers(row_id),
  dispatch_date TIMESTAMP,
  transport_details TEXT,
-cr_on timestamp without time zone DEFAULT now() NOT NULL,
-    up_on timestamp without time zone DEFAULT now() NOT NULL
+ cr_on timestamp without time zone DEFAULT now() NOT NULL,
+ up_on timestamp without time zone DEFAULT now() NOT NULL
 
 );
 

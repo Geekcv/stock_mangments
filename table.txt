@@ -189,3 +189,23 @@ CREATE TABLE sms.audit_logs (
 );
 
 
+ALTER TABLE sms.shops
+ADD COLUMN city TEXT,
+ADD COLUMN state TEXT,
+ADD COLUMN pincode TEXT,
+ADD COLUMN phone TEXT,
+ADD COLUMN email TEXT,
+ADD COLUMN is_active BOOLEAN DEFAULT TRUE,
+ADD COLUMN gst_number TEXT,
+ADD COLUMN owner_name TEXT,
+ADD COLUMN logo_url TEXT;
+
+
+
+ALTER TABLE sms.sweets
+--  Add new columns
+ADD COLUMN unit TEXT DEFAULT 'KG',
+ADD COLUMN price NUMERIC(10,2) DEFAULT 0,
+ADD COLUMN description TEXT,
+ADD COLUMN image_url TEXT,
+ADD COLUMN is_active BOOLEAN DEFAULT TRUE;

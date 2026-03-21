@@ -225,29 +225,61 @@ async function loginUser(req, res) {
 }
 
 async function createShop(req, res) {
-  console.log("request", req);
+  try {
+    console.log("request", req.data);
 
-  const tablename = schema + ".shops";
+    const tablename = schema + ".shops";
 
-  const shop_name = req.data.shop_name;
-  const address = req.data.address || "";
+    const {
+      shop_name,
+      address = "",
+      city = "",
+      state = "",
+      pincode = "",
+      phone = "",
+      email = "",
+      gst_number = "",
+      owner_name = "",
+      logo_url = ""
+    } = req.data || {};
 
-  if (!shop_name) {
+    // Validation
+    if (!shop_name) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop name is required",
+      });
+    }
+
+    //  Columns object
+    const columns = {
+      row_id: libFunc.randomid(),
+      shop_name: shop_name.trim().replaceAll("'", "`"),
+      address: address.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      gst_number: gst_number.trim(),
+      owner_name: owner_name.trim(),
+      logo_url: logo_url.trim(),
+      is_active: true
+    };
+
+    //  Insert Data
+    const resp = await db_query.addData(tablename, columns);
+
+    return libFunc.sendResponse(res, resp);
+
+  } catch (error) {
+    console.log("createShop error:", error);
     return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Shop name is required",
+      status: 0,
+      msg: "Something went wrong",
+      error: error.message
     });
   }
-
-  const columns = {
-    row_id: libFunc.randomid(),
-    shop_name: shop_name.trim().replaceAll("'", "`"),
-    address: address.trim(),
-  };
-
-  const resp = await db_query.addData(tablename, columns);
-
-  return libFunc.sendResponse(res, resp);
 }
 
 async function createCounter(req, res) {
@@ -526,31 +558,85 @@ async function fetchAllCategories(req, res) {
 }
 
 async function createSweet(req, res) {
+  try {
+    console.log("request", req.data);
 
-  const tablename = schema + ".sweets";
+    const tablename = schema + ".sweets";
+    const categoryTable = schema + ".categories";
 
-  const category_id = req.data.category_id;
-  const sweet_name = req.data.sweet_name;
-  const shelf_life_days = req.data.shelf_life_days || 0;
+    const {
+      category_id,
+      sweet_name,
+      unit = "KG",
+      price = 0,
+      shelf_life_days = 0,
+      description = "",
+      image_url = ""
+    } = req.data || {};
 
-  if (!category_id || !sweet_name) {
+    // Validation
+    if (!category_id || !sweet_name) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Category and Sweet name required"
+      });
+    }
+
+    // Check category exists
+    const categoryCheck = await db_query.customQuery(`
+      SELECT 1 FROM ${categoryTable}
+      WHERE row_id = '${category_id.trim()}'
+    `);
+
+    if (categoryCheck.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid or inactive category"
+      });
+    }
+
+    // Duplicate check (same category)
+    const existingSweet = await db_query.customQuery(`
+      SELECT 1 FROM ${tablename}
+      WHERE category_id = '${category_id.trim()}'
+      AND LOWER(sweet_name) = LOWER('${sweet_name.trim().replaceAll("'", "`")}')
+    `);
+
+    if (existingSweet.length > 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Sweet already exists in this category"
+      });
+    }
+
+    // Insert Data
+    const columns = {
+      row_id: libFunc.randomid(),
+      category_id: category_id.trim(),
+      sweet_name: sweet_name.trim().replaceAll("'", "`"),
+      unit: unit,
+      price: price,
+      shelf_life_days: shelf_life_days,
+      description: description.trim(),
+      image_url: image_url.trim(),
+      is_active: true
+    };
+
+    const resp = await db_query.addData(tablename, columns);
+
+    return libFunc.sendResponse(res, resp);
+
+  } catch (error) {
+    console.log("createSweet error:", error);
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Category and Sweet name required"
+      msg: "Something went wrong",
+      error: error.message
     });
   }
-
-  const columns = {
-    row_id: libFunc.randomid(),
-    category_id: category_id.trim(),
-    sweet_name: sweet_name.trim().replaceAll("'", "`"),
-    shelf_life_days: shelf_life_days
-  };
-
-  const resp = await db_query.addData(tablename, columns);
-
-  return libFunc.sendResponse(res, resp);
 }
+
 async function fetchAllSweets(req, res) {
 
   const sql = `

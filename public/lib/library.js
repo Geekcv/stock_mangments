@@ -629,7 +629,7 @@ async function fetchCounters(req, res) {
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows,
+    data: result,
   });
 }
 
@@ -654,7 +654,7 @@ async function fetchSuppliers(req, res) {
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows,
+    data: result,
   });
 }
 
@@ -747,7 +747,7 @@ async function fetchAllCategories(req, res) {
 
   return libFunc.sendResponse(res, {
     status: 0,
-    data: result.rows || [],
+    data: result || [],
   });
 }
 

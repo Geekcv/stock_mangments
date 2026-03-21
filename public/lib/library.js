@@ -74,6 +74,7 @@ let common_fn = {
 
   //pdf
   dow_pdf: downloadOrderPDF,
+  dow_ch_pdf: downloadChalanPDF,
 };
 
 const schema = "sms";
@@ -539,7 +540,7 @@ async function createSupplier(req, res) {
 
 async function fetchShops(req, res) {
   try {
-    console.log("request", req.data);
+    // console.log("request", req.data);
 
     const tablename = schema + ".shops";
 
@@ -591,12 +592,10 @@ async function fetchShops(req, res) {
     `;
 
     const result = await db_query.customQuery(query, "Shop Fetch");
-    console.log("res", result);
+    // console.log("res", result);
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      data: result,
-    });
+    console.log("resposne ", result);
+    return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchShops error:", error);
 
@@ -2505,6 +2504,15 @@ async function downloadChalanPDF(req, res) {
 
     const data = result.data;
 
+    const orgFolder = path.join("./public/uploads", "ShopMedia");
+    if (!fs.existsSync(orgFolder)) {
+      fs.mkdirSync(orgFolder, { recursive: true });
+    }
+
+    // 🔹 File name + path
+    const fileName = `Report_${Date.now()}.pdf`;
+    const filePath = path.join(orgFolder, fileName);
+
     const doc = new PDFDocument({ margin: 40 });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -2513,49 +2521,101 @@ async function downloadChalanPDF(req, res) {
       `attachment; filename=chalan_${chalan_id}.pdf`
     );
 
-    doc.pipe(res);
+    doc.pipe(fs.createWriteStream(filePath));
 
-    // 🔹 Header
-    doc.fontSize(18).text("DISPATCH CHALAN", { align: "center" });
+    // ================= HEADER =================
+    doc
+      .fontSize(18)
+      .fillColor("#2c3e50")
+      .text("DISPATCH CHALAN", { align: "center" });
+    doc.moveDown(0.5);
+    doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
 
-    // 🔹 Info
-    doc.text(`Chalan ID: ${data[0].chalan_id}`);
-    doc.text(`Order ID: ${data[0].order_id}`);
+    // ================= CHALAN INFO =================
+    doc.fontSize(11).fillColor("#000");
+    doc
+      .text(`Chalan ID: ${data[0].chalan_id}`, { continued: true })
+      .text(`        Order ID: ${data[0].order_id}`, { align: "right" });
     doc.text(
       `Dispatch Date: ${new Date(data[0].dispatch_date).toLocaleDateString()}`
     );
-
     doc.moveDown();
 
-    // 🔹 Supplier
-    doc.text("Supplier:");
+    // ================= SUPPLIER =================
+    doc
+      .fontSize(12)
+      .fillColor("#34495e")
+      .text("Supplier Details", { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor("#000");
     doc.text(`Name: ${data[0].supplier_name}`);
     doc.text(`Phone: ${data[0].phone}`);
     doc.text(`Address: ${data[0].address}`);
-
     doc.moveDown();
 
-    // 🔹 Transport
-    doc.text(`Transport: ${data[0].transport_details}`);
-
+    // ================= TRANSPORT =================
+    doc
+      .fontSize(12)
+      .fillColor("#34495e")
+      .text("Transport Details", { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor("#000");
+    doc.text(`${data[0].transport_details}`);
     doc.moveDown();
 
-    // 🔹 Items
-    doc.text("Items:", { underline: true });
+    // ================= ITEMS TABLE =================
+    doc.fontSize(12).fillColor("#000").text("Items", { underline: true });
     doc.moveDown(0.5);
 
-    doc.text("Sweet Name        Qty        Unit");
+    const col1 = 50;
+    const col2 = 300;
+    const col3 = 400;
 
-    doc.moveDown(0.5);
+    let tableTop = doc.y;
 
-    data.forEach((item) => {
-      doc.text(
-        `${item.sweet_name}        ${item.quantity}        ${item.unit}`
-      );
+    // ===== TABLE HEADER =====
+    doc.rect(40, tableTop, 500, 20).fill("#f2f2f2");
+    doc.fillColor("#000").fontSize(10);
+    doc.text("Sweet Name", col1, tableTop + 5);
+    doc.text("Qty", col2, tableTop + 5);
+    doc.text("Unit", col3, tableTop + 5);
+
+    let y = tableTop + 25;
+
+    // ===== TABLE ROWS =====
+    data.forEach((item, index) => {
+      // Zebra row for readability
+      if (index % 2 === 0) {
+        doc.rect(40, y - 2, 500, 20).fill("#fafafa");
+        doc.fillColor("#000");
+      }
+
+      // Proper aligned columns
+      doc.text(item.sweet_name, col1, y, { width: 200 });
+      doc.text(item.quantity.toString(), col2, y);
+      doc.text(item.unit, col3, y);
+
+      y += 20;
     });
 
+    // ================= FOOTER =================
+    doc.moveDown(2);
+    doc
+      .fontSize(9)
+      .fillColor("gray")
+      .text("This is a system generated document.", { align: "center" });
+
     doc.end();
+
+    const fileUrl = `uploads/${chalan_id}/${fileName}`;
+    const serverUrl = "https://stock-mangments.onrender.com/";
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "PDF generated successfully",
+      filePath: serverUrl + fileUrl,
+    });
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
     res.status(500).send("Error generating PDF");

@@ -889,8 +889,6 @@ async function fetchAllSweets(req, res) {
 
     console.log("results", result);
     return libFunc.sendResponse(res, result);
-
-    return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchAllSweets error:", error);
 

@@ -878,14 +878,14 @@ async function fetchAllSweets(req, res) {
     const result = await db_query.customQuery(sql, "Fetch All Sweets");
 
     //  Add full URL
-    const BASE_URL = "https://stock-mangments.onrender.com";
+    // const BASE_URL = "https://stock-mangments.onrender.com";
 
-    if (result?.data?.length) {
-      result.data = result.data.map((item) => ({
-        ...item,
-        image_url: item.image_url ? `${BASE_URL}/${item.image_url}` : null,
-      }));
-    }
+    // if (result?.data?.length) {
+    //   result.data = result.data.map((item) => ({
+    //     ...item,
+    //     image_url: item.image_url ? `${BASE_URL}/${item.image_url}` : null,
+    //   }));
+    // }
 
     console.log("results", result);
     return libFunc.sendResponse(res, result);

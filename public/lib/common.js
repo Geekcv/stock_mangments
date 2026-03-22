@@ -118,7 +118,7 @@ router.post("/uploads", verifyToken, upload.any(), async (req, res) => {
   try {
     const files = req.files;
     console.log("files", files);
-    const foldername = "Shop"; // Use default if not provided
+    const foldername = "ShopMedia"; // Use default if not provided
     var respFiles = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];

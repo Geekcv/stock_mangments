@@ -626,7 +626,7 @@ async function fetchCounters(req, res) {
   const result = await db_query.customQuery(query, "Counter fetch");
   console.log("results-->", result);
 
-  return libFunc.sendResponse(res,result);
+  return libFunc.sendResponse(res, result);
 }
 
 async function fetchSuppliers(req, res) {
@@ -876,7 +876,19 @@ async function fetchAllSweets(req, res) {
     `;
 
     const result = await db_query.customQuery(sql, "Fetch All Sweets");
+
+    //  Add full URL
+    const BASE_URL = "https://stock-mangments.onrender.com";
+
+    if (result?.data?.length) {
+      result.data = result.data.map((item) => ({
+        ...item,
+        image_url: item.image_url ? `${BASE_URL}/${item.image_url}` : null,
+      }));
+    }
+
     console.log("results", result);
+    return libFunc.sendResponse(res, result);
 
     return libFunc.sendResponse(res, result);
   } catch (error) {

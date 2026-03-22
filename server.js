@@ -26,19 +26,14 @@ app.use(
   })
 );
 
-//  CORS (IMPORTANT)
-app.use(
-  cors({
-    origin: "*", // production me frontend domain daalna
-  })
-);
-
-//  STATIC FILES (MOST IMPORTANT FIX)
-app.use(
-  "/uploads",
-  cors(), //  yahi missing tha
-  express.static(path.join(__dirname, "uploads"))
-);
+app.use(cors());
+app.use('/uploads', (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // app.use(cors());
 // app.use(function (req, res, next) {

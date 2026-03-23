@@ -1,0 +1,111 @@
+fn: "common_fn",
+    se: "cr_shop",
+    data: {       
+    'shop_name': 'Sharma Sweets 22',
+    'address': 'Main Market 22',
+    'city': 'Jaipur',
+    'state': 'Rajasthan',
+    'pincode': '302001',
+    'phone': '9876843180',
+    'email': 'shop22@gmail.com',
+    'gst_number': '08ABCDE1234F1Z5',
+    'owner_name': 'Ramesh Sharma 22',
+    'logo_url': '',
+    'password':'1234'   // add new cloumn       
+    }
+
+
+
+    {
+  fn: 'common_fn',
+  se: 'cr_sweets',
+  data: {
+    category_id: '1773931027905_05NB',
+    sweet_name: 'Kaju Katli 22',
+    unit: 'KG',
+    price: 850,
+    shelf_life_days: 10,
+    description: 'Premium kaju sweet',
+    image_url: '',
+    counter_id: '1774068978592_lPPR',   // add new cloumn     
+    return_type: 'RETURNABLE'        // add new cloumn     
+  }
+}
+
+
+// inventory 
+{
+  fn: 'common_fn',
+  se: 'add_in',
+  data: {
+    counter_id: '1774068978592_lPPR',
+    sweet_id: '1774185553167_GZ47',
+    transaction_type: 'IN',
+    quantity: 50,
+    expiry_date: '2026-04-01',
+    reference_id: 'PURCHASE_123',
+    notes: 'New stock added',
+    min_stock: 10,
+    max_stock: 100
+  }
+}
+
+
+{
+  fn: 'common_fn',
+  se: 'add_in',
+  data: {
+    counter_id: '1774068978592_lPPR',
+    sweet_id: '1774185553167_GZ47',
+    transaction_type: 'OUT',
+    quantity: 5,
+    notes: 'Sold to customer'
+  }
+}
+
+
+{
+  fn: 'common_fn',
+  se: 'add_in',
+  data: {
+    counter_id: '1774068978592_lPPR',
+    sweet_id: '1774185553167_GZ47',
+    transaction_type: 'ADJUST',
+    quantity: 30,
+    min_stock: 5,
+    max_stock: 80,
+    notes: 'Updated stock limits'
+  }
+}
+
+
+// order_date
+
+fn: "common_fn",
+se: "cr_counter_req",
+data: {  
+
+"counter_id": "1774068978592_lPPR",
+"items": [
+{
+  "sweet_id": "1774185553167_GZ47",
+  "quantity": 10
+},
+{
+  "sweet_id": "1774185553167_GZ47",
+  "quantity": 5
+}
+]
+  
+}
+
+
+{
+  fn: 'common_fn',
+  se: 'cr_final_order',
+  data: {
+    shop_id: '1774185040850_CRFG',
+    supplier_id: '1774069330617_59r8',
+    request_ids: [ '1774187557132_iHkK', '1774187557145_A0Fw' ]
+  }
+}

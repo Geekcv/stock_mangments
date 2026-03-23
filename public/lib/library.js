@@ -67,7 +67,9 @@ let common_fn = {
   add_in: addStock,
 
   // order (Purchase order)
-  cr_ord: createOrder,
+  // cr_ord: createOrder,
+  cr_counter_req: createCounterRequest,
+  cr_final_order: createFinalOrder,
 
   //Challan
   cr_challan: createChalan,
@@ -113,7 +115,8 @@ async function registerUser(req, res) {
   }
 
   // Role validation
-  const validRoles = ["ADMIN", "COUNTER_USER", "SUPPLIER"];
+  // const validRoles = ["ADMIN", "COUNTER_USER", "SUPPLIER"];
+  const validRoles = ["ADMIN", "SHOP_ADMIN", "COUNTER_USER", "SUPPLIER"];
 
   if (!validRoles.includes(role)) {
     const resp = { status: 1, msg: "Invalid role" };
@@ -242,7 +245,8 @@ async function createShop(req, res) {
   try {
     console.log("request", req.data);
 
-    const tablename = schema + ".shops";
+    const shopTable = schema + ".shops";
+    const userTable = schema + ".users";
 
     const {
       shop_name,
@@ -255,19 +259,54 @@ async function createShop(req, res) {
       gst_number = "",
       owner_name = "",
       logo_url = "",
+      password,
     } = req.data || {};
 
-    // Validation
-    if (!shop_name) {
+    //  Validation
+    if (!shop_name || !owner_name || !email || !phone || !password) {
+      console.log("Shop + Owner login details required");
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Shop name is required",
+        msg: "Shop + Owner login details required",
       });
     }
 
-    //  Columns object
-    const columns = {
-      row_id: libFunc.randomid(),
+    //  Duplicate check
+    const existingUser = await db_query.customQuery(`
+      SELECT phone, email FROM ${userTable}
+      WHERE phone = '${phone.trim()}'
+      OR email = '${email.trim()}'
+    `);
+
+    if (existingUser.data?.length > 0) {
+      const user = existingUser.data[0];
+      console.log("Phone already exists");
+
+      if (user.phone === phone.trim()) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      if (user.email === email.trim()) {
+        console.log("Email already exists");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
+        });
+      }
+    }
+
+    //  TRANSACTION START
+    await connect_db.query("BEGIN");
+
+    const shopRowId = libFunc.randomid();
+
+    //  Create Shop
+    const shopResp = await db_query.addData(shopTable, {
+      row_id: shopRowId,
       shop_name: shop_name.trim().replaceAll("'", "`"),
       address: address.trim(),
       city: city.trim(),
@@ -279,16 +318,45 @@ async function createShop(req, res) {
       owner_name: owner_name.trim(),
       logo_url: logo_url.trim(),
       is_active: true,
-    };
+    });
 
-    //  Insert Data
-    const resp = await db_query.addData(tablename, columns);
+    if (shopResp.status !== 0) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, shopResp);
+    }
 
-    return libFunc.sendResponse(res, resp);
-  } catch (error) {
-    console.log("createShop error:", error);
+    //  Create SHOP_ADMIN user
+    const userResp = await db_query.addData(userTable, {
+      row_id: libFunc.randomid(),
+      name: owner_name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      password: password.trim(), // simple
+      role: "SHOP_ADMIN",
+      shop_id: shopRowId,
+    });
+
+    if (userResp.status !== 0) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, userResp);
+    }
+
+    //  SUCCESS
+    await connect_db.query("COMMIT");
+    console.log("Shop and Shop Admin created successfully");
+
     return libFunc.sendResponse(res, {
       status: 0,
+      msg: "Shop and Shop Admin created successfully",
+      data: { shop_id: shopRowId },
+    });
+  } catch (error) {
+    console.log("createShopWithAdmin error:", error);
+
+    await connect_db.query("ROLLBACK");
+
+    return libFunc.sendResponse(res, {
+      status: 1,
       msg: "Something went wrong",
       error: error.message,
     });
@@ -744,62 +812,80 @@ async function createSweet(req, res) {
 
     const tablename = schema + ".sweets";
     const categoryTable = schema + ".categories";
+    const counterTable = schema + ".counters";
 
     const {
       category_id,
+      counter_id,
       sweet_name,
       unit = "KG",
       price = 0,
       shelf_life_days = 0,
       description = "",
       image_url = "",
+      return_type = "NONE",
     } = req.data || {};
 
-    // Validation
-    if (!category_id || !sweet_name) {
+    //  Validation
+    if (!category_id || !counter_id || !sweet_name) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Category and Sweet name required",
+        msg: "Category, Counter and Sweet name required",
       });
     }
 
-    // Check category exists
+    //  Check category exists
     const categoryCheck = await db_query.customQuery(`
       SELECT 1 FROM ${categoryTable}
       WHERE row_id = '${category_id.trim()}'
     `);
 
-    if (categoryCheck.length === 0) {
+    if (!categoryCheck.data || categoryCheck.data.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid or inactive category",
+        msg: "Invalid category",
       });
     }
 
-    // Duplicate check (same category)
+    //  Check counter exists
+    const counterCheck = await db_query.customQuery(`
+      SELECT 1 FROM ${counterTable}
+      WHERE row_id = '${counter_id.trim()}'
+    `);
+
+    if (!counterCheck.data || counterCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid counter",
+      });
+    }
+
+    //  Duplicate check (same counter)
     const existingSweet = await db_query.customQuery(`
       SELECT 1 FROM ${tablename}
-      WHERE category_id = '${category_id.trim()}'
+      WHERE counter_id = '${counter_id.trim()}'
       AND LOWER(sweet_name) = LOWER('${sweet_name.trim().replaceAll("'", "`")}')
     `);
 
-    if (existingSweet.length > 0) {
+    if (existingSweet.data && existingSweet.data.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Sweet already exists in this category",
+        msg: "Sweet already exists for this counter",
       });
     }
 
-    // Insert Data
+    //  Insert Data
     const columns = {
       row_id: libFunc.randomid(),
       category_id: category_id.trim(),
+      counter_id: counter_id.trim(),
       sweet_name: sweet_name.trim().replaceAll("'", "`"),
       unit: unit,
       price: price,
       shelf_life_days: shelf_life_days,
       description: description.trim(),
       image_url: image_url.trim(),
+      return_type: return_type,
       is_active: true,
     };
 
@@ -900,6 +986,12 @@ async function fetchAllSweets(req, res) {
   }
 }
 
+// ✔ IN → stock add
+// ✔ OUT → stock reduce
+// ✔ ADJUST → overwrite quantity
+
+// ✔ min_stock, max_stock → optional
+// ✔ expiry_date → only useful in IN
 async function addStock(req, res) {
   try {
     const inventoryTable = schema + ".inventory";
@@ -913,6 +1005,8 @@ async function addStock(req, res) {
       expiry_date = null,
       reference_id = "",
       notes = "",
+      min_stock = null,
+      max_stock = null,
     } = req.data || {};
 
     //  Validation
@@ -930,6 +1024,16 @@ async function addStock(req, res) {
         status: 1,
         msg: "Quantity must be greater than 0",
       });
+    }
+
+    //  Min/Max validation
+    if (min_stock !== null && max_stock !== null) {
+      if (Number(min_stock) > Number(max_stock)) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Min stock cannot be greater than max stock",
+        });
+      }
     }
 
     //  START TRANSACTION
@@ -959,8 +1063,7 @@ async function addStock(req, res) {
 
     if (existing.data && existing.data.length > 0) {
       const existingRow = existing.data[0];
-      const inventoryRowId = existingRow.row_id;
-      const currentQty = Number(existing.data[0].quantity);
+      const currentQty = Number(existingRow.quantity);
 
       if (transaction_type === "IN") {
         newQty = currentQty + qty;
@@ -978,14 +1081,23 @@ async function addStock(req, res) {
       }
 
       //  Update inventory
+      const updateData = {
+        quantity: newQty,
+        expiry_date,
+      };
+
+      //  optional update min/max
+      if (min_stock !== null) updateData.min_stock = min_stock;
+      if (max_stock !== null) updateData.max_stock = max_stock;
+
       await db_query.addData(
         inventoryTable,
-        { quantity: newQty, expiry_date },
+        updateData,
         existingRow.row_id,
         "Inventory"
       );
     } else {
-      //  New inventory row (only for IN)
+      // 🔹 New inventory row (only for IN)
       if (transaction_type !== "IN") {
         await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
@@ -1000,6 +1112,8 @@ async function addStock(req, res) {
         sweet_id,
         quantity: qty,
         expiry_date,
+        min_stock: min_stock || 0,
+        max_stock: max_stock || 0,
       });
     }
 
@@ -1257,6 +1371,181 @@ async function getInventoryAlerts(req, res) {
     });
   } catch (error) {
     console.log("getInventoryAlerts error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function createCounterRequest(req, res) {
+  try {
+    const table = schema + ".counter_requests";
+
+    const { counter_id, items } = req.data || {};
+
+    if (!counter_id || !items || items.length === 0) {
+      console.log("Counter and items required");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Counter and items required",
+      });
+    }
+
+    await connect_db.query("BEGIN");
+
+    for (let item of items) {
+      if (!item.sweet_id || !item.quantity) {
+        await connect_db.query("ROLLBACK");
+        console.log("Invalid item data");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid item data",
+        });
+      }
+
+      await db_query.addData(table, {
+        row_id: libFunc.randomid(),
+        counter_id,
+        sweet_id: item.sweet_id,
+        quantity: item.quantity,
+        status: "PENDING",
+      });
+    }
+
+    await connect_db.query("COMMIT");
+    console.log("Request sent to shop admin");
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Request sent to shop admin",
+    });
+  } catch (error) {
+    await connect_db.query("ROLLBACK");
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+    });
+  }
+}
+
+async function createFinalOrder(req, res) {
+  try {
+    console.log("Incoming Request:", req.data);
+
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+    const requestTable = schema + ".counter_requests";
+
+    const { shop_id, supplier_id, request_ids } = req.data || {};
+
+    //  Basic Validation
+    if (!shop_id || !supplier_id || !request_ids || request_ids.length === 0) {
+      console.log(" Missing required fields");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop, Supplier and request_ids required",
+      });
+    }
+
+    console.log("Request IDs:", request_ids);
+
+    await connect_db.query("BEGIN");
+
+    //  Fetch VALID + PENDING requests only
+    const requests = await db_query.customQuery(`
+      SELECT * FROM ${requestTable}
+      WHERE row_id IN (${request_ids.map(id => `'${id}'`).join(",")})
+      AND status = 'PENDING'
+    `);
+
+    console.log("📦 DB Requests:", requests.data);
+
+    //  No valid requests
+    if (!requests.data || requests.data.length === 0) {
+      await connect_db.query("ROLLBACK");
+      console.log(" No valid pending requests found");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "No valid pending requests found",
+      });
+    }
+
+    //  Some invalid IDs
+    if (requests.data.length !== request_ids.length) {
+      await connect_db.query("ROLLBACK");
+      console.log(" Invalid or already processed request_ids");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Some request_ids are invalid or already processed",
+      });
+    }
+
+    //  Combine sweets
+    const sweetMap = {};
+
+    for (let r of requests.data) {
+      if (!sweetMap[r.sweet_id]) {
+        sweetMap[r.sweet_id] = 0;
+      }
+      sweetMap[r.sweet_id] += Number(r.quantity);
+    }
+
+    console.log(" Combined Sweet Map:", sweetMap);
+
+    //  Create Order
+    const orderRowId = libFunc.randomid();
+
+    await db_query.addData(orderTable, {
+      row_id: orderRowId,
+      shop_id,
+      supplier_id,
+      order_status: "PENDING",
+    });
+
+    console.log(" Order Created:", orderRowId);
+
+    //  Insert Order Items
+    for (let sweet_id in sweetMap) {
+      await db_query.addData(itemTable, {
+        row_id: libFunc.randomid(),
+        order_id: orderRowId,
+        sweet_id,
+        quantity: sweetMap[sweet_id],
+      });
+    }
+
+    console.log(" Order Items Inserted");
+
+    //  Update request status
+    await db_query.customQuery(`
+      UPDATE ${requestTable}
+      SET status = 'APPROVED'
+      WHERE row_id IN (${request_ids.map(id => `'${id}'`).join(",")})
+    `);
+
+    console.log(" Requests marked as APPROVED");
+
+    await connect_db.query("COMMIT");
+
+    console.log("🎉 Final Order Created Successfully");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Final order created successfully",
+      data: { order_id: orderRowId },
+    });
+
+  } catch (error) {
+    console.log(" createFinalOrder ERROR:", error);
+
+    try {
+      await connect_db.query("ROLLBACK");
+      console.log(" Transaction Rolled Back");
+    } catch (e) {
+      console.log(" Rollback failed:", e);
+    }
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -1803,11 +2092,10 @@ async function getSupplierOrders(req, res) {
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const sweetTable = schema + ".sweets";
-    const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
 
     const { supplier_id } = req.data || {};
 
-    // 🔹 Validation
     if (!supplier_id) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1815,15 +2103,15 @@ async function getSupplierOrders(req, res) {
       });
     }
 
-    // 🔹 Fetch Orders + Items
     const result = await db_query.customQuery(`
       SELECT 
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
-        c.counter_name,
-        c.location,
+        sh.shop_name,
+        sh.city,
+        sh.state,
 
         oi.sweet_id,
         s.sweet_name,
@@ -1831,48 +2119,61 @@ async function getSupplierOrders(req, res) {
         oi.quantity
 
       FROM ${orderTable} o
-      LEFT JOIN ${counterTable} c 
-        ON c.row_id = o.counter_id
-      LEFT JOIN ${itemTable} oi 
-        ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} s 
-        ON s.row_id = oi.sweet_id
+      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
+      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
+      LEFT JOIN ${sweetTable} s ON s.row_id = oi.sweet_id
 
       WHERE o.supplier_id = '${supplier_id.trim()}'
       ORDER BY o.order_date DESC
     `);
 
-    // 🔹 Group data (order-wise)
+    // 🔥 UNIVERSAL FIX
+    const rows = Array.isArray(result) ? result : result.data;
+
+    console.log("📦 Final Rows:", rows);
+
+    if (!rows || rows.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "No orders found",
+        data: [],
+      });
+    }
+
     const ordersMap = {};
 
-    for (let row of result.data) {
+    for (let row of rows) {
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
-          counter_name: row.counter_name,
-          location: row.location,
+          shop_name: row.shop_name,
+          city: row.city,
+          state: row.state,
           items: [],
         };
       }
 
-      ordersMap[row.order_id].items.push({
-        sweet_id: row.sweet_id,
-        sweet_name: row.sweet_name,
-        unit: row.unit,
-        quantity: row.quantity,
-      });
+      if (row.sweet_id) {
+        ordersMap[row.order_id].items.push({
+          sweet_id: row.sweet_id,
+          sweet_name: row.sweet_name,
+          unit: row.unit,
+          quantity: row.quantity,
+        });
+      }
     }
 
     const finalData = Object.values(ordersMap);
-    console.log("find", finalData);
+    console.log("fianl data",finalData)
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Supplier orders fetched successfully",
       data: finalData,
     });
+
   } catch (error) {
     console.log("getSupplierOrders error:", error);
 

@@ -106,6 +106,9 @@ CREATE TABLE sms.stock_transactions (
     up_on timestamp without time zone DEFAULT now() NOT NULL
 );
 
+//TODO
+CHECK (transaction_type IN ('IN','OUT','RETURN','ADJUSTMENT'));
+
 CREATE TABLE sms.orders (
  id SERIAL NOT NULL,
  row_id TEXT NOT NULL PRIMARY KEY,
@@ -209,3 +212,39 @@ ADD COLUMN price NUMERIC(10,2) DEFAULT 0,
 ADD COLUMN description TEXT,
 ADD COLUMN image_url TEXT,
 ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+
+
+
+
+ALTER TABLE sms.sweets
+ADD COLUMN counter_id TEXT REFERENCES sms.counters(row_id);
+
+ALTER TABLE sms.sweets
+ADD COLUMN return_type TEXT DEFAULT 'NONE';
+//TODO
+CHECK (return_type IN ('NONE','RETURNABLE','NON_RETURNABLE'));
+
+
+ALTER TABLE sms.inventory
+ADD COLUMN min_stock INTEGER DEFAULT 0,
+ADD COLUMN max_stock INTEGER DEFAULT 0;
+
+ALTER TABLE sms.users
+ADD COLUMN shop_id TEXT REFERENCES sms.shops(row_id)
+
+
+CREATE TABLE sms.counter_requests (
+  id SERIAL NOT NULL,
+  row_id TEXT NOT NULL PRIMARY KEY,
+  counter_id TEXT REFERENCES sms.counters(row_id),
+  sweet_id TEXT REFERENCES sms.sweets(row_id),
+  quantity NUMERIC,
+  status TEXT DEFAULT 'PENDING', -- PENDING / APPROVED / REJECTED
+  cr_on timestamp without time zone DEFAULT now() NOT NULL,
+  up_on timestamp without time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE sms.orders
+ADD COLUMN shop_id TEXT REFERENCES sms.shops(row_id);
+
+ALTER TABLE sms.orders DROP COLUMN counter_id;

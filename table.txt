@@ -248,3 +248,16 @@ ALTER TABLE sms.orders
 ADD COLUMN shop_id TEXT REFERENCES sms.shops(row_id);
 
 ALTER TABLE sms.orders DROP COLUMN counter_id;
+
+
+
+ALTER TABLE sms.departments
+ADD COLUMN shop_id TEXT REFERENCES sms.shops(row_id);
+
+
+ALTER TABLE sms.categories
+ADD COLUMN shop_id TEXT;
+
+
+ALTER TABLE sms.sweets
+ADD COLUMN shop_id TEXT;

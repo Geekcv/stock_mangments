@@ -28,6 +28,7 @@ function verifyToken(req, res, next) {
       req.userId = decoded.userId;
       req.role = decoded.role;
       req.counterId = decoded.counterId;
+      req.shopId =decoded.shopId
       req.token = token;
       next();
     }
@@ -57,6 +58,8 @@ router.post("/", verifyToken, function (req, res, next) {
   data.data.user_role = req.role; //if loggedin user is admin or dept admin then needed
   data.data.token = req.token;
   data.data.counterId = req.counterId;
+  data.data.shopId = req.shopId;
+
   let fn = "common_fn",
     se = data.se;
 

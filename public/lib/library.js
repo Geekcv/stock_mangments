@@ -183,7 +183,7 @@ async function loginUser(req, res) {
     }
 
     const query = `
-      SELECT row_id,name,email,phone,password,role,counter_id
+      SELECT row_id,name,email,phone,password,role,counter_id,shop_id
       FROM sms.users
       WHERE email = '${req.data.email}' OR phone = '${req.data.phone}'
       LIMIT 1
@@ -214,6 +214,7 @@ async function loginUser(req, res) {
       userId: user.row_id,
       role: user.role,
       counterId: user.counter_id,
+      shopId: user.shop_id,
     };
 
     const token = jwt.sign(jwtData, JWT_SECRET, { expiresIn: "3d" });
@@ -226,6 +227,7 @@ async function loginUser(req, res) {
         user_id: user.row_id,
         role: user.role,
         counter_id: user.counter_id,
+        shop_id: user.shop_id,
       },
     };
     console.log("res", response);
@@ -243,7 +245,7 @@ async function loginUser(req, res) {
 
 async function createShop(req, res) {
   try {
-    console.log("request", req.data);
+    const user = req.data;
 
     const shopTable = schema + ".shops";
     const userTable = schema + ".users";
@@ -254,44 +256,52 @@ async function createShop(req, res) {
       city = "",
       state = "",
       pincode = "",
-      phone = "",
-      email = "",
+      phone,
+      email,
       gst_number = "",
-      owner_name = "",
+      owner_name,
       logo_url = "",
       password,
     } = req.data || {};
 
+    //  Role validation
+    if (user.user_role !== "ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only admin can create shop",
+      });
+    }
+
     //  Validation
     if (!shop_name || !owner_name || !email || !phone || !password) {
-      console.log("Shop + Owner login details required");
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Shop + Owner login details required",
       });
     }
 
-    //  Duplicate check
+    //  Normalize
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone.trim();
+
+    //  Duplicate user check
     const existingUser = await db_query.customQuery(`
       SELECT phone, email FROM ${userTable}
-      WHERE phone = '${phone.trim()}'
-      OR email = '${email.trim()}'
+      WHERE phone = '${cleanPhone}'
+      OR email = '${cleanEmail}'
     `);
 
     if (existingUser.data?.length > 0) {
-      const user = existingUser.data[0];
-      console.log("Phone already exists");
+      const u = existingUser.data[0];
 
-      if (user.phone === phone.trim()) {
+      if (u.phone === cleanPhone) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
         });
       }
 
-      if (user.email === email.trim()) {
-        console.log("Email already exists");
-
+      if (u.email === cleanEmail) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -299,7 +309,20 @@ async function createShop(req, res) {
       }
     }
 
-    //  TRANSACTION START
+    //  Duplicate shop check
+    const existingShop = await db_query.customQuery(`
+      SELECT 1 FROM ${shopTable}
+      WHERE LOWER(shop_name) = LOWER('${shop_name.trim()}')
+    `);
+
+    if (existingShop.data?.length > 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop already exists",
+      });
+    }
+
+    //  START TRANSACTION
     await connect_db.query("BEGIN");
 
     const shopRowId = libFunc.randomid();
@@ -312,8 +335,8 @@ async function createShop(req, res) {
       city: city.trim(),
       state: state.trim(),
       pincode: pincode.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
+      phone: cleanPhone,
+      email: cleanEmail,
       gst_number: gst_number.trim(),
       owner_name: owner_name.trim(),
       logo_url: logo_url.trim(),
@@ -325,13 +348,13 @@ async function createShop(req, res) {
       return libFunc.sendResponse(res, shopResp);
     }
 
-    //  Create SHOP_ADMIN user
+    // 👤 Create SHOP_ADMIN (plain password)
     const userResp = await db_query.addData(userTable, {
       row_id: libFunc.randomid(),
       name: owner_name.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      password: password.trim(), // simple
+      email: cleanEmail,
+      phone: cleanPhone,
+      password: password.trim(), //  no hashing
       role: "SHOP_ADMIN",
       shop_id: shopRowId,
     });
@@ -341,9 +364,7 @@ async function createShop(req, res) {
       return libFunc.sendResponse(res, userResp);
     }
 
-    //  SUCCESS
     await connect_db.query("COMMIT");
-    console.log("Shop and Shop Admin created successfully");
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -351,9 +372,11 @@ async function createShop(req, res) {
       data: { shop_id: shopRowId },
     });
   } catch (error) {
-    console.log("createShopWithAdmin error:", error);
+    console.log("createShop error:", error);
 
-    await connect_db.query("ROLLBACK");
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (e) {}
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -362,6 +385,128 @@ async function createShop(req, res) {
     });
   }
 }
+
+// async function createCounter(req, res) {
+//   try {
+//     console.log("request", req.data);
+
+//     const counterTable = schema + ".counters";
+//     const userTable = schema + ".users";
+
+//     const {
+//       shop_id,
+//       counter_name,
+//       location = "",
+//       name,
+//       email,
+//       phone,
+//       password,
+//     } = req.data || {};
+
+//     //  Validation
+//     if (!shop_id || !counter_name || !name || !email || !phone || !password) {
+//       console.log("Required fields missing");
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Required fields missing",
+//       });
+//     }
+
+//     //  Duplicate check (like supplier)
+//     const existingUser = await db_query.customQuery(`
+//       SELECT phone, email FROM ${userTable}
+//       WHERE phone = '${phone.trim()}'
+//       OR email = '${email.trim()}'
+//     `);
+
+//     console.log("existingUser", existingUser);
+
+//     if (existingUser.data && existingUser.data.length > 0) {
+//       const user = existingUser.data[0];
+
+//       if (user.phone === phone.trim()) {
+//         console.log("Phone already exists");
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Phone already exists",
+//         });
+//       }
+
+//       if (user.email === email.trim()) {
+//         console.log("Email already exists");
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Email already exists",
+//         });
+//       }
+//     }
+
+//     //  BEGIN TRANSACTION
+//     await connect_db.query("BEGIN TRANSACTION");
+
+//     const counterRowId = libFunc.randomid();
+
+//     //  Insert Counter
+//     const counterColumns = {
+//       row_id: counterRowId,
+//       shop_id: shop_id.trim(),
+//       counter_name: counter_name.trim().replaceAll("'", "`"),
+//       location: location.trim(),
+//     };
+
+//     const counterResp = await db_query.addData(counterTable, counterColumns);
+
+//     if (counterResp.status === 0) {
+//       //  Insert User
+//       const userColumns = {
+//         row_id: libFunc.randomid(),
+//         name: name.trim(),
+//         email: email.trim(),
+//         phone: phone.trim(),
+//         password: password.trim(),
+//         role: "COUNTER_USER",
+//         counter_id: counterRowId,
+//       };
+
+//       const userResp = await db_query.addData(userTable, userColumns);
+
+//       if (userResp.status === 0) {
+//         //  SUCCESS
+//         await connect_db.query("COMMIT");
+//         console.log("Counter and counter user created successfully");
+
+//         return libFunc.sendResponse(res, {
+//           status: 0,
+//           msg: "Counter and counter user created successfully",
+//           data: {
+//             counter_id: counterRowId,
+//           },
+//         });
+//       } else {
+//         //  User insert failed
+//         await connect_db.query("ROLLBACK");
+//         return libFunc.sendResponse(res, userResp);
+//       }
+//     } else {
+//       //  Counter insert failed
+//       await connect_db.query("ROLLBACK");
+//       return libFunc.sendResponse(res, counterResp);
+//     }
+//   } catch (error) {
+//     console.log("createCounter error:", error);
+
+//     await connect_db.query("ROLLBACK");
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg:
+//         error.code === "23505"
+//           ? "Duplicate entry (phone/email already exists)"
+//           : "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
 
 async function createCounter(req, res) {
   try {
@@ -380,8 +525,56 @@ async function createCounter(req, res) {
       password,
     } = req.data || {};
 
+    const loggedInUser = req.data;
+
+    // Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(loggedInUser.user_role)) {
+      console.log("access denided");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Resolve Shop ID
+    let finalShopId;
+
+    if (loggedInUser.user_role === "ADMIN") {
+      console.log("inside admin");
+      if (!shop_id) {
+        console.log("shop_id is required for admin");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required for admin",
+        });
+      }
+      finalShopId = shop_id.trim();
+    }
+
+    if (loggedInUser.user_role === "SHOP_ADMIN") {
+      console.log("inside shop admin");
+
+      if (shop_id && shop_id !== loggedInUser.shopId) {
+        console.log("You can only create counter in your shop");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "You can only create counter in your shop",
+        });
+      }
+      finalShopId = loggedInUser.shopId;
+    }
+
     //  Validation
-    if (!shop_id || !counter_name || !name || !email || !phone || !password) {
+    if (
+      !finalShopId ||
+      !counter_name ||
+      !name ||
+      !email ||
+      !phone ||
+      !password
+    ) {
       console.log("Required fields missing");
       return libFunc.sendResponse(res, {
         status: 1,
@@ -389,20 +582,19 @@ async function createCounter(req, res) {
       });
     }
 
-    //  Duplicate check (like supplier)
-    const existingUser = await db_query.customQuery(`
-      SELECT phone, email FROM ${userTable}
-      WHERE phone = '${phone.trim()}'
-      OR email = '${email.trim()}'
-    `);
+    //  Duplicate check (SQL Injection Safe)
+    const existingUser = await db_query.customQuery(
+      `SELECT phone, email FROM ${userTable}
+       WHERE phone = '${phone.trim()}' OR email = '${email.trim()}'`
+    );
 
-    console.log("existingUser", existingUser);
+    console.log("exising usrs", existingUser);
 
     if (existingUser.data && existingUser.data.length > 0) {
       const user = existingUser.data[0];
 
       if (user.phone === phone.trim()) {
-        console.log("Phone already exists");
+        console.log("phone already exists");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
@@ -410,7 +602,8 @@ async function createCounter(req, res) {
       }
 
       if (user.email === email.trim()) {
-        console.log("Email already exists");
+        console.log("email already exists");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -419,56 +612,54 @@ async function createCounter(req, res) {
     }
 
     //  BEGIN TRANSACTION
-    await connect_db.query("BEGIN TRANSACTION");
+    await connect_db.query("BEGIN");
 
     const counterRowId = libFunc.randomid();
 
     //  Insert Counter
     const counterColumns = {
       row_id: counterRowId,
-      shop_id: shop_id.trim(),
+      shop_id: finalShopId,
       counter_name: counter_name.trim().replaceAll("'", "`"),
       location: location.trim(),
     };
 
     const counterResp = await db_query.addData(counterTable, counterColumns);
 
-    if (counterResp.status === 0) {
-      //  Insert User
-      const userColumns = {
-        row_id: libFunc.randomid(),
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        password: password.trim(),
-        role: "COUNTER_USER",
-        counter_id: counterRowId,
-      };
-
-      const userResp = await db_query.addData(userTable, userColumns);
-
-      if (userResp.status === 0) {
-        //  SUCCESS
-        await connect_db.query("COMMIT");
-        console.log("Counter and counter user created successfully");
-
-        return libFunc.sendResponse(res, {
-          status: 0,
-          msg: "Counter and counter user created successfully",
-          data: {
-            counter_id: counterRowId,
-          },
-        });
-      } else {
-        //  User insert failed
-        await connect_db.query("ROLLBACK");
-        return libFunc.sendResponse(res, userResp);
-      }
-    } else {
-      //  Counter insert failed
+    if (counterResp.status !== 0) {
       await connect_db.query("ROLLBACK");
       return libFunc.sendResponse(res, counterResp);
     }
+
+    // 👤 Insert Counter User
+    const userColumns = {
+      row_id: libFunc.randomid(),
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      password: password.trim(), //  (later hash karna)
+      role: "COUNTER_USER",
+      counter_id: counterRowId,
+      shop_id: finalShopId,
+    };
+
+    const userResp = await db_query.addData(userTable, userColumns);
+
+    if (userResp.status !== 0) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, userResp);
+    }
+
+    //  COMMIT
+    await connect_db.query("COMMIT");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Counter and counter user created successfully",
+      data: {
+        counter_id: counterRowId,
+      },
+    });
   } catch (error) {
     console.log("createCounter error:", error);
 
@@ -479,8 +670,7 @@ async function createCounter(req, res) {
       msg:
         error.code === "23505"
           ? "Duplicate entry (phone/email already exists)"
-          : "Something went wrong",
-      error: error.message,
+          : error.message || "Something went wrong",
     });
   }
 }
@@ -608,15 +798,34 @@ async function createSupplier(req, res) {
 
 async function fetchShops(req, res) {
   try {
-    // console.log("request", req.data);
-
     const tablename = schema + ".shops";
 
-    const { city, state, search } = req.data || {};
+    const { city, state, search, shop_id } = req.data || {};
+    const user = req.data;
 
-    //  Dynamic WHERE conditions
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
     let conditions = ["is_active = true"];
 
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (shop_id) {
+        conditions.push(`row_id = '${shop_id}'`);
+      }
+    }
+
+    //  SHOP_ADMIN /  COUNTER_USER
+    if (["SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      conditions.push(`row_id = '${user.shop_id}'`);
+    }
+
+    //  Filters
     if (city) {
       conditions.push(`LOWER(city) = LOWER('${city.replaceAll("'", "`")}')`);
     }
@@ -636,9 +845,8 @@ async function fetchShops(req, res) {
       `);
     }
 
-    const whereClause = conditions.length
-      ? `WHERE ${conditions.join(" AND ")}`
-      : "";
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const query = `
       SELECT 
@@ -650,7 +858,9 @@ async function fetchShops(req, res) {
         pincode,
         phone,
         email,
-        gst_number,owner_name,logo_url,
+        gst_number,
+        owner_name,
+        logo_url,
         is_active,
         cr_on,
         up_on
@@ -659,10 +869,10 @@ async function fetchShops(req, res) {
       ORDER BY shop_name ASC
     `;
 
-    const result = await db_query.customQuery(query, "Shop Fetch");
-    // console.log("res", result);
+    console.log("Final Query:", query);
 
-    console.log("resposne ", result);
+    const result = await db_query.customQuery(query, "fetch");
+
     return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchShops error:", error);
@@ -677,26 +887,77 @@ async function fetchShops(req, res) {
 
 async function fetchCounters(req, res) {
   console.log("request", req);
+  try {
+    const { shopId } = req.data || {};
+    const user = req.data; //  FIX (req.data nahi)
 
-  const query = `
-    SELECT
-      c.row_id,
-      c.counter_name,
-      c.location,
-      c.shop_id,
-      s.shop_name
-    FROM ${schema}.counters c
-    LEFT JOIN ${schema}.shops s
-      ON s.row_id = c.shop_id
-    ORDER BY c.counter_name ASC
-  `;
+    const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
 
-  const result = await db_query.customQuery(query, "Counter fetch");
-  console.log("results-->", result);
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
 
-  return libFunc.sendResponse(res, result);
+    let whereConditions = [];
+
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (shopId) {
+        whereConditions.push(`c.shop_id = '${shopId}'`);
+      }
+    }
+
+    //  SHOP_ADMIN
+    if (user.user_role === "SHOP_ADMIN") {
+      //  Always use own shop_id (not request)
+      whereConditions.push(`c.shop_id = '${user.shopId}'`);
+    }
+
+    //  COUNTER_USER
+    if (user.user_role === "COUNTER_USER") {
+      whereConditions.push(`c.row_id = '${user.counterId}'`);
+    }
+
+    //  WHERE clause
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    //  Final Query
+    const query = `
+      SELECT
+        c.row_id,
+        c.counter_name,
+        c.location,
+        c.shop_id,
+        s.shop_name
+      FROM ${counterTable} c
+      LEFT JOIN ${shopTable} s
+        ON s.row_id = c.shop_id
+      ${whereClause}
+      ORDER BY c.counter_name ASC
+    `;
+
+    console.log("Final Query:", query);
+
+    const result = await db_query.customQuery(query, "fetch all counter");
+
+    return libFunc.sendResponse(res, result);
+  } catch (error) {
+    console.log("fetchCounters error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
 }
-
 async function fetchSuppliers(req, res) {
   console.log("request", req);
 
@@ -720,98 +981,341 @@ async function fetchSuppliers(req, res) {
 }
 
 async function createDepartment(req, res) {
-  const tablename = schema + ".departments";
+  console.log("req", req);
+  try {
+    const tablename = schema + ".departments";
 
-  const department_name = req.data.department_name;
-  const description = req.data.description || "";
+    const { department_name, description = "", shop_id } = req.data || {};
+    const user = req.data;
 
-  if (!department_name) {
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Validation
+    if (!department_name) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Department name is required",
+      });
+    }
+
+    //  Resolve shop_id
+    let finalShopId;
+
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (!shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required",
+        });
+      }
+      finalShopId = shop_id.trim();
+    }
+
+    //  SHOP_ADMIN
+    if (user.user_role === "SHOP_ADMIN") {
+      if (shop_id && shop_id !== user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "You can only create department in your shop",
+        });
+      }
+      finalShopId = user.shopId;
+    }
+
+    //  Duplicate check (same shop)
+    const existing = await db_query.customQuery(`
+      SELECT row_id FROM ${tablename}
+      WHERE department_name = '${department_name.trim()}'
+      AND shop_id = '${finalShopId}'
+    `);
+
+    if (existing.data && existing.data.length > 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Department already exists in this shop",
+      });
+    }
+
+    //  Insert
+    const columns = {
+      row_id: libFunc.randomid(),
+      department_name: department_name.trim().replaceAll("'", "`"),
+      description: description.trim(),
+      shop_id: finalShopId,
+    };
+
+    const resp = await db_query.addData(tablename, columns, null, "Department");
+
+    return libFunc.sendResponse(res, resp);
+  } catch (error) {
+    console.log("createDepartment error:", error);
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Department name is required",
+      msg: "Something went wrong",
+      error: error.message,
     });
   }
-
-  const columns = {
-    row_id: libFunc.randomid(),
-    department_name: department_name.trim().replaceAll("'", "`"),
-    description: description.trim(),
-  };
-
-  const resp = await db_query.addData(tablename, columns);
-
-  return libFunc.sendResponse(res, resp);
 }
 
 async function fetchDepartments(req, res) {
-  const table = `${schema}.departments`;
+  try {
+    const deptTable = `${schema}.departments`;
+    const shopTable = `${schema}.shops`;
 
-  const sql = `
-    SELECT
-      d.row_id,
-      d.department_name,
-      d.description,
-      d.cr_on
-    FROM ${table} d
-    ORDER BY d.department_name
-  `;
+    const user = req.data; //  FIX
+    const { shop_id } = req.data || {}; // optional filter
 
-  const dbRes = await db_query.customQuery(sql, "Fetch Departments");
-  console.log("dbres", dbRes);
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
 
-  return libFunc.sendResponse(res, dbRes);
+    let whereConditions = [];
+
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (shop_id) {
+        whereConditions.push(`d.shop_id = '${shop_id}'`);
+      }
+    }
+
+    //  SHOP_ADMIN
+    if (user.user_role === "SHOP_ADMIN") {
+      // ❗ always force own shop
+      whereConditions.push(`d.shop_id = '${user.shopId}'`);
+    }
+
+    //  Build WHERE clause
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    //  Final Query
+    const sql = `
+      SELECT
+        d.row_id,
+        d.department_name,
+        d.description,
+        d.shop_id,
+        s.shop_name,
+        d.cr_on
+      FROM ${deptTable} d
+      LEFT JOIN ${shopTable} s
+        ON s.row_id = d.shop_id
+      ${whereClause}
+      ORDER BY d.department_name
+    `;
+
+    console.log("Final Query:", sql);
+
+    const dbRes = await db_query.customQuery(sql);
+
+    return libFunc.sendResponse(res, dbRes);
+  } catch (error) {
+    console.log("fetchDepartments error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
 }
 
 async function createCategory(req, res) {
-  const tablename = schema + ".categories";
+  console.log("req", req);
+  try {
+    const tablename = schema + ".categories";
+    const deptTable = schema + ".departments";
 
-  const department_id = req.data.department_id;
-  const category_name = req.data.category_name;
+    const { department_id, category_name, shop_id } = req.data || {};
+    const user = req.data;
 
-  if (!department_id || !category_name) {
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Basic validation
+    if (!department_id || !category_name) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Department and Category name required",
+      });
+    }
+
+    //  Check department exists + get shop_id
+    const deptCheck = await db_query.customQuery(`
+      SELECT row_id, shop_id 
+      FROM ${deptTable}
+      WHERE row_id = '${department_id}'
+    `);
+
+    if (!deptCheck.data || deptCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid department",
+      });
+    }
+
+    const department = deptCheck.data[0];
+    let finalShopId;
+
+    if (user.user_role === "ADMIN") {
+      if (!shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required",
+        });
+      }
+      finalShopId = shop_id.trim();
+    }
+
+    //  SHOP ACCESS CONTROL
+    if (user.user_role === "SHOP_ADMIN") {
+      if (department.shop_id !== user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "You cannot add category to another shop's department",
+        });
+      }
+      finalShopId = user.shopId;
+    }
+
+    //  Duplicate check (same department)
+    const existing = await db_query.customQuery(`
+      SELECT row_id FROM ${tablename}
+      WHERE category_name = '${category_name.trim()}'
+      AND department_id = '${department_id}'
+    `);
+
+    if (existing.data && existing.data.length > 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Category already exists in this department",
+      });
+    }
+
+    //  Insert
+    const columns = {
+      row_id: libFunc.randomid(),
+      department_id: department_id.trim(),
+      category_name: category_name.trim().replaceAll("'", "`"),
+      shop_id: finalShopId,
+    };
+
+    const resp = await db_query.addData(tablename, columns, null, "Category");
+
+    return libFunc.sendResponse(res, resp);
+  } catch (error) {
+    console.log("createCategory error:", error);
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Department and Category name required",
+      msg: "Something went wrong",
+      error: error.message,
     });
   }
-
-  const columns = {
-    row_id: libFunc.randomid(),
-    department_id: department_id.trim(),
-    category_name: category_name.trim().replaceAll("'", "`"),
-  };
-
-  const resp = await db_query.addData(tablename, columns);
-
-  return libFunc.sendResponse(res, resp);
 }
 
 async function fetchAllCategories(req, res) {
-  const sql = `
-    SELECT
-      c.row_id,
-      c.category_name,
-      c.department_id,
-      d.department_name,
-      c.cr_on
-    FROM ${schema}.categories c
-    LEFT JOIN ${schema}.departments d
-      ON d.row_id = c.department_id
-    ORDER BY c.category_name ASC
-  `;
+  try {
+    const user = req.data;
+    const { shop_id, department_id } = req.data || {};
 
-  const result = await db_query.customQuery(sql, "Fetch All Categories");
-  console.log("results", result);
+    const categoryTable = `${schema}.categories`;
+    const deptTable = `${schema}.departments`;
+    const shopTable = `${schema}.shops`;
 
-  return libFunc.sendResponse(res, result);
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    let whereConditions = [];
+
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (shop_id) {
+        whereConditions.push(`d.shop_id = '${shop_id}'`);
+      }
+
+      if (department_id) {
+        whereConditions.push(`c.department_id = '${department_id}'`);
+      }
+    }
+
+    //  SHOP_ADMIN
+    if (user.user_role === "SHOP_ADMIN") {
+      whereConditions.push(`d.shop_id = '${user.shopId}'`);
+
+      if (department_id) {
+        whereConditions.push(`c.department_id = '${department_id}'`);
+      }
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    //  FINAL QUERY (JOIN shop added)
+    const sql = `
+      SELECT
+        c.row_id,
+        c.category_name,
+        c.department_id,
+        d.department_name,
+        d.shop_id,
+        s.shop_name,   --  NEW
+        c.cr_on
+      FROM ${categoryTable} c
+      LEFT JOIN ${deptTable} d
+        ON d.row_id = c.department_id
+      LEFT JOIN ${shopTable} s
+        ON s.row_id = d.shop_id
+      ${whereClause}
+      ORDER BY c.category_name ASC
+    `;
+
+    console.log("Final Query:", sql);
+
+    const result = await db_query.customQuery(sql);
+
+    return libFunc.sendResponse(res, result);
+  } catch (error) {
+    console.log("fetchAllCategories error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
 }
-
 async function createSweet(req, res) {
   try {
-    console.log("request", req.data);
-
     const tablename = schema + ".sweets";
     const categoryTable = schema + ".categories";
+    const deptTable = schema + ".departments";
     const counterTable = schema + ".counters";
 
     const {
@@ -826,7 +1330,17 @@ async function createSweet(req, res) {
       return_type = "NONE",
     } = req.data || {};
 
-    //  Validation
+    const user = req.data;
+
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Basic validation
     if (!category_id || !counter_id || !sweet_name) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -834,10 +1348,13 @@ async function createSweet(req, res) {
       });
     }
 
-    //  Check category exists
+    //  Get Category + Shop
     const categoryCheck = await db_query.customQuery(`
-      SELECT 1 FROM ${categoryTable}
-      WHERE row_id = '${category_id.trim()}'
+      SELECT c.row_id, d.shop_id
+      FROM ${categoryTable} c
+      LEFT JOIN ${deptTable} d
+        ON d.row_id = c.department_id
+      WHERE c.row_id = '${category_id.trim()}'
     `);
 
     if (!categoryCheck.data || categoryCheck.data.length === 0) {
@@ -847,9 +1364,12 @@ async function createSweet(req, res) {
       });
     }
 
-    //  Check counter exists
+    const category = categoryCheck.data[0];
+
+    //  Get Counter + Shop
     const counterCheck = await db_query.customQuery(`
-      SELECT 1 FROM ${counterTable}
+      SELECT row_id, shop_id
+      FROM ${counterTable}
       WHERE row_id = '${counter_id.trim()}'
     `);
 
@@ -860,7 +1380,39 @@ async function createSweet(req, res) {
       });
     }
 
-    //  Duplicate check (same counter)
+    const counter = counterCheck.data[0];
+    let finalShopId;
+
+    if (user.user_role === "ADMIN") {
+      if (!shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required",
+        });
+      }
+      finalShopId = shop_id.trim();
+    }
+
+    //  CORE VALIDATION (Hierarchy match)
+    if (category.shop_id !== counter.shop_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Category and Counter must belong to same shop",
+      });
+    }
+
+    //  Role-based shop restriction
+    if (user.user_role === "SHOP_ADMIN") {
+      if (counter.shop_id !== user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "You cannot create sweet for another shop",
+        });
+      }
+      finalShopId = user.shopId;
+    }
+
+    //  Duplicate check
     const existingSweet = await db_query.customQuery(`
       SELECT 1 FROM ${tablename}
       WHERE counter_id = '${counter_id.trim()}'
@@ -874,19 +1426,20 @@ async function createSweet(req, res) {
       });
     }
 
-    //  Insert Data
+    // Insert
     const columns = {
       row_id: libFunc.randomid(),
       category_id: category_id.trim(),
       counter_id: counter_id.trim(),
       sweet_name: sweet_name.trim().replaceAll("'", "`"),
-      unit: unit,
-      price: price,
-      shelf_life_days: shelf_life_days,
+      unit,
+      price,
+      shelf_life_days,
       description: description.trim(),
       image_url: image_url.trim(),
-      return_type: return_type,
+      return_type,
       is_active: true,
+      shop_id: finalShopId,
     };
 
     const resp = await db_query.addData(tablename, columns);
@@ -904,20 +1457,51 @@ async function createSweet(req, res) {
 }
 
 async function fetchAllSweets(req, res) {
+  console.log(req);
   try {
-    console.log("request", req.data);
+    const user = req.data;
 
-    const { category_id, department_id, search } = req.data || {};
+    const { category_id, department_id, shop_id, counter_id, search } =
+      req.data || {};
 
-    //  Conditions
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
     let conditions = ["s.is_active = true"];
 
+    //  ADMIN
+    if (user.user_role === "ADMIN") {
+      if (shop_id) {
+        conditions.push(`d.shop_id = '${shop_id}'`);
+      }
+    }
+
+    //  SHOP_ADMIN
+    if (user.user_role === "SHOP_ADMIN") {
+      conditions.push(`d.shop_id = '${user.shopId}'`);
+    }
+
+    //  COUNTER_USER
+    if (user.user_role === "COUNTER_USER") {
+      conditions.push(`ct.row_id = '${user.counterId}'`);
+    }
+
+    //  Filters
     if (category_id) {
       conditions.push(`s.category_id = '${category_id.replaceAll("'", "`")}'`);
     }
 
     if (department_id) {
       conditions.push(`d.row_id = '${department_id.replaceAll("'", "`")}'`);
+    }
+
+    if (counter_id) {
+      conditions.push(`ct.row_id = '${counter_id.replaceAll("'", "`")}'`);
     }
 
     if (search) {
@@ -936,6 +1520,7 @@ async function fetchAllSweets(req, res) {
       ? `WHERE ${conditions.join(" AND ")}`
       : "";
 
+    //  FINAL QUERY (FULL JOIN)
     const sql = `
       SELECT
         s.row_id,
@@ -946,34 +1531,45 @@ async function fetchAllSweets(req, res) {
         s.description,
         s.image_url,
         s.category_id,
+
         c.category_name,
+
         d.row_id AS department_id,
         d.department_name,
+        d.shop_id,
+
+        sh.shop_name,        --  added
+
+        ct.row_id AS counter_id,
+        ct.counter_name,     --  added
+
         s.is_active,
         s.cr_on,
         s.up_on
+
       FROM ${schema}.sweets s
+
       LEFT JOIN ${schema}.categories c
         ON c.row_id = s.category_id
+
       LEFT JOIN ${schema}.departments d
         ON d.row_id = c.department_id
+
+      LEFT JOIN ${schema}.shops sh
+        ON sh.row_id = d.shop_id
+
+      LEFT JOIN ${schema}.counters ct
+        ON ct.row_id = s.counter_id
+
       ${whereClause}
+
       ORDER BY s.sweet_name ASC
     `;
 
-    const result = await db_query.customQuery(sql, "Fetch All Sweets");
+    console.log("Final Query:", sql);
 
-    //  Add full URL
-    // const BASE_URL = "https://stock-mangments.onrender.com";
+    const result = await db_query.customQuery(sql);
 
-    // if (result?.data?.length) {
-    //   result.data = result.data.map((item) => ({
-    //     ...item,
-    //     image_url: item.image_url ? `${BASE_URL}/${item.image_url}` : null,
-    //   }));
-    // }
-
-    console.log("results", result);
     return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchAllSweets error:", error);
@@ -993,14 +1589,19 @@ async function fetchAllSweets(req, res) {
 // ✔ min_stock, max_stock → optional
 // ✔ expiry_date → only useful in IN
 async function addStock(req, res) {
+  console.log(req);
   try {
     const inventoryTable = schema + ".inventory";
     const transactionTable = schema + ".stock_transactions";
+    const sweetTable = schema + ".sweets";
+    const categoryTable = schema + ".categories";
+    const deptTable = schema + ".departments";
+    const counterTable = schema + ".counters";
 
     const {
       counter_id,
       sweet_id,
-      transaction_type, // IN / OUT / ADJUST
+      transaction_type,
       quantity,
       expiry_date = null,
       reference_id = "",
@@ -1009,20 +1610,108 @@ async function addStock(req, res) {
       max_stock = null,
     } = req.data || {};
 
-    //  Validation
-    if (!counter_id || !sweet_id || !transaction_type || !quantity) {
+    const user = req.data;
+
+    //  Role validation
+    if (!["SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Basic validation
+    if (!sweet_id || !transaction_type || !quantity) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Missing required fields",
       });
     }
 
+    //  Resolve counter_id based on role
+    let finalCounterId;
+
+    if (user.user_role === "COUNTER_USER") {
+      finalCounterId = user.counterId;
+    }
+
+    if (user.user_role === "SHOP_ADMIN") {
+      if (!counter_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "counter_id is required",
+        });
+      }
+      finalCounterId = counter_id;
+    }
+
+    //  Get Counter → Shop
+    const counterCheck = await db_query.customQuery(`
+      SELECT shop_id
+      FROM ${counterTable}
+      WHERE row_id = '${finalCounterId}'
+    `);
+
+    if (!counterCheck.data || counterCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid counter",
+      });
+    }
+
+    const counterShopId = counterCheck.data[0].shop_id;
+
+    //  SHOP_ADMIN restriction
+    if (user.user_role === "SHOP_ADMIN") {
+      if (counterShopId !== user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Unauthorized shop access",
+        });
+      }
+    }
+
     const qty = Number(quantity);
 
-    if (qty <= 0) {
+    if (isNaN(qty) || qty <= 0) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Quantity must be greater than 0",
+      });
+    }
+
+    //  Transaction type validation
+    const validTypes = ["IN", "OUT", "ADJUST"];
+    if (!validTypes.includes(transaction_type)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid transaction type",
+      });
+    }
+
+    //  Get Sweet → Shop
+    const sweetCheck = await db_query.customQuery(`
+      SELECT d.shop_id
+      FROM ${sweetTable} s
+      LEFT JOIN ${categoryTable} c ON c.row_id = s.category_id
+      LEFT JOIN ${deptTable} d ON d.row_id = c.department_id
+      WHERE s.row_id = '${sweet_id}'
+    `);
+
+    if (!sweetCheck.data || sweetCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid sweet",
+      });
+    }
+
+    const sweetShopId = sweetCheck.data[0].shop_id;
+
+    //  CORE VALIDATION
+    if (sweetShopId !== counterShopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Sweet and Counter must belong to same shop",
       });
     }
 
@@ -1040,22 +1729,25 @@ async function addStock(req, res) {
     await connect_db.query("BEGIN");
 
     //  Insert transaction
-    const transactionData = {
-      row_id: libFunc.randomid(),
-      counter_id: counter_id.trim(),
-      sweet_id: sweet_id.trim(),
-      transaction_type,
-      quantity: qty,
-      reference_id,
-      notes,
-    };
+    await db_query.addData(
+      transactionTable,
+      {
+        row_id: libFunc.randomid(),
+        counter_id: finalCounterId,
+        sweet_id,
+        transaction_type,
+        quantity: qty,
+        reference_id,
+        notes,
+      },
+      null,
+      "Stock Transaction"
+    );
 
-    await db_query.addData(transactionTable, transactionData);
-
-    //  Check existing inventory
+    //  Check inventory
     const existing = await db_query.customQuery(`
       SELECT * FROM ${inventoryTable}
-      WHERE counter_id = '${counter_id}'
+      WHERE counter_id = '${finalCounterId}'
       AND sweet_id = '${sweet_id}'
     `);
 
@@ -1076,48 +1768,46 @@ async function addStock(req, res) {
           });
         }
         newQty = currentQty - qty;
-      } else if (transaction_type === "ADJUST") {
-        newQty = qty;
+      } else {
+        newQty = qty; // ADJUST
       }
-
-      //  Update inventory
-      const updateData = {
-        quantity: newQty,
-        expiry_date,
-      };
-
-      //  optional update min/max
-      if (min_stock !== null) updateData.min_stock = min_stock;
-      if (max_stock !== null) updateData.max_stock = max_stock;
 
       await db_query.addData(
         inventoryTable,
-        updateData,
+        {
+          quantity: newQty,
+          expiry_date,
+          ...(min_stock !== null && { min_stock }),
+          ...(max_stock !== null && { max_stock }),
+        },
         existingRow.row_id,
         "Inventory"
       );
     } else {
-      // 🔹 New inventory row (only for IN)
       if (transaction_type !== "IN") {
         await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "No stock available to deduct",
+          msg: "No stock available",
         });
       }
 
-      await db_query.addData(inventoryTable, {
-        row_id: libFunc.randomid(),
-        counter_id,
-        sweet_id,
-        quantity: qty,
-        expiry_date,
-        min_stock: min_stock || 0,
-        max_stock: max_stock || 0,
-      });
+      await db_query.addData(
+        inventoryTable,
+        {
+          row_id: libFunc.randomid(),
+          counter_id: finalCounterId,
+          sweet_id,
+          quantity: qty,
+          expiry_date,
+          min_stock: min_stock || 0,
+          max_stock: max_stock || 0,
+        },
+        null,
+        "Inventory"
+      );
     }
 
-    //  COMMIT
     await connect_db.query("COMMIT");
 
     return libFunc.sendResponse(res, {
@@ -1133,12 +1823,10 @@ async function addStock(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Something went wrong",
-      error: error.message,
+      msg: error.message || "Something went wrong",
     });
   }
 }
-
 // {
 //   fn: 'common_fn',
 //   se: 'add_in',
@@ -1383,103 +2071,240 @@ async function getInventoryAlerts(req, res) {
 async function createCounterRequest(req, res) {
   try {
     const table = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
+    const sweetTable = schema + ".sweets";
+    const categoryTable = schema + ".categories";
+    const deptTable = schema + ".departments";
 
-    const { counter_id, items } = req.data || {};
+    const { items } = req.data || {};
+    const user = req.data;
 
-    if (!counter_id || !items || items.length === 0) {
-      console.log("Counter and items required");
+    //  Role validation
+    if (user.user_role !== "COUNTER_USER") {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Counter and items required",
+        msg: "Only counter user can create request",
       });
     }
+
+    //  Always take counter_id from token
+    const finalCounterId = user.counterId;
+
+    if (!finalCounterId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid user counter",
+      });
+    }
+
+    //  Basic validation
+    if (!items || items.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Items are required",
+      });
+    }
+
+    //  Get Counter → Shop
+    const counterCheck = await db_query.customQuery(`
+      SELECT shop_id FROM ${counterTable}
+      WHERE row_id = '${finalCounterId}'
+    `);
+
+    if (!counterCheck.data || counterCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid counter",
+      });
+    }
+
+    const counterShopId = counterCheck.data[0].shop_id;
 
     await connect_db.query("BEGIN");
 
     for (let item of items) {
-      if (!item.sweet_id || !item.quantity) {
+      const { sweet_id, quantity } = item;
+
+      if (!sweet_id || !quantity || Number(quantity) <= 0) {
         await connect_db.query("ROLLBACK");
-        console.log("Invalid item data");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Invalid item data",
         });
       }
 
-      await db_query.addData(table, {
-        row_id: libFunc.randomid(),
-        counter_id,
-        sweet_id: item.sweet_id,
-        quantity: item.quantity,
-        status: "PENDING",
-      });
+      //  Get Sweet → Shop
+      const sweetCheck = await db_query.customQuery(`
+        SELECT d.shop_id
+        FROM ${sweetTable} s
+        LEFT JOIN ${categoryTable} c ON c.row_id = s.category_id
+        LEFT JOIN ${deptTable} d ON d.row_id = c.department_id
+        WHERE s.row_id = '${sweet_id}'
+      `);
+
+      if (!sweetCheck.data || sweetCheck.data.length === 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid sweet",
+        });
+      }
+
+      const sweetShopId = sweetCheck.data[0].shop_id;
+
+      //  Shop match validation
+      if (sweetShopId !== counterShopId) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Sweet does not belong to your shop",
+        });
+      }
+
+      //  Duplicate pending request check
+      const existing = await db_query.customQuery(`
+        SELECT 1 FROM ${table}
+        WHERE counter_id = '${finalCounterId}'
+        AND sweet_id = '${sweet_id}'
+        AND status = 'PENDING'
+      `);
+
+      if (existing.data && existing.data.length > 0) {
+        continue; // skip duplicate
+      }
+
+      //  Insert request
+      await db_query.addData(
+        table,
+        {
+          row_id: libFunc.randomid(),
+          counter_id: finalCounterId,
+          sweet_id,
+          quantity: Number(quantity),
+          status: "PENDING",
+        },
+        null,
+        "Counter Request"
+      );
     }
 
     await connect_db.query("COMMIT");
-    console.log("Request sent to shop admin");
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Request sent to shop admin",
     });
   } catch (error) {
-    await connect_db.query("ROLLBACK");
+    console.log("createCounterRequest error:", error);
+
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (e) {}
+
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Something went wrong",
+      error: error.message,
     });
   }
 }
 
 async function createFinalOrder(req, res) {
   try {
-    console.log("Incoming Request:", req.data);
+    const user = req.data;
 
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const requestTable = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
+    const supplierTable = schema + ".suppliers";
 
-    const { shop_id, supplier_id, request_ids } = req.data || {};
+    const { supplier_id, request_ids, shop_id } = req.data || {};
 
-    //  Basic Validation
-    if (!shop_id || !supplier_id || !request_ids || request_ids.length === 0) {
-      console.log(" Missing required fields");
+    //  Role validation
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Shop, Supplier and request_ids required",
+        msg: "Access denied",
       });
     }
 
-    console.log("Request IDs:", request_ids);
+    //  Resolve shop_id
+    let finalShopId;
+
+    if (user.user_role === "SHOP_ADMIN") {
+      finalShopId = user.shopId; //  from token
+    }
+
+    if (user.user_role === "ADMIN") {
+      if (!shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required",
+        });
+      }
+      finalShopId = shop_id;
+    }
+
+    //  Basic validation
+    if (!supplier_id || !request_ids || request_ids.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Supplier and request_ids required",
+      });
+    }
 
     await connect_db.query("BEGIN");
 
-    //  Fetch VALID + PENDING requests only
-    const requests = await db_query.customQuery(`
-      SELECT * FROM ${requestTable}
-      WHERE row_id IN (${request_ids.map(id => `'${id}'`).join(",")})
-      AND status = 'PENDING'
+    //  Validate Supplier
+    const supplierCheck = await db_query.customQuery(`
+      SELECT 1 FROM ${supplierTable}
+      WHERE row_id = '${supplier_id}'
     `);
 
-    console.log("📦 DB Requests:", requests.data);
+    if (!supplierCheck.data.length) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid supplier",
+      });
+    }
 
-    //  No valid requests
+    //  Fetch PENDING requests + join counter → shop
+    const requests = await db_query.customQuery(`
+      SELECT r.*, c.shop_id
+      FROM ${requestTable} r
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = r.counter_id
+      WHERE r.row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
+      AND r.status = 'PENDING'
+    `);
+
     if (!requests.data || requests.data.length === 0) {
       await connect_db.query("ROLLBACK");
-      console.log(" No valid pending requests found");
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "No valid pending requests found",
       });
     }
 
-    //  Some invalid IDs
     if (requests.data.length !== request_ids.length) {
       await connect_db.query("ROLLBACK");
-      console.log(" Invalid or already processed request_ids");
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Some request_ids are invalid or already processed",
       });
+    }
+
+    //  Shop validation
+    for (let r of requests.data) {
+      if (r.shop_id !== finalShopId) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "All requests must belong to your shop",
+        });
+      }
     }
 
     //  Combine sweets
@@ -1492,60 +2317,56 @@ async function createFinalOrder(req, res) {
       sweetMap[r.sweet_id] += Number(r.quantity);
     }
 
-    console.log(" Combined Sweet Map:", sweetMap);
-
     //  Create Order
     const orderRowId = libFunc.randomid();
 
-    await db_query.addData(orderTable, {
-      row_id: orderRowId,
-      shop_id,
-      supplier_id,
-      order_status: "PENDING",
-    });
-
-    console.log(" Order Created:", orderRowId);
+    await db_query.addData(
+      orderTable,
+      {
+        row_id: orderRowId,
+        shop_id: finalShopId,
+        supplier_id,
+        order_status: "PENDING",
+      },
+      null,
+      "Order"
+    );
 
     //  Insert Order Items
     for (let sweet_id in sweetMap) {
-      await db_query.addData(itemTable, {
-        row_id: libFunc.randomid(),
-        order_id: orderRowId,
-        sweet_id,
-        quantity: sweetMap[sweet_id],
-      });
+      await db_query.addData(
+        itemTable,
+        {
+          row_id: libFunc.randomid(),
+          order_id: orderRowId,
+          sweet_id,
+          quantity: sweetMap[sweet_id],
+        },
+        null,
+        "Order Item"
+      );
     }
 
-    console.log(" Order Items Inserted");
-
-    //  Update request status
+    //  Update requests → APPROVED
     await db_query.customQuery(`
       UPDATE ${requestTable}
       SET status = 'APPROVED'
-      WHERE row_id IN (${request_ids.map(id => `'${id}'`).join(",")})
+      WHERE row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
     `);
 
-    console.log(" Requests marked as APPROVED");
-
     await connect_db.query("COMMIT");
-
-    console.log("🎉 Final Order Created Successfully");
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Final order created successfully",
       data: { order_id: orderRowId },
     });
-
   } catch (error) {
-    console.log(" createFinalOrder ERROR:", error);
+    console.log("createFinalOrder ERROR:", error);
 
     try {
       await connect_db.query("ROLLBACK");
-      console.log(" Transaction Rolled Back");
-    } catch (e) {
-      console.log(" Rollback failed:", e);
-    }
+    } catch (e) {}
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -2127,10 +2948,10 @@ async function getSupplierOrders(req, res) {
       ORDER BY o.order_date DESC
     `);
 
-    // 🔥 UNIVERSAL FIX
+    //  UNIVERSAL FIX
     const rows = Array.isArray(result) ? result : result.data;
 
-    console.log("📦 Final Rows:", rows);
+    console.log(" Final Rows:", rows);
 
     if (!rows || rows.length === 0) {
       return libFunc.sendResponse(res, {
@@ -2166,14 +2987,13 @@ async function getSupplierOrders(req, res) {
     }
 
     const finalData = Object.values(ordersMap);
-    console.log("fianl data",finalData)
+    console.log("fianl data", finalData);
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Supplier orders fetched successfully",
       data: finalData,
     });
-
   } catch (error) {
     console.log("getSupplierOrders error:", error);
 

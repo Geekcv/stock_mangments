@@ -340,3 +340,80 @@ bana ke de deta hoon
 
 Bolo 👍
 👉 Invoice se start kare ya Chalan PDF se?
+
+
+
+ADMIN Dashboard
+Shops
+Users
+All Reports
+All Orders
+
+SHOP_ADMIN
+Counters
+Inventory
+Orders
+Reports
+
+COUNTER_USER
+Stock Entry
+Inventory View
+Request Stock
+
+SUPPLIER
+Orders List
+Dispatch (Chalan)
+Returns
+
+
+
+
+res {
+  status: 0,
+  msg: 'Login Successful',
+  data: {
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJpYXQiOjE3NzQ0NTI2NzksImV4cCI6MTc3NDcxMTg3OX0.mETQN5jQmqoNplTC2Y_Asj_T9OrrhvXXpUG1pUYuadE',
+    user_id: '1773576248141_czEK',
+    role: 'ADMIN',
+    counter_id: '0',
+    shop_id: null
+  }
+}
+
+
+
+res {
+  status: 0,
+  msg: 'Login Successful',
+  data: {
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUyNzIyMDg1X2NJd1kiLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwiaWF0IjoxNzc0NDUyODc1LCJleHAiOjE3NzQ3MTIwNzV9.X8Vp4YacDQ5S08Lc0EEY53fn2RsYT-qUqpXyuEpYaeI',
+    user_id: '1774452722085_cIwY',
+    role: 'SHOP_ADMIN',
+    counter_id: null,
+    shop_id: '1774452722080_yFUN'
+  }
+}
+
+
+
+res {
+  status: 0,
+  msg: 'Login Successful',
+  data: {
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0MDY4OTc4NjA4X0VGME8iLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDA2ODk3ODU5Ml9sUFBSIiwiaWF0IjoxNzc0Mjc5MzE3LCJleHAiOjE3NzQ1Mzg1MTd9.ie3cN_Z9kDHoSRrdslbOFLDTKFBoaCABJ1yQNOVpOqs',
+    user_id: '1774068978608_EF0O',
+    role: 'COUNTER_USER',
+    counter_id: '1774068978592_lPPR'
+  }
+}
+
+res {
+  status: 0,
+  msg: 'Login Successful',
+  data: {
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNjczMDkzNDA4X21RU3kiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsImlhdCI6MTc3NDI3OTM4MCwiZXhwIjoxNzc0NTM4NTgwfQ.7-oY7IKmwlfHPC5G0GHeVojGApSb7zNisqSsJX3Q14g',
+    user_id: '1773673093408_mQSy',
+    role: 'SUPPLIER',
+    counter_id: null
+  }
+}

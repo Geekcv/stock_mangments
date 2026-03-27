@@ -411,9 +411,10 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNjczMDkzNDA4X21RU3kiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsImlhdCI6MTc3NDI3OTM4MCwiZXhwIjoxNzc0NTM4NTgwfQ.7-oY7IKmwlfHPC5G0GHeVojGApSb7zNisqSsJX3Q14g',
-    user_id: '1773673093408_mQSy',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDU3Nzg3ODI1X2dLckwiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwiaWF0IjoxNzc0NjI2MjU3LCJleHAiOjE3NzQ4ODU0NTd9.w1LRt0bmBFgI_qrA2Uv8rCSPgOiwwiEw6nL2U9D9h3E',
+    user_id: '1774457787825_gKrL',
     role: 'SUPPLIER',
-    counter_id: null
+    counter_id: null,
+    shop_id: null
   }
 }

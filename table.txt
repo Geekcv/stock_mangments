@@ -261,3 +261,7 @@ ADD COLUMN shop_id TEXT;
 
 ALTER TABLE sms.sweets
 ADD COLUMN shop_id TEXT;
+
+
+ALTER TABLE sms.users
+ADD COLUMN supplier_id TEXT 

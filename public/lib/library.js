@@ -50,6 +50,7 @@ let common_fn = {
   cr_supplier: createSupplier,
   fe_supplier: fetchSuppliers,
   fe_my_ord: getSupplierOrders,
+  up_ord_stu: updateOrderStatus,
 
   // Department
   cr_dep: createDepartment,
@@ -183,7 +184,7 @@ async function loginUser(req, res) {
     }
 
     const query = `
-      SELECT row_id,name,email,phone,password,role,counter_id,shop_id
+      SELECT row_id,name,email,phone,password,role,counter_id,shop_id,supplier_id
       FROM sms.users
       WHERE email = '${req.data.email}' OR phone = '${req.data.phone}'
       LIMIT 1
@@ -215,6 +216,7 @@ async function loginUser(req, res) {
       role: user.role,
       counterId: user.counter_id,
       shopId: user.shop_id,
+      supplierId: user.supplier_id,
     };
 
     const token = jwt.sign(jwtData, JWT_SECRET, { expiresIn: "3d" });
@@ -228,6 +230,7 @@ async function loginUser(req, res) {
         role: user.role,
         counter_id: user.counter_id,
         shop_id: user.shop_id,
+        supplier_id: user.supplier_id,
       },
     };
     console.log("res", response);
@@ -752,6 +755,7 @@ async function createSupplier(req, res) {
         phone: phone.trim(),
         password: password.trim(),
         role: "SUPPLIER",
+        supplier_id: supplierRowId,
       };
 
       const userResp = await db_query.addData(userTable, userColumns);
@@ -2807,29 +2811,34 @@ async function cancelOrder(req, res) {
   }
 }
 
-async function createChalan(req, res) {
+async function updateOrderStatus(req, res) {
   try {
-    const chalanTable = schema + ".chalans";
     const orderTable = schema + ".orders";
 
-    const {
-      order_id,
-      supplier_id,
-      dispatch_date,
-      transport_details = "",
-    } = req.data || {};
+    const { order_id, status } = req.data || {};
+    const user = req.data;
 
-    // 🔹 Validation
-    if (!order_id || !supplier_id) {
+    const validStatuses = ["ACCEPTED", "REJECTED", "DISPATCHED", "DELIVERED"];
+
+    //  Validation
+    if (!order_id || !status) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Order and Supplier required",
+        msg: "Order ID and status required",
       });
     }
 
-    //  Check Order Exists
+    if (!validStatuses.includes(status)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid status",
+      });
+    }
+
+    //  Get order
     const orderCheck = await db_query.customQuery(`
-      SELECT order_status FROM ${orderTable}
+      SELECT supplier_id, shop_id, order_status
+      FROM ${orderTable}
       WHERE row_id = '${order_id.trim()}'
     `);
 
@@ -2840,17 +2849,164 @@ async function createChalan(req, res) {
       });
     }
 
-    const currentStatus = orderCheck.data[0].order_status;
+    const order = orderCheck.data[0];
 
-    //  Prevent duplicate dispatch
-    if (currentStatus === "DISPATCHED") {
+    //  Role-based access
+    if (user.user_role === "SUPPLIER") {
+      if (order.supplier_id !== user.supplierId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Unauthorized order",
+        });
+      }
+
+      if (!["ACCEPTED", "REJECTED", "DISPATCHED"].includes(status)) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier cannot set this status",
+        });
+      }
+    }
+
+    if (user.user_role === "SHOP_ADMIN") {
+      if (order.shop_id !== user.shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Unauthorized shop order",
+        });
+      }
+
+      if (status !== "DELIVERED") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop admin can only mark delivered",
+        });
+      }
+    }
+
+    if (!["ADMIN", "SHOP_ADMIN", "SUPPLIER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    //  Status flow validation
+    const current = order.order_status;
+
+    const validFlow = {
+      PENDING: ["ACCEPTED", "REJECTED"],
+      ACCEPTED: ["DISPATCHED"],
+      DISPATCHED: ["DELIVERED"],
+    };
+
+    if (validFlow[current] && !validFlow[current].includes(status)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: `Invalid status transition from ${current} → ${status}`,
+      });
+    }
+
+    //  Update
+    await db_query.addData(
+      orderTable,
+      { order_status: status },
+      order_id.trim(),
+      "Order"
+    );
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: `Order ${status} successfully`,
+    });
+  } catch (error) {
+    console.log("updateOrderStatus error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function createChalan(req, res) {
+  try {
+    const chalanTable = schema + ".chalans";
+    const orderTable = schema + ".orders";
+
+    const { order_id, dispatch_date, transport_details = "" } = req.data || {};
+    const user = req.data;
+
+    // Role validation
+    if (user.user_role !== "SUPPLIER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only supplier can dispatch order",
+      });
+    }
+
+    if (!order_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order ID required",
+      });
+    }
+
+    //  Get Order
+    const orderCheck = await db_query.customQuery(`
+      SELECT supplier_id, order_status
+      FROM ${orderTable}
+      WHERE row_id = '${order_id.trim()}'
+    `);
+
+    if (!orderCheck.data || orderCheck.data.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid order",
+      });
+    }
+
+    const order = orderCheck.data[0];
+
+    //  Ensure supplier owns order
+    if (order.supplier_id !== user.supplierId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Unauthorized order access",
+      });
+    }
+
+    //  Status check
+    if (order.order_status === "DISPATCHED") {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Order already dispatched",
       });
     }
 
+    if (order.order_status !== "ACCEPTED") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order must be ACCEPTED before dispatch",
+      });
+    }
+
     await connect_db.query("BEGIN");
+
+    //  Double check (avoid race condition)
+    const existingChalan = await db_query.customQuery(`
+      SELECT 1 FROM ${chalanTable}
+      WHERE order_id = '${order_id.trim()}'
+    `);
+
+    if (existingChalan.data && existingChalan.data.length > 0) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Chalan already exists for this order",
+      });
+    }
 
     //  Create Chalan
     const chalanRowId = libFunc.randomid();
@@ -2858,20 +3014,18 @@ async function createChalan(req, res) {
     await db_query.addData(chalanTable, {
       row_id: chalanRowId,
       order_id: order_id.trim(),
-      supplier_id: supplier_id.trim(),
-      dispatch_date: dispatch_date || new Date(),
+      supplier_id: user.supplierId, //  from token, not request
+      dispatch_date: dispatch_date,
       transport_details: transport_details.trim(),
     });
 
     //  Update Order Status
-    const updateResp = await db_query.addData(
+    await db_query.addData(
       orderTable,
       { order_status: "DISPATCHED" },
       order_id.trim(),
       "Order"
     );
-
-    console.log("Update Response:", updateResp);
 
     await connect_db.query("COMMIT");
 
@@ -2916,12 +3070,38 @@ async function getSupplierOrders(req, res) {
     const shopTable = schema + ".shops";
 
     const { supplier_id } = req.data || {};
+    const user = req.data;
+    console.log("usrs", user);
 
-    if (!supplier_id) {
+    //  Role validation
+    if (!["SUPPLIER", "ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Supplier ID required",
+        msg: "Access denied",
       });
+    }
+
+    let whereCondition = "";
+
+    //  SUPPLIER → only own orders
+    if (user.user_role === "SUPPLIER") {
+      whereCondition = `o.supplier_id = '${user.supplierId}'`;
+    }
+
+    //  ADMIN → any supplier
+    if (user.user_role === "ADMIN") {
+      if (!supplier_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier ID required",
+        });
+      }
+      whereCondition = `o.supplier_id = '${supplier_id.trim()}'`;
+    }
+
+    //  SHOP_ADMIN → only own shop orders
+    if (user.user_role === "SHOP_ADMIN") {
+      whereCondition = `o.shop_id = '${user.shop_id}'`;
     }
 
     const result = await db_query.customQuery(`
@@ -2930,6 +3110,7 @@ async function getSupplierOrders(req, res) {
         o.order_status,
         o.order_date,
 
+        sh.row_id AS shop_id,
         sh.shop_name,
         sh.city,
         sh.state,
@@ -2944,14 +3125,11 @@ async function getSupplierOrders(req, res) {
       LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
       LEFT JOIN ${sweetTable} s ON s.row_id = oi.sweet_id
 
-      WHERE o.supplier_id = '${supplier_id.trim()}'
+      WHERE ${whereCondition}
       ORDER BY o.order_date DESC
     `);
 
-    //  UNIVERSAL FIX
     const rows = Array.isArray(result) ? result : result.data;
-
-    console.log(" Final Rows:", rows);
 
     if (!rows || rows.length === 0) {
       return libFunc.sendResponse(res, {
@@ -2969,9 +3147,12 @@ async function getSupplierOrders(req, res) {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
-          shop_name: row.shop_name,
-          city: row.city,
-          state: row.state,
+          shop: {
+            shop_id: row.shop_id,
+            shop_name: row.shop_name,
+            city: row.city,
+            state: row.state,
+          },
           items: [],
         };
       }
@@ -2987,7 +3168,6 @@ async function getSupplierOrders(req, res) {
     }
 
     const finalData = Object.values(ordersMap);
-    console.log("fianl data", finalData);
 
     return libFunc.sendResponse(res, {
       status: 0,

@@ -29,6 +29,7 @@ function verifyToken(req, res, next) {
       req.role = decoded.role;
       req.counterId = decoded.counterId;
       req.shopId =decoded.shopId
+      req.supplierId =decoded.supplierId
       req.token = token;
       next();
     }
@@ -59,6 +60,9 @@ router.post("/", verifyToken, function (req, res, next) {
   data.data.token = req.token;
   data.data.counterId = req.counterId;
   data.data.shopId = req.shopId;
+  data.data.supplierId = req.supplierId;
+
+  
 
   let fn = "common_fn",
     se = data.se;

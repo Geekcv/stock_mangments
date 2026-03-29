@@ -2265,6 +2265,24 @@ async function createCounterRequest(req, res) {
 
     await connect_db.query("COMMIT");
 
+       // Shop admin find karo
+// const shopAdmin = await db_query.customQuery(`
+// SELECT row_id FROM ${schema}.users
+// WHERE role = 'SHOP_ADMIN'
+// AND shop_id = (
+//   SELECT shop_id FROM ${schema}.counters
+//   WHERE row_id = '${finalCounterId}'
+// )
+// `);
+// console.log("ddd",shopAdmin,shopAdmin.data.length > 0)
+// if (shopAdmin.data.length > 0) {
+// await createNotification(
+//   shopAdmin.data[0].row_id,
+//   "New Request",
+//   "New stock request from counter"
+// );
+// }
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Request sent to shop admin",
@@ -2430,6 +2448,19 @@ async function createFinalOrder(req, res) {
     `);
 
     await connect_db.query("COMMIT");
+
+//     const supplierUsers = await db_query.customQuery(`
+//   SELECT row_id FROM ${schema}.users
+//   WHERE supplier_id = '${supplier_id}'
+// `);
+
+// for (let u of supplierUsers.data) {
+//   await createNotification(
+//     u.row_id,
+//     "New Order",
+//     "You have received a new order"
+//   );
+// }
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -2700,6 +2731,7 @@ async function updateOrderStatus(req, res) {
   try {
     const orderTable = schema + ".orders";
 
+    // console.log("request",req)
     const { order_id, order_status } = req.data || {};
 
     // 🔹 Validation
@@ -2754,6 +2786,20 @@ async function updateOrderStatus(req, res) {
       order_id.trim(),
       "Order"
     );
+
+    // const shopAdmin = await db_query.customQuery(`
+    //   SELECT row_id FROM ${userTable}
+    //   WHERE role = 'SHOP_ADMIN'
+    //   AND shop_id = '${shopId}'
+    // `);
+
+    // if (shopAdmin.data && shopAdmin.data.length > 0) {
+    //   await createNotification(
+    //     shopAdmin.data[0].row_id,
+    //     "Order Status Updated",
+    //     `Order ${order_status}`
+    //   );
+    // }
 
     return libFunc.sendResponse(res, resp);
   } catch (error) {
@@ -4452,6 +4498,70 @@ async function getDashboardFull(req, res) {
       status: 1,
       msg: "Something went wrong",
       error: error.message,
+    });
+  }
+}
+
+
+async function createNotification(user_id, title, message) {
+  console.log("data",user_id,title,message)
+  try {
+    await db_query.addData(`${schema}.notifications`, {
+      row_id: libFunc.randomid(),
+      user_id,
+      title,
+      message,
+    });
+  } catch (err) {
+    console.log("Notification error:", err);
+  }
+}
+
+async function getNotifications(req, res) {
+  try {
+    const user = req.data;
+
+    const result = await db_query.customQuery(`
+      SELECT row_id, title, message, is_read, cr_on
+      FROM ${schema}.notifications
+      WHERE user_id = '${user.row_id}'
+      ORDER BY cr_on DESC
+      LIMIT 20
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      data: result.data,
+    });
+  } catch (error) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Error fetching notifications",
+    });
+  }
+}
+
+
+async function getNotifications(req, res) {
+  try {
+    const user = req.data;
+
+    const result = await db_query.customQuery(`
+      SELECT row_id, title, message, is_read, cr_on
+      FROM ${schema}.notifications
+      WHERE user_id = '${user.row_id}'
+      ORDER BY cr_on DESC
+      LIMIT 20
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      data: result.data,
+    });
+  } catch (error) {
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Error fetching notifications",
     });
   }
 }

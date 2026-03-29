@@ -41,18 +41,27 @@ let common_fn = {
   // shop
   cr_shop: createShop,
   fe_shop: fetchShops,
-  fe_or_details: getShopOrders, // pendings
+  fe_or_details: getShopOrders, 
+  // order (Purchase order)
+  cr_final_order: createFinalOrder,
+
 
   // counter
   cr_counter: createCounter,
   fe_counter: fetchCounters,
   fe_order_req: getCounterRequests,
+  cr_counter_req: createCounterRequest,
+
 
   // supplier
   cr_supplier: createSupplier,
   fe_supplier: fetchSuppliers,
   fe_my_ord: getSupplierOrders,
   up_ord_stu: updateOrderStatus,
+  //Challan 
+  cr_challan: createChalan,
+  fe_challan:getAllChalans,
+
 
   // Department
   cr_dep: createDepartment,
@@ -71,13 +80,7 @@ let common_fn = {
   fet_inv: getInventory,
   fet_stock_his: getStockHistory,
 
-  // order (Purchase order)
-  // cr_ord: createOrder,
-  cr_counter_req: createCounterRequest,
-  cr_final_order: createFinalOrder,
 
-  //Challan
-  cr_challan: createChalan,
 
   //pdf
   dow_pdf: downloadOrderPDF,
@@ -2551,11 +2554,10 @@ async function getShopOrders(req, res) {
         o.order_status,
         o.order_date,
 
-        c.row_id AS counter_id,
-        c.counter_name,
-
         sup.row_id AS supplier_id,
         sup.supplier_name,
+
+        sh.shop_name,
 
         oi.sweet_id,
         s.sweet_name,
@@ -2563,16 +2565,20 @@ async function getShopOrders(req, res) {
         oi.quantity
 
       FROM ${schema}.orders o
-      LEFT JOIN ${schema}.counters c 
-        ON c.row_id = o.counter_id
+
+      LEFT JOIN ${schema}.shops sh 
+        ON sh.row_id = o.shop_id
+
       LEFT JOIN ${schema}.suppliers sup 
         ON sup.row_id = o.supplier_id
+
       LEFT JOIN ${schema}.order_items oi 
         ON oi.order_id = o.row_id
+
       LEFT JOIN ${schema}.sweets s 
         ON s.row_id = oi.sweet_id
 
-      WHERE c.shop_id = '${shopId}'
+      WHERE o.shop_id = '${shopId}'
       ORDER BY o.order_date DESC
     `);
 
@@ -2585,8 +2591,7 @@ async function getShopOrders(req, res) {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
-          counter_id: row.counter_id,
-          counter_name: row.counter_name,
+          shop_name: row.shop_name,
           supplier_id: row.supplier_id,
           supplier_name: row.supplier_name,
           items: [],
@@ -2608,6 +2613,7 @@ async function getShopOrders(req, res) {
       msg: "Shop orders fetched successfully",
       data: Object.values(ordersMap),
     });
+
   } catch (error) {
     console.log("getShopOrders error:", error);
 
@@ -3059,6 +3065,126 @@ async function createChalan(req, res) {
     try {
       await connect_db.query("ROLLBACK");
     } catch (e) {}
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function getAllChalans(req, res) {
+  try {
+    const user = req.data;
+
+    const chalanTable = schema + ".chalans";
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+    const sweetTable = schema + ".sweets";
+    const supplierTable = schema + ".suppliers";
+    const shopTable = schema + ".shops";
+
+    let where = "WHERE 1=1";
+
+    // 🔵 SUPPLIER → only own chalans
+    if (user.user_role === "SUPPLIER") {
+      where += ` AND ch.supplier_id = '${user.supplierId}'`;
+    }
+
+    // 🟠 SHOP_ADMIN → only own shop
+    if (user.user_role === "SHOP_ADMIN") {
+      where += ` AND o.shop_id = '${user.shopId}'`;
+    }
+
+    // 🔴 ADMIN → no filter
+
+    const result = await db_query.customQuery(`
+      SELECT
+        ch.row_id AS chalan_id,
+        ch.dispatch_date,
+        ch.transport_details,
+
+        o.row_id AS order_id,
+        o.order_status,
+        o.order_date,
+
+        sh.shop_name,
+        sh.city,
+        sh.state,
+
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
+
+        oi.sweet_id,
+        s.sweet_name,
+        s.unit,
+        oi.quantity
+
+      FROM ${chalanTable} ch
+
+      LEFT JOIN ${orderTable} o 
+        ON o.row_id = ch.order_id
+
+      LEFT JOIN ${shopTable} sh 
+        ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${supplierTable} sup 
+        ON sup.row_id = ch.supplier_id
+
+      LEFT JOIN ${itemTable} oi 
+        ON oi.order_id = o.row_id
+
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = oi.sweet_id
+
+      ${where}
+      ORDER BY ch.dispatch_date DESC
+    `);
+
+    // 🔹 Group chalan-wise
+    const chalanMap = {};
+
+    for (let row of result.data || []) {
+      if (!chalanMap[row.chalan_id]) {
+        chalanMap[row.chalan_id] = {
+          chalan_id: row.chalan_id,
+          dispatch_date: row.dispatch_date,
+          transport_details: row.transport_details,
+
+          order_id: row.order_id,
+          order_status: row.order_status,
+          order_date: row.order_date,
+
+          shop_name: row.shop_name,
+          city: row.city,
+          state: row.state,
+
+          supplier_id: row.supplier_id,
+          supplier_name: row.supplier_name,
+
+          items: [],
+        };
+      }
+
+      if (row.sweet_id) {
+        chalanMap[row.chalan_id].items.push({
+          sweet_id: row.sweet_id,
+          sweet_name: row.sweet_name,
+          unit: row.unit,
+          quantity: row.quantity,
+        });
+      }
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Chalans fetched successfully",
+      data: Object.values(chalanMap),
+    });
+
+  } catch (error) {
+    console.log("getAllChalans error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -3944,24 +4070,20 @@ async function getDashboardData(req, res) {
     const orderTable = schema + ".orders";
     const inventoryTable = schema + ".inventory";
     const requestTable = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
 
     let response = {};
 
     // 🔴 ================= ADMIN =================
     if (user.user_role === "ADMIN") {
-      const shops = await db_query.customQuery(
-        `SELECT COUNT(*) FROM ${shopTable}`
-      );
-      const users = await db_query.customQuery(
-        `SELECT COUNT(*) FROM ${userTable}`
-      );
-      const orders = await db_query.customQuery(
-        `SELECT COUNT(*) FROM ${orderTable}`
-      );
-      const lowStock = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${inventoryTable}
-        WHERE quantity::int <= min_stock
-      `);
+
+      const [shops, users, orders, lowStock, suppliers] = await Promise.all([
+        db_query.customQuery(`SELECT COUNT(*) FROM ${shopTable}`),
+        db_query.customQuery(`SELECT COUNT(*) FROM ${userTable}`),
+        db_query.customQuery(`SELECT COUNT(*) FROM ${orderTable}`),
+        db_query.customQuery(`SELECT COUNT(*) FROM ${inventoryTable} WHERE quantity::int <= min_stock`),
+        db_query.customQuery(`SELECT COUNT(*) FROM ${schema}.suppliers`)
+      ]);
 
       response = {
         role: "ADMIN",
@@ -3969,8 +4091,9 @@ async function getDashboardData(req, res) {
           total_shops: shops.data[0].count,
           total_users: users.data[0].count,
           total_orders: orders.data[0].count,
+          total_suppliers: suppliers.data[0].count,
           low_stock_items: lowStock.data[0].count,
-        },
+        }
       };
     }
 
@@ -3978,30 +4101,48 @@ async function getDashboardData(req, res) {
     if (user.user_role === "SHOP_ADMIN") {
       const shopId = user.shopId;
 
-      const totalStock = await db_query.customQuery(`
-        SELECT COALESCE(SUM(quantity::int),0) AS total FROM ${inventoryTable} i
-        JOIN ${schema}.counters c ON c.row_id = i.counter_id
-        WHERE c.shop_id = '${shopId}'
-      `);
+      const [totalStock, lowStock, pendingRequests, orders, counters, recentOrders] =
+        await Promise.all([
 
-      const lowStock = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${inventoryTable} i
-        JOIN ${schema}.counters c ON c.row_id = i.counter_id
-        WHERE c.shop_id = '${shopId}'
-        AND i.quantity::int <= i.min_stock
-      `);
+          db_query.customQuery(`
+            SELECT COALESCE(SUM(quantity::int),0) AS total 
+            FROM ${inventoryTable} i
+            JOIN ${counterTable} c ON c.row_id = i.counter_id
+            WHERE c.shop_id = '${shopId}'
+          `),
 
-      const pendingRequests = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${requestTable} r
-        JOIN ${schema}.counters c ON c.row_id = r.counter_id
-        WHERE c.shop_id = '${shopId}'
-        AND r.status = 'PENDING'
-      `);
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${inventoryTable} i
+            JOIN ${counterTable} c ON c.row_id = i.counter_id
+            WHERE c.shop_id = '${shopId}'
+            AND i.quantity::int <= i.min_stock
+          `),
 
-      const orders = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${orderTable}
-        WHERE shop_id = '${shopId}'
-      `);
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${requestTable} r
+            JOIN ${counterTable} c ON c.row_id = r.counter_id
+            WHERE c.shop_id = '${shopId}'
+            AND r.status = 'PENDING'
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${orderTable}
+            WHERE shop_id = '${shopId}'
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${counterTable}
+            WHERE shop_id = '${shopId}'
+          `),
+
+          db_query.customQuery(`
+            SELECT row_id, order_status, order_date
+            FROM ${orderTable}
+            WHERE shop_id = '${shopId}'
+            ORDER BY order_date DESC
+            LIMIT 5
+          `)
+        ]);
 
       response = {
         role: "SHOP_ADMIN",
@@ -4010,7 +4151,9 @@ async function getDashboardData(req, res) {
           low_stock: lowStock.data[0].count,
           pending_requests: pendingRequests.data[0].count,
           total_orders: orders.data[0].count,
+          total_counters: counters.data[0].count,
         },
+        recent_orders: recentOrders.data
       };
     }
 
@@ -4018,22 +4161,40 @@ async function getDashboardData(req, res) {
     if (user.user_role === "COUNTER_USER") {
       const counterId = user.counterId;
 
-      const stock = await db_query.customQuery(`
-        SELECT COALESCE(SUM(quantity::int),0) AS total
-        FROM ${inventoryTable}
-        WHERE counter_id = '${counterId}'
-      `);
+      const [stock, lowStock, myRequests, pendingReq, recentTxn] =
+        await Promise.all([
 
-      const lowStock = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${inventoryTable}
-        WHERE counter_id = '${counterId}'
-        AND quantity::int <= min_stock
-      `);
+          db_query.customQuery(`
+            SELECT COALESCE(SUM(quantity::int),0) AS total
+            FROM ${inventoryTable}
+            WHERE counter_id = '${counterId}'
+          `),
 
-      const myRequests = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${requestTable}
-        WHERE counter_id = '${counterId}'
-      `);
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${inventoryTable}
+            WHERE counter_id = '${counterId}'
+            AND quantity::int <= min_stock
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${requestTable}
+            WHERE counter_id = '${counterId}'
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${requestTable}
+            WHERE counter_id = '${counterId}'
+            AND status = 'PENDING'
+          `),
+
+          db_query.customQuery(`
+            SELECT sweet_id, quantity, transaction_type, cr_on
+            FROM ${schema}.stock_transactions
+            WHERE counter_id = '${counterId}'
+            ORDER BY cr_on DESC
+            LIMIT 5
+          `)
+        ]);
 
       response = {
         role: "COUNTER_USER",
@@ -4041,7 +4202,9 @@ async function getDashboardData(req, res) {
           available_stock: stock.data[0].total,
           low_stock: lowStock.data[0].count,
           my_requests: myRequests.data[0].count,
+          pending_requests: pendingReq.data[0].count,
         },
+        recent_transactions: recentTxn.data
       };
     }
 
@@ -4049,30 +4212,50 @@ async function getDashboardData(req, res) {
     if (user.user_role === "SUPPLIER") {
       const supplierId = user.supplierId;
 
-      const totalOrders = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${orderTable}
-        WHERE supplier_id = '${supplierId}'
-      `);
+      const [totalOrders, pendingOrders, acceptedOrders, dispatched, recentOrders] =
+        await Promise.all([
 
-      const pendingOrders = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${orderTable}
-        WHERE supplier_id = '${supplierId}'
-        AND order_status = 'PENDING'
-      `);
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${orderTable}
+            WHERE supplier_id = '${supplierId}'
+          `),
 
-      const dispatched = await db_query.customQuery(`
-        SELECT COUNT(*) FROM ${orderTable}
-        WHERE supplier_id = '${supplierId}'
-        AND order_status = 'DISPATCHED'
-      `);
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${orderTable}
+            WHERE supplier_id = '${supplierId}'
+            AND order_status = 'PENDING'
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${orderTable}
+            WHERE supplier_id = '${supplierId}'
+            AND order_status = 'ACCEPTED'
+          `),
+
+          db_query.customQuery(`
+            SELECT COUNT(*) FROM ${orderTable}
+            WHERE supplier_id = '${supplierId}'
+            AND order_status = 'DISPATCHED'
+          `),
+
+          db_query.customQuery(`
+            SELECT row_id, order_status, order_date
+            FROM ${orderTable}
+            WHERE supplier_id = '${supplierId}'
+            ORDER BY order_date DESC
+            LIMIT 5
+          `)
+        ]);
 
       response = {
         role: "SUPPLIER",
         cards: {
           total_orders: totalOrders.data[0].count,
           pending_orders: pendingOrders.data[0].count,
+          accepted_orders: acceptedOrders.data[0].count,
           dispatched_orders: dispatched.data[0].count,
         },
+        recent_orders: recentOrders.data
       };
     }
 
@@ -4081,6 +4264,7 @@ async function getDashboardData(req, res) {
       msg: "Dashboard data fetched successfully",
       data: response,
     });
+
   } catch (error) {
     console.log("getDashboardData error:", error);
 

@@ -41,10 +41,12 @@ let common_fn = {
   // shop
   cr_shop: createShop,
   fe_shop: fetchShops,
+  fe_or_details: getShopOrders, // pendings
 
   // counter
   cr_counter: createCounter,
   fe_counter: fetchCounters,
+  fe_order_req: getCounterRequests,
 
   // supplier
   cr_supplier: createSupplier,
@@ -66,6 +68,8 @@ let common_fn = {
 
   //Inventory
   add_in: addStock,
+  fet_inv: getInventory,
+  fet_stock_his: getStockHistory,
 
   // order (Purchase order)
   // cr_ord: createOrder,
@@ -78,6 +82,9 @@ let common_fn = {
   //pdf
   dow_pdf: downloadOrderPDF,
   dow_ch_pdf: downloadChalanPDF,
+
+  // dhasboard
+  fe_dash: getDashboardData,
 };
 
 const schema = "sms";
@@ -1323,6 +1330,7 @@ async function createSweet(req, res) {
     const counterTable = schema + ".counters";
 
     const {
+      shop_id,
       category_id,
       counter_id,
       sweet_name,
@@ -1907,33 +1915,60 @@ async function getStockHistory(req, res) {
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
 
+    const user = req.data;
+
     const { counter_id, sweet_id, transaction_type, from_date, to_date } =
       req.data || {};
 
-    // 🔹 Base Query
-    let where = `WHERE 1=1`;
+    let conditions = ["1=1"];
+
+    // 🔒 ================= ROLE BASE FILTER =================
+
+    // 🔴 ADMIN → no restriction
+
+    // 🟠 SHOP ADMIN → only own shop counters
+    if (user.user_role === "SHOP_ADMIN") {
+      conditions.push(`c.shop_id = '${user.shopId}'`);
+    }
+
+    // 🟡 COUNTER USER → only own counter
+    if (user.user_role === "COUNTER_USER") {
+      conditions.push(`st.counter_id = '${user.counterId}'`);
+    }
+
+    // 🟢 SUPPLIER → no access
+    if (user.user_role === "SUPPLIER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    // 🔎 ================= FILTERS =================
 
     if (counter_id) {
-      where += ` AND st.counter_id = '${counter_id.trim()}'`;
+      conditions.push(`st.counter_id = '${counter_id.trim()}'`);
     }
 
     if (sweet_id) {
-      where += ` AND st.sweet_id = '${sweet_id.trim()}'`;
+      conditions.push(`st.sweet_id = '${sweet_id.trim()}'`);
     }
 
     if (transaction_type) {
-      where += ` AND st.transaction_type = '${transaction_type}'`;
+      conditions.push(`st.transaction_type = '${transaction_type}'`);
     }
 
     if (from_date) {
-      where += ` AND st.cr_on >= '${from_date}'`;
+      conditions.push(`st.cr_on >= '${from_date}'`);
     }
 
     if (to_date) {
-      where += ` AND st.cr_on <= '${to_date}'`;
+      conditions.push(`st.cr_on <= '${to_date}'`);
     }
 
-    // 🔹 Query
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    // 📊 QUERY
     const result = await db_query.customQuery(`
       SELECT
         st.row_id AS transaction_id,
@@ -1946,7 +1981,10 @@ async function getStockHistory(req, res) {
         st.cr_on,
 
         s.sweet_name,
-        c.counter_name
+        s.unit,
+
+        c.counter_name,
+        c.shop_id
 
       FROM ${transactionTable} st
       LEFT JOIN ${sweetTable} s 
@@ -1954,7 +1992,7 @@ async function getStockHistory(req, res) {
       LEFT JOIN ${counterTable} c 
         ON c.row_id = st.counter_id
 
-      ${where}
+      ${whereClause}
       ORDER BY st.cr_on DESC
     `);
 
@@ -1987,20 +2025,50 @@ async function getInventory(req, res) {
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
 
+    const user = req.data;
+
+    let whereConditions = ["i.quantity::int > 0"];
+
+    // 🔴 ADMIN → sab dekh sakta hai (no extra filter)
+
+    // 🟠 SHOP ADMIN → only own shop counters
+    if (user.user_role === "SHOP_ADMIN") {
+      whereConditions.push(`c.shop_id = '${user.shopId}'`);
+    }
+
+    // 🟡 COUNTER USER → only own counter
+    if (user.user_role === "COUNTER_USER") {
+      whereConditions.push(`i.counter_id = '${user.counterId}'`);
+    }
+
+    // 🟢 SUPPLIER → access deny (optional)
+    if (user.user_role === "SUPPLIER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
+
     const data = await db_query.customQuery(`
       SELECT 
         i.row_id,
         i.quantity,
+        i.min_stock,
+        i.max_stock,
         i.expiry_date,
 
         s.row_id AS sweet_id,
         s.sweet_name,
         s.unit,
         s.price,
+        s.image_url,
 
         c.row_id AS counter_id,
         c.counter_name,
         c.location,
+        c.shop_id,
 
         i.cr_on
 
@@ -2010,7 +2078,7 @@ async function getInventory(req, res) {
       LEFT JOIN ${counterTable} c 
         ON c.row_id = i.counter_id
 
-      WHERE i.quantity > 0
+      ${whereClause}
       ORDER BY i.cr_on DESC
     `);
 
@@ -2463,175 +2531,62 @@ async function createOrder(req, res) {
 //   }
 // }
 
-async function getOrderDetails(req, res) {
+async function getShopOrders(req, res) {
   try {
-    const orderTable = schema + ".orders";
-    const itemTable = schema + ".order_items";
-    const sweetTable = schema + ".sweets";
-    const supplierTable = schema + ".suppliers";
-    const counterTable = schema + ".counters";
+    const user = req.data;
 
-    const { order_id } = req.data || {};
-
-    // 🔹 Validation
-    if (!order_id) {
+    // 🔒 Only SHOP_ADMIN
+    if (user.user_role !== "SHOP_ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Order ID required",
+        msg: "Access denied",
       });
     }
 
-    // 🔹 Fetch Order + Items
+    const shopId = user.shopId;
+
     const result = await db_query.customQuery(`
-      SELECT
+      SELECT 
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
         c.row_id AS counter_id,
         c.counter_name,
-        c.location,
 
-        s.row_id AS supplier_id,
-        s.supplier_name,
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
 
         oi.sweet_id,
-        sw.sweet_name,
-        sw.unit,
+        s.sweet_name,
+        s.unit,
         oi.quantity
 
-      FROM ${orderTable} o
-      LEFT JOIN ${counterTable} c 
+      FROM ${schema}.orders o
+      LEFT JOIN ${schema}.counters c 
         ON c.row_id = o.counter_id
-      LEFT JOIN ${supplierTable} s 
-        ON s.row_id = o.supplier_id
-      LEFT JOIN ${itemTable} oi 
+      LEFT JOIN ${schema}.suppliers sup 
+        ON sup.row_id = o.supplier_id
+      LEFT JOIN ${schema}.order_items oi 
         ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} sw 
-        ON sw.row_id = oi.sweet_id
+      LEFT JOIN ${schema}.sweets s 
+        ON s.row_id = oi.sweet_id
 
-      WHERE o.row_id = '${order_id.trim()}'
-    `);
-
-    if (!result.data || result.data.length === 0) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Order not found",
-      });
-    }
-
-    // 🔹 Format Response
-    const orderData = {
-      order_id: result.data[0].order_id,
-      order_status: result.data[0].order_status,
-      order_date: result.data[0].order_date,
-      counter: {
-        counter_id: result.data[0].counter_id,
-        counter_name: result.data[0].counter_name,
-        location: result.data[0].location,
-      },
-      supplier: {
-        supplier_id: result.data[0].supplier_id,
-        supplier_name: result.data[0].supplier_name,
-      },
-      items: [],
-    };
-
-    for (let row of result.data) {
-      if (row.sweet_id) {
-        orderData.items.push({
-          sweet_id: row.sweet_id,
-          sweet_name: row.sweet_name,
-          unit: row.unit,
-          quantity: row.quantity,
-        });
-      }
-    }
-
-    return libFunc.sendResponse(res, {
-      status: 0,
-      msg: "Order details fetched successfully",
-      data: orderData,
-    });
-  } catch (error) {
-    console.log("getOrderDetails error:", error);
-
-    return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Something went wrong",
-      error: error.message,
-    });
-  }
-}
-
-async function getOrdersByCounter(req, res) {
-  try {
-    const orderTable = schema + ".orders";
-    const itemTable = schema + ".order_items";
-    const sweetTable = schema + ".sweets";
-    const supplierTable = schema + ".suppliers";
-
-    const { counter_id, order_status, from_date, to_date } = req.data || {};
-
-    // 🔹 Validation
-    if (!counter_id) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Counter ID required",
-      });
-    }
-
-    // 🔹 Dynamic WHERE
-    let where = `WHERE o.counter_id = '${counter_id.trim()}'`;
-
-    if (order_status) {
-      where += ` AND o.order_status = '${order_status}'`;
-    }
-
-    if (from_date) {
-      where += ` AND o.order_date >= '${from_date}'`;
-    }
-
-    if (to_date) {
-      where += ` AND o.order_date <= '${to_date}'`;
-    }
-
-    // 🔹 Query
-    const result = await db_query.customQuery(`
-      SELECT
-        o.row_id AS order_id,
-        o.order_status,
-        o.order_date,
-
-        s.row_id AS supplier_id,
-        s.supplier_name,
-
-        oi.sweet_id,
-        sw.sweet_name,
-        sw.unit,
-        oi.quantity
-
-      FROM ${orderTable} o
-      LEFT JOIN ${supplierTable} s 
-        ON s.row_id = o.supplier_id
-      LEFT JOIN ${itemTable} oi 
-        ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} sw 
-        ON sw.row_id = oi.sweet_id
-
-      ${where}
+      WHERE c.shop_id = '${shopId}'
       ORDER BY o.order_date DESC
     `);
 
     // 🔹 Group order-wise
     const ordersMap = {};
 
-    for (let row of result.data) {
+    for (let row of result.data || []) {
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
+          counter_id: row.counter_id,
+          counter_name: row.counter_name,
           supplier_id: row.supplier_id,
           supplier_name: row.supplier_name,
           items: [],
@@ -2648,15 +2603,77 @@ async function getOrdersByCounter(req, res) {
       }
     }
 
-    const finalData = Object.values(ordersMap);
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Shop orders fetched successfully",
+      data: Object.values(ordersMap),
+    });
+  } catch (error) {
+    console.log("getShopOrders error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function getCounterRequests(req, res) {
+  try {
+    const user = req.data;
+
+    const requestTable = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
+    const sweetTable = schema + ".sweets";
+
+    let conditions = ["1=1"];
+
+    // 🟡 COUNTER USER → own requests
+    if (user.user_role === "COUNTER_USER") {
+      conditions.push(`r.counter_id = '${user.counterId}'`);
+    }
+
+    // 🟠 SHOP ADMIN → all counters of shop
+    if (user.user_role === "SHOP_ADMIN") {
+      conditions.push(`c.shop_id = '${user.shopId}'`);
+    }
+
+    // 🔴 ADMIN → all (no filter)
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    const result = await db_query.customQuery(`
+      SELECT
+        r.row_id,
+        r.quantity,
+        r.status,
+        r.cr_on,
+
+        c.row_id AS counter_id,
+        c.counter_name,
+
+        s.row_id AS sweet_id,
+        s.sweet_name,
+        s.unit
+
+      FROM ${requestTable} r
+      LEFT JOIN ${counterTable} c 
+        ON c.row_id = r.counter_id
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = r.sweet_id
+
+      ${whereClause}
+      ORDER BY r.cr_on DESC
+    `);
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Orders fetched successfully",
-      data: finalData,
+      msg: "Counter requests fetched successfully",
+      data: result.data || [],
     });
   } catch (error) {
-    console.log("getOrdersByCounter error:", error);
+    console.log("getCounterRequests error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -3915,5 +3932,342 @@ async function downloadChalanPDF(req, res) {
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
     res.status(500).send("Error generating PDF");
+  }
+}
+
+async function getDashboardData(req, res) {
+  try {
+    const user = req.data;
+
+    const shopTable = schema + ".shops";
+    const userTable = schema + ".users";
+    const orderTable = schema + ".orders";
+    const inventoryTable = schema + ".inventory";
+    const requestTable = schema + ".counter_requests";
+
+    let response = {};
+
+    // 🔴 ================= ADMIN =================
+    if (user.user_role === "ADMIN") {
+      const shops = await db_query.customQuery(
+        `SELECT COUNT(*) FROM ${shopTable}`
+      );
+      const users = await db_query.customQuery(
+        `SELECT COUNT(*) FROM ${userTable}`
+      );
+      const orders = await db_query.customQuery(
+        `SELECT COUNT(*) FROM ${orderTable}`
+      );
+      const lowStock = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${inventoryTable}
+        WHERE quantity::int <= min_stock
+      `);
+
+      response = {
+        role: "ADMIN",
+        cards: {
+          total_shops: shops.data[0].count,
+          total_users: users.data[0].count,
+          total_orders: orders.data[0].count,
+          low_stock_items: lowStock.data[0].count,
+        },
+      };
+    }
+
+    // 🟠 ================= SHOP ADMIN =================
+    if (user.user_role === "SHOP_ADMIN") {
+      const shopId = user.shopId;
+
+      const totalStock = await db_query.customQuery(`
+        SELECT COALESCE(SUM(quantity::int),0) AS total FROM ${inventoryTable} i
+        JOIN ${schema}.counters c ON c.row_id = i.counter_id
+        WHERE c.shop_id = '${shopId}'
+      `);
+
+      const lowStock = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${inventoryTable} i
+        JOIN ${schema}.counters c ON c.row_id = i.counter_id
+        WHERE c.shop_id = '${shopId}'
+        AND i.quantity::int <= i.min_stock
+      `);
+
+      const pendingRequests = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${requestTable} r
+        JOIN ${schema}.counters c ON c.row_id = r.counter_id
+        WHERE c.shop_id = '${shopId}'
+        AND r.status = 'PENDING'
+      `);
+
+      const orders = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${orderTable}
+        WHERE shop_id = '${shopId}'
+      `);
+
+      response = {
+        role: "SHOP_ADMIN",
+        cards: {
+          total_stock: totalStock.data[0].total,
+          low_stock: lowStock.data[0].count,
+          pending_requests: pendingRequests.data[0].count,
+          total_orders: orders.data[0].count,
+        },
+      };
+    }
+
+    // 🟡 ================= COUNTER USER =================
+    if (user.user_role === "COUNTER_USER") {
+      const counterId = user.counterId;
+
+      const stock = await db_query.customQuery(`
+        SELECT COALESCE(SUM(quantity::int),0) AS total
+        FROM ${inventoryTable}
+        WHERE counter_id = '${counterId}'
+      `);
+
+      const lowStock = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${inventoryTable}
+        WHERE counter_id = '${counterId}'
+        AND quantity::int <= min_stock
+      `);
+
+      const myRequests = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${requestTable}
+        WHERE counter_id = '${counterId}'
+      `);
+
+      response = {
+        role: "COUNTER_USER",
+        cards: {
+          available_stock: stock.data[0].total,
+          low_stock: lowStock.data[0].count,
+          my_requests: myRequests.data[0].count,
+        },
+      };
+    }
+
+    // 🟢 ================= SUPPLIER =================
+    if (user.user_role === "SUPPLIER") {
+      const supplierId = user.supplierId;
+
+      const totalOrders = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${orderTable}
+        WHERE supplier_id = '${supplierId}'
+      `);
+
+      const pendingOrders = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${orderTable}
+        WHERE supplier_id = '${supplierId}'
+        AND order_status = 'PENDING'
+      `);
+
+      const dispatched = await db_query.customQuery(`
+        SELECT COUNT(*) FROM ${orderTable}
+        WHERE supplier_id = '${supplierId}'
+        AND order_status = 'DISPATCHED'
+      `);
+
+      response = {
+        role: "SUPPLIER",
+        cards: {
+          total_orders: totalOrders.data[0].count,
+          pending_orders: pendingOrders.data[0].count,
+          dispatched_orders: dispatched.data[0].count,
+        },
+      };
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Dashboard data fetched successfully",
+      data: response,
+    });
+  } catch (error) {
+    console.log("getDashboardData error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function getDashboardFull(req, res) {
+  try {
+    const user = req.user;
+
+    const shopTable = schema + ".shops";
+    const orderTable = schema + ".orders";
+    const inventoryTable = schema + ".inventory";
+    const requestTable = schema + ".counter_requests";
+
+    let data = {
+      role: user.user_role,
+      cards: {},
+      tables: {},
+      charts: {},
+    };
+
+    // ================= 🔴 ADMIN =================
+    if (user.user_role === "ADMIN") {
+      const totalShops = await db_query.customQuery(
+        `SELECT COUNT(*) FROM ${shopTable}`
+      );
+      const totalOrders = await db_query.customQuery(
+        `SELECT COUNT(*) FROM ${orderTable}`
+      );
+
+      const recentOrders = await db_query.customQuery(`
+        SELECT o.row_id, o.order_status, o.order_date, s.shop_name
+        FROM ${orderTable} o
+        LEFT JOIN ${shopTable} s ON s.row_id = o.shop_id
+        ORDER BY o.order_date DESC LIMIT 5
+      `);
+
+      const monthlyOrders = await db_query.customQuery(`
+        SELECT TO_CHAR(order_date, 'Mon') AS month, COUNT(*)::int AS count
+        FROM ${orderTable}
+        GROUP BY month
+      `);
+
+      data.cards = {
+        total_shops: totalShops.data[0].count,
+        total_orders: totalOrders.data[0].count,
+      };
+
+      data.tables = {
+        recent_orders: recentOrders.data,
+      };
+
+      data.charts = {
+        monthly_orders: monthlyOrders.data,
+      };
+    }
+
+    // ================= 🟠 SHOP ADMIN =================
+    if (user.user_role === "SHOP_ADMIN") {
+      const shopId = user.shop_id;
+
+      const totalStock = await db_query.customQuery(`
+        SELECT COALESCE(SUM(i.quantity::int),0) AS total
+        FROM ${inventoryTable} i
+        JOIN ${schema}.counters c ON c.row_id = i.counter_id
+        WHERE c.shop_id = '${shopId}'
+      `);
+
+      const lowStockItems = await db_query.customQuery(`
+        SELECT s.sweet_name, i.quantity, i.min_stock
+        FROM ${inventoryTable} i
+        JOIN ${schema}.counters c ON c.row_id = i.counter_id
+        JOIN ${schema}.sweets s ON s.row_id = i.sweet_id
+        WHERE c.shop_id = '${shopId}'
+        AND i.quantity::int <= i.min_stock
+      `);
+
+      const requests = await db_query.customQuery(`
+        SELECT r.row_id, r.quantity, r.status, s.sweet_name
+        FROM ${requestTable} r
+        JOIN ${schema}.sweets s ON s.row_id = r.sweet_id
+        JOIN ${schema}.counters c ON c.row_id = r.counter_id
+        WHERE c.shop_id = '${shopId}'
+        ORDER BY r.cr_on DESC LIMIT 5
+      `);
+
+      const orders = await db_query.customQuery(`
+        SELECT row_id, order_status, order_date
+        FROM ${orderTable}
+        WHERE shop_id = '${shopId}'
+        ORDER BY order_date DESC LIMIT 5
+      `);
+
+      data.cards = {
+        total_stock: totalStock.data[0].total,
+        low_stock: lowStockItems.data.length,
+        pending_requests: requests.data.filter((r) => r.status === "PENDING")
+          .length,
+      };
+
+      data.tables = {
+        low_stock_items: lowStockItems.data,
+        recent_requests: requests.data,
+        recent_orders: orders.data,
+      };
+    }
+
+    // ================= 🟡 COUNTER USER =================
+    if (user.user_role === "COUNTER_USER") {
+      const counterId = user.counter_id;
+
+      const stock = await db_query.customQuery(`
+        SELECT s.sweet_name, i.quantity
+        FROM ${inventoryTable} i
+        JOIN ${schema}.sweets s ON s.row_id = i.sweet_id
+        WHERE i.counter_id = '${counterId}'
+      `);
+
+      const requests = await db_query.customQuery(`
+        SELECT r.row_id, r.quantity, r.status, s.sweet_name
+        FROM ${requestTable} r
+        JOIN ${schema}.sweets s ON s.row_id = r.sweet_id
+        WHERE r.counter_id = '${counterId}'
+        ORDER BY r.cr_on DESC LIMIT 5
+      `);
+
+      data.cards = {
+        total_items: stock.data.length,
+        total_requests: requests.data.length,
+      };
+
+      data.tables = {
+        inventory: stock.data,
+        my_requests: requests.data,
+      };
+    }
+
+    // ================= 🟢 SUPPLIER =================
+    if (user.user_role === "SUPPLIER") {
+      const supplierId = user.supplier_id;
+
+      const orders = await db_query.customQuery(`
+        SELECT o.row_id, o.order_status, o.order_date, sh.shop_name
+        FROM ${orderTable} o
+        LEFT JOIN ${schema}.shops sh ON sh.row_id = o.shop_id
+        WHERE o.supplier_id = '${supplierId}'
+        ORDER BY o.order_date DESC LIMIT 5
+      `);
+
+      const statusChart = await db_query.customQuery(`
+        SELECT order_status, COUNT(*)::int AS count
+        FROM ${orderTable}
+        WHERE supplier_id = '${supplierId}'
+        GROUP BY order_status
+      `);
+
+      data.cards = {
+        total_orders: orders.data.length,
+      };
+
+      data.tables = {
+        recent_orders: orders.data,
+      };
+
+      data.charts = {
+        order_status: statusChart.data,
+      };
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Dashboard loaded",
+      data,
+    });
+  } catch (error) {
+    console.log("Dashboard Error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
   }
 }

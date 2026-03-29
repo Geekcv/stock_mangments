@@ -372,11 +372,12 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJpYXQiOjE3NzQ0NTI2NzksImV4cCI6MTc3NDcxMTg3OX0.mETQN5jQmqoNplTC2Y_Asj_T9OrrhvXXpUG1pUYuadE',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzQ3MTIxNjEsImV4cCI6MTc3NDk3MTM2MX0.uTYsfoo-sljm0gOzBiLkYSvlXpY-VWD2yIwqlAXkgkw',
     user_id: '1773576248141_czEK',
     role: 'ADMIN',
     counter_id: '0',
-    shop_id: null
+    shop_id: null,
+    supplier_id: null
   }
 }
 
@@ -386,13 +387,15 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUyNzIyMDg1X2NJd1kiLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwiaWF0IjoxNzc0NDUyODc1LCJleHAiOjE3NzQ3MTIwNzV9.X8Vp4YacDQ5S08Lc0EEY53fn2RsYT-qUqpXyuEpYaeI',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUyNzIyMDg1X2NJd1kiLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc0NzEyNDgyLCJleHAiOjE3NzQ5NzE2ODJ9.zjjqb1fiGBkV1-Gs6z4i-aOpZxfmvCyNI_1E1OOBe0g',
     user_id: '1774452722085_cIwY',
     role: 'SHOP_ADMIN',
     counter_id: null,
-    shop_id: '1774452722080_yFUN'
+    shop_id: '1774452722080_yFUN',
+    supplier_id: null
   }
 }
+
 
 
 
@@ -400,10 +403,12 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0MDY4OTc4NjA4X0VGME8iLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDA2ODk3ODU5Ml9sUFBSIiwiaWF0IjoxNzc0Mjc5MzE3LCJleHAiOjE3NzQ1Mzg1MTd9.ie3cN_Z9kDHoSRrdslbOFLDTKFBoaCABJ1yQNOVpOqs',
-    user_id: '1774068978608_EF0O',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUzMTc4OTMzX3VCYUMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDQ1MzE3ODkyN19SbTZHIiwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc0NzEyNDMwLCJleHAiOjE3NzQ5NzE2MzB9.mCeSQo4CR9SZosrOJcm_viJPAnFr2mnuDCjoKkE8JMQ',       
+    user_id: '1774453178933_uBaC',
     role: 'COUNTER_USER',
-    counter_id: '1774068978592_lPPR'
+    counter_id: '1774453178927_Rm6G',
+    shop_id: '1774452722080_yFUN',
+    supplier_id: null
   }
 }
 
@@ -411,10 +416,11 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDU3Nzg3ODI1X2dLckwiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwiaWF0IjoxNzc0NjI2MjU3LCJleHAiOjE3NzQ4ODU0NTd9.w1LRt0bmBFgI_qrA2Uv8rCSPgOiwwiEw6nL2U9D9h3E',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDU3Nzg3ODI1X2dLckwiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwic3VwcGxpZXJJZCI6IjE3NzQ0NTc3ODc4MTZfV3JpOCIsImlhdCI6MTc3NDcxMjM0NiwiZXhwIjoxNzc0OTcxNTQ2fQ.L6CNQPl3PViwGIXf0-iWwQJkxC2RQY8IT87T5Gn0-pI',
     user_id: '1774457787825_gKrL',
     role: 'SUPPLIER',
     counter_id: null,
-    shop_id: null
+    shop_id: null,
+    supplier_id: '1774457787816_Wri8'
   }
 }

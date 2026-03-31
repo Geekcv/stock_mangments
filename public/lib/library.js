@@ -44,6 +44,7 @@ let common_fn = {
   fe_or_details: getShopOrders, 
   // order (Purchase order)
   cr_final_order: createFinalOrder,
+  fe_all_req_counter:getAllCounterRequestsByShop,
 
 
   // counter
@@ -4562,6 +4563,83 @@ async function getNotifications(req, res) {
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Error fetching notifications",
+    });
+  }
+}
+
+
+async function getAllCounterRequestsByShop(req, res) {
+  try {
+    const requestTable = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
+    const sweetTable = schema + ".sweets";
+
+    const user = req.data;
+    const { status } = req.data || {};
+
+    // 🔒 Role validation
+    if (user.user_role !== "SHOP_ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only shop admin allowed",
+      });
+    }
+
+    const shopId = user.shopId;
+
+    if (!shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid shop",
+      });
+    }
+
+    // 🔹 Dynamic WHERE
+    let where = `WHERE c.shop_id = '${shopId}'`;
+
+    if (status) {
+      where += ` AND r.status = '${status}'`;
+    }
+
+    // 🔹 Query
+    const result = await db_query.customQuery(`
+      SELECT
+        r.row_id,
+        r.quantity,
+        r.status,
+        r.cr_on,
+
+        s.row_id AS sweet_id,
+        s.sweet_name,
+        s.unit,
+
+        c.row_id AS counter_id,
+        c.counter_name,
+        c.location
+
+      FROM ${requestTable} r
+      LEFT JOIN ${counterTable} c 
+        ON c.row_id = r.counter_id
+      LEFT JOIN ${sweetTable} s 
+        ON s.row_id = r.sweet_id
+
+      ${where}
+      ORDER BY r.cr_on DESC
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Shop counter requests fetched successfully",
+      data: result.data || [],
+    });
+
+  } catch (error) {
+    console.log("getAllCounterRequestsByShop error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
     });
   }
 }

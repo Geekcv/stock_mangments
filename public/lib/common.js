@@ -28,8 +28,8 @@ function verifyToken(req, res, next) {
       req.userId = decoded.userId;
       req.role = decoded.role;
       req.counterId = decoded.counterId;
-      req.shopId =decoded.shopId
-      req.supplierId =decoded.supplierId
+      req.shopId = decoded.shopId;
+      req.supplierId = decoded.supplierId;
       req.token = token;
       next();
     }
@@ -62,8 +62,6 @@ router.post("/", verifyToken, function (req, res, next) {
   data.data.shopId = req.shopId;
   data.data.supplierId = req.supplierId;
 
-  
-
   let fn = "common_fn",
     se = data.se;
 
@@ -88,74 +86,73 @@ router.post("/create-user", function (req, res, next) {
  *
  *File Uploading
  */
-//-------------------------------------------------------------------///
-var fpath = `./public/uploads/`;
 
-/**
- * upload with some data
- */
+//  NEW BASE PATH (VPS persistent storage)
+const BASE_UPLOAD_PATH = "/home/uploads";
 
-// // Configure multer storage
+// Configure multer storage
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    // console.log("upload folder",req.user.OrganizationId);
+    const uploadPath = path.join(BASE_UPLOAD_PATH, "ShopMedia");
 
-    const fpath = path.join("./public/uploads/", "ShopMedia"); // Adjust path as necessary
-    // console.log("directry name---",__dirname)
-    // Create the directory if it doesn't exist
-    if (!fs.existsSync(fpath)) {
-      fs.mkdirSync(fpath, { recursive: true }); // Create directory recursively
+    // Create directory if not exists
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
     }
 
-    cb(null, fpath);
+    cb(null, uploadPath);
   },
+
   filename: function (req, file, cb) {
     cb(null, Date.now() + "_" + file.originalname);
   },
 });
 
-// Initialize multer with storage configuration
+// Initialize multer
 var upload = multer({
   storage: storage,
-  limits: { fileSize: 2000000000 }, // Limit file size to 2GB
+  limits: { fileSize: 2000000000 },
 });
 
-// POST route for multiple file uploads
+// Upload API
 router.post("/uploads", verifyToken, upload.any(), async (req, res) => {
   try {
     const files = req.files;
-    console.log("files", files);
-    const foldername = "ShopMedia"; // Use default if not provided
-    var respFiles = [];
+
+    const foldername = "ShopMedia";
+    let respFiles = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+
       respFiles.push({
         name: file.filename,
+
+        // IMPORTANT: URL path (NOT system path)
         foPa: `uploads/${foldername}/${file.filename}`,
+
         mimetype: file.mimetype,
         size: file.size,
       });
     }
 
-    var resp = {
-      status: true,
-      message: "Files uploaded successfully.",
-      data: {
-        filesInfo: respFiles,
+    res.status(200).send({
+      rsp: {
+        status: true,
+        message: "Files uploaded successfully.",
+        data: { filesInfo: respFiles },
       },
-    };
-
-    // console.log("Response:", resp);
-    res.send({ rsp: resp }).status(200);
+    });
   } catch (err) {
     console.error("Error during upload:", err);
-    var resp = {
-      status: 1,
-      msg: "Error during upload",
-      error: err.message,
-    };
-    // console.log("Response:", resp);
-    res.send({ rsp: resp }).status(200);
+
+    res.status(500).send({
+      rsp: {
+        status: false,
+        message: "Error during upload",
+        error: err.message,
+      },
+    });
   }
 });
 

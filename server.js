@@ -27,15 +27,15 @@ app.use(
 );
 
 
-app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  setHeaders: (res, path) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "*");
-    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  }
-}));
+// app.use(cors());
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+//   setHeaders: (res, path) => {
+//     res.setHeader("Access-Control-Allow-Origin", "*");
+//     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+//     res.setHeader("Access-Control-Allow-Headers", "*");
+//     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+//   }
+// }));
 // app.use(cors());
 // app.use(function (req, res, next) {
 //   res.header("Access-Control-Allow-Origin", "*");
@@ -45,6 +45,36 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 //   );
 //   next();
 // });
+
+
+const allowedOrigins = [
+  'https://jodhpursweetsshop.netlify.app',
+  'http://localhost:4200'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS Not Allowed'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+app.options('*', cors());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.get('/', (req, res) => {
+  res.send('API Running 🚀');
+});
+
+
 app.use("/common", common);
 // app.use('/', express.static('public'));
 app.use("/node_modules", express.static(path.join(__dirname, "node_modules")));

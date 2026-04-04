@@ -12,7 +12,7 @@ const common = require("./public/lib/common.js");
 
 const PORT = process.env.SERVER_PORT || 17000;
 
-// ✅ VPS Persistent Upload Path
+//  VPS Persistent Upload Path
 const BASE_UPLOAD_PATH = "/home/uploads";
 
 // ================== MIDDLEWARE ==================
@@ -53,7 +53,7 @@ app.options("*", cors());
 
 // ================== STATIC UPLOADS ==================
 
-// ✅ Serve uploaded files from VPS (IMPORTANT)
+//  Serve uploaded files from VPS (IMPORTANT)
 app.use("/uploads", express.static(BASE_UPLOAD_PATH));
 
 // ================== ROUTES ==================
@@ -88,7 +88,7 @@ const upload = multer({
   limits: { fileSize: 2000000000 }, // 2GB
 });
 
-// ✅ Upload API
+//  Upload API
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
@@ -107,7 +107,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         name: file.filename,
         originalname: file.originalname,
 
-        // ✅ URL path
+        //  URL path
         foPa: `/uploads/ShopMedia/${file.filename}`,
 
         mimetype: file.mimetype,

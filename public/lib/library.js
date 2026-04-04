@@ -87,6 +87,7 @@ let common_fn = {
 
   // profile
   fe_pro: getProfile,
+  up_profile: updateProfile,
 };
 
 const schema = "sms";
@@ -1916,6 +1917,7 @@ async function getStockHistory(req, res) {
     const transactionTable = schema + ".stock_transactions";
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
 
     const user = req.data;
 
@@ -1926,19 +1928,14 @@ async function getStockHistory(req, res) {
 
     // 🔒 ================= ROLE BASE FILTER =================
 
-    // 🔴 ADMIN → no restriction
-
-    // 🟠 SHOP ADMIN → only own shop counters
     if (user.user_role === "SHOP_ADMIN") {
       conditions.push(`c.shop_id = '${user.shopId}'`);
     }
 
-    // 🟡 COUNTER USER → only own counter
     if (user.user_role === "COUNTER_USER") {
       conditions.push(`st.counter_id = '${user.counterId}'`);
     }
 
-    // 🟢 SUPPLIER → no access
     if (user.user_role === "SUPPLIER") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1970,7 +1967,7 @@ async function getStockHistory(req, res) {
 
     const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
-    // 📊 QUERY
+    // 📊 QUERY (UPDATED)
     const result = await db_query.customQuery(`
       SELECT
         st.row_id AS transaction_id,
@@ -1986,13 +1983,19 @@ async function getStockHistory(req, res) {
         s.unit,
 
         c.counter_name,
-        c.shop_id
+
+        sh.row_id AS shop_id,
+        sh.shop_name,
+        sh.city,
+        sh.state
 
       FROM ${transactionTable} st
       LEFT JOIN ${sweetTable} s 
         ON s.row_id = st.sweet_id
       LEFT JOIN ${counterTable} c 
         ON c.row_id = st.counter_id
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = c.shop_id
 
       ${whereClause}
       ORDER BY st.cr_on DESC
@@ -4659,7 +4662,7 @@ async function getProfile(req, res) {
     // 🔴 ================= ADMIN =================
     if (user.user_role === "ADMIN") {
       const admin = await db_query.customQuery(`
-        SELECT row_id, name, email, phone, role, cr_on
+        SELECT row_id, name, email, phone, role,password, cr_on
         FROM ${userTable}
         WHERE row_id = '${user.userId}'
       `);
@@ -4679,6 +4682,7 @@ async function getProfile(req, res) {
           u.email,
           u.phone,
           u.role,
+          u.password,
 
           s.row_id AS shop_id,
           s.shop_name,
@@ -4686,8 +4690,6 @@ async function getProfile(req, res) {
           s.city,
           s.state,
           s.pincode,
-          s.phone AS shop_phone,
-          s.email AS shop_email,
           s.owner_name,
           s.logo_url
 
@@ -4713,6 +4715,7 @@ async function getProfile(req, res) {
           u.email,
           u.phone,
           u.role,
+          u.password,
 
           c.row_id AS counter_id,
           c.counter_name,
@@ -4745,12 +4748,10 @@ async function getProfile(req, res) {
           u.email,
           u.phone,
           u.role,
+          u.password,
+          sp.address,
 
-          sp.row_id AS supplier_id,
-          sp.supplier_name,
-          sp.phone AS supplier_phone,
-          sp.email AS supplier_email,
-          sp.address
+          sp.row_id AS supplier_id
 
         FROM ${userTable} u
         LEFT JOIN ${supplierTable} sp
@@ -4772,6 +4773,163 @@ async function getProfile(req, res) {
     });
   } catch (error) {
     console.log("getProfile error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function updateProfile(req, res) {
+  console.log("req", req);
+  try {
+    const user = req.data;
+
+    const userTable = schema + ".users";
+    const shopTable = schema + ".shops";
+    const supplierTable = schema + ".suppliers";
+    const counterTable = schema + ".counters";
+
+    const {
+      name,
+      email,
+      phone,
+      password,
+
+      // shop fields
+      shop_name,
+      address,
+      city,
+      state,
+      pincode,
+      gst_number,
+      logo_url,
+      owner_name,
+
+      counter_name,
+
+      // supplier fields
+      supplier_name,
+    } = req.data || {};
+
+    // 🔹 Common validation
+    if (!name && !email && !phone && !shop_name && !supplier_name) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Nothing to update",
+      });
+    }
+
+    // ================= 🔴 ADMIN =================
+    if (user.user_role === "ADMIN") {
+      await db_query.addData(
+        userTable,
+        {
+          name,
+          email,
+          phone,
+        },
+        user.userId,
+        "User",
+      );
+    }
+
+    // ================= 🟠 SHOP ADMIN =================
+    if (user.user_role === "SHOP_ADMIN") {
+      // 🔹 Update user info
+      await db_query.addData(
+        userTable,
+        {
+          name,
+          email,
+          phone,
+          password,
+        },
+        user.userId,
+        "User",
+      );
+
+      // 🔹 Update shop info
+      await db_query.addData(
+        shopTable,
+        {
+          shop_name,
+          address,
+          city,
+          state,
+          pincode,
+          email,
+          gst_number,
+          logo_url,
+          owner_name,
+        },
+        user.shopId,
+        "Shop",
+      );
+    }
+
+    // ================= 🟡 COUNTER USER =================
+    if (user.user_role === "COUNTER_USER") {
+      await db_query.addData(
+        userTable,
+        {
+          name,
+          email,
+          phone,
+          password,
+        },
+        user.userId,
+        "User",
+      );
+
+      await db_query.addData(
+        counterTable,
+        {
+          counter_name,
+        },
+        user.counterId,
+        "Counter",
+      );
+    }
+
+    // ================= 🟢 SUPPLIER =================
+    if (user.user_role === "SUPPLIER") {
+      // 🔹 Update user info
+      await db_query.addData(
+        userTable,
+        {
+          name,
+          email,
+          phone,
+          password,
+        },
+        user.userId,
+        "User",
+      );
+
+      // 🔹 Update supplier info
+      await db_query.addData(
+        supplierTable,
+        {
+          supplier_name,
+          address: address,
+          email,
+          phone,
+          password,
+        },
+        user.supplierId,
+        "Supplier",
+      );
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Profile updated successfully",
+    });
+  } catch (error) {
+    console.log("updateProfile error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,

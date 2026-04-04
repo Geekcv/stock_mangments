@@ -3957,7 +3957,9 @@ async function downloadChalanPDF(req, res) {
     const itemTable = schema + ".order_items";
     const sweetTable = schema + ".sweets";
     const supplierTable = schema + ".suppliers";
+    const shopTable = schema + ".shops";
 
+    // ================= QUERY =================
     const result = await db_query.customQuery(`
       SELECT
         ch.row_id AS chalan_id,
@@ -3967,8 +3969,14 @@ async function downloadChalanPDF(req, res) {
         o.row_id AS order_id,
 
         s.supplier_name,
-        s.phone,
-        s.address,
+        s.phone AS supplier_phone,
+        s.address AS supplier_address,
+
+        sh.shop_name,
+        sh.city,
+        sh.state,
+        sh.address AS shop_address,
+        sh.phone AS shop_phone,
 
         oi.quantity,
         sw.sweet_name,
@@ -3977,6 +3985,7 @@ async function downloadChalanPDF(req, res) {
       FROM ${chalanTable} ch
       LEFT JOIN ${orderTable} o ON o.row_id = ch.order_id
       LEFT JOIN ${supplierTable} s ON s.row_id = ch.supplier_id
+      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
       LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
       LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
 
@@ -3989,22 +3998,18 @@ async function downloadChalanPDF(req, res) {
 
     const data = result.data;
 
-    // ✅ Persistent Path (VPS)
+    // ================= FILE PATH =================
     const BASE_UPLOAD_PATH = "/home/uploads";
     const orgFolder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
 
-    // Create folder if not exists
     if (!fs.existsSync(orgFolder)) {
       fs.mkdirSync(orgFolder, { recursive: true });
     }
 
-    // ✅ File name + path
-    const fileName = `Report_${Date.now()}.pdf`;
+    const fileName = `Chalan_${Date.now()}.pdf`;
     const filePath = path.join(orgFolder, fileName);
 
     const doc = new PDFDocument({ margin: 40 });
-
-    // Pipe to file
     doc.pipe(fs.createWriteStream(filePath));
 
     // ================= HEADER =================
@@ -4017,15 +4022,21 @@ async function downloadChalanPDF(req, res) {
     doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
 
-    // ================= CHALAN INFO =================
+    // ================= BASIC INFO =================
     doc.fontSize(11).fillColor("#000");
+
     doc
       .text(`Chalan ID: ${data[0].chalan_id}`, { continued: true })
       .text(`        Order ID: ${data[0].order_id}`, { align: "right" });
 
     doc.text(
-      `Dispatch Date: ${new Date(data[0].dispatch_date).toLocaleDateString()}`
+      `Dispatch Date: ${
+        data[0].dispatch_date
+          ? new Date(data[0].dispatch_date).toLocaleDateString()
+          : "-"
+      }`
     );
+
     doc.moveDown();
 
     // ================= SUPPLIER =================
@@ -4036,9 +4047,27 @@ async function downloadChalanPDF(req, res) {
 
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor("#000");
-    doc.text(`Name: ${data[0].supplier_name}`);
-    doc.text(`Phone: ${data[0].phone}`);
-    doc.text(`Address: ${data[0].address}`);
+
+    doc.text(`Name: ${data[0].supplier_name || "-"}`);
+    doc.text(`Phone: ${data[0].supplier_phone || "-"}`);
+    doc.text(`Address: ${data[0].supplier_address || "-"}`);
+
+    doc.moveDown();
+
+    // ================= SHOP =================
+    doc
+      .fontSize(12)
+      .fillColor("#34495e")
+      .text("Shop Details", { underline: true });
+
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor("#000");
+
+    doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
+    doc.text(`Phone: ${data[0].shop_phone || "-"}`);
+    doc.text(`Address: ${data[0].shop_address || "-"}`);
+    doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+
     doc.moveDown();
 
     // ================= TRANSPORT =================
@@ -4049,7 +4078,9 @@ async function downloadChalanPDF(req, res) {
 
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor("#000");
-    doc.text(`${data[0].transport_details}`);
+
+    doc.text(`${data[0].transport_details || "-"}`);
+
     doc.moveDown();
 
     // ================= ITEMS TABLE =================
@@ -4062,23 +4093,26 @@ async function downloadChalanPDF(req, res) {
 
     let tableTop = doc.y;
 
+    // Header row
     doc.rect(40, tableTop, 500, 20).fill("#f2f2f2");
     doc.fillColor("#000").fontSize(10);
+
     doc.text("Sweet Name", col1, tableTop + 5);
     doc.text("Qty", col2, tableTop + 5);
     doc.text("Unit", col3, tableTop + 5);
 
     let y = tableTop + 25;
 
+    // Rows
     data.forEach((item, index) => {
       if (index % 2 === 0) {
         doc.rect(40, y - 2, 500, 20).fill("#fafafa");
         doc.fillColor("#000");
       }
 
-      doc.text(item.sweet_name, col1, y, { width: 200 });
-      doc.text(item.quantity.toString(), col2, y);
-      doc.text(item.unit, col3, y);
+      doc.text(item.sweet_name || "-", col1, y, { width: 200 });
+      doc.text((item.quantity || 0).toString(), col2, y);
+      doc.text(item.unit || "-", col3, y);
 
       y += 20;
     });
@@ -4092,7 +4126,7 @@ async function downloadChalanPDF(req, res) {
 
     doc.end();
 
-    // ✅ Correct URL
+    // ================= RESPONSE =================
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
     const serverUrl = "https://stock.abhishekcv.in";
 
@@ -4104,7 +4138,7 @@ async function downloadChalanPDF(req, res) {
 
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
-    res.status(500).send("Error generating PDF");
+    return res.status(500).send("Error generating PDF");
   }
 }
 

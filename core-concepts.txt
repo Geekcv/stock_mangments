@@ -372,7 +372,8 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzQ3MTIxNjEsImV4cCI6MTc3NDk3MTM2MX0.uTYsfoo-sljm0gOzBiLkYSvlXpY-VWD2yIwqlAXkgkw',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzUyOTIzMTAsImV4cCI6MTc3NTU1MTUxMH0.D4FTQ2Yxaw3tZ4ksPXZqmcHJZJaDd7pNh5QSM-lxKQI"
+user_id: "1773576248141_czEK',
     user_id: '1773576248141_czEK',
     role: 'ADMIN',
     counter_id: '0',
@@ -387,7 +388,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUyNzIyMDg1X2NJd1kiLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc0NzEyNDgyLCJleHAiOjE3NzQ5NzE2ODJ9.zjjqb1fiGBkV1-Gs6z4i-aOpZxfmvCyNI_1E1OOBe0g',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgyOTc0NDUyX1lPa1ciLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc1MjkzMzc1LCJleHAiOjE3NzU1NTI1NzV9.gBxWS-tVUCgJjnrI4ms0YgX2qHf9SIUHQp6JJwKAP9o',
     user_id: '1774452722085_cIwY',
     role: 'SHOP_ADMIN',
     counter_id: null,
@@ -403,7 +404,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDUzMTc4OTMzX3VCYUMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDQ1MzE3ODkyN19SbTZHIiwic2hvcElkIjoiMTc3NDQ1MjcyMjA4MF95RlVOIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc0NzEyNDMwLCJleHAiOjE3NzQ5NzE2MzB9.mCeSQo4CR9SZosrOJcm_viJPAnFr2mnuDCjoKkE8JMQ',       
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgzMTMxNDc3X3N0aGMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDg4MzEzMTQ3NV9CM0pKIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc1MjkzNDE0LCJleHAiOjE3NzU1NTI2MTR9.Pwy1rBwdBfcnkEWGY9b5eNNI0PB82RHcnVjomFXPxb4',       
     user_id: '1774453178933_uBaC',
     role: 'COUNTER_USER',
     counter_id: '1774453178927_Rm6G',
@@ -416,7 +417,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0NDU3Nzg3ODI1X2dLckwiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwic3VwcGxpZXJJZCI6IjE3NzQ0NTc3ODc4MTZfV3JpOCIsImlhdCI6MTc3NDcxMjM0NiwiZXhwIjoxNzc0OTcxNTQ2fQ.L6CNQPl3PViwGIXf0-iWwQJkxC2RQY8IT87T5Gn0-pI',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0OTM0NTkxNjc1X3VMYWMiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwic3VwcGxpZXJJZCI6IjE3NzQ5MzQ1OTE2NzNfRzFRbCIsImlhdCI6MTc3NTI5MzQ1MCwiZXhwIjoxNzc1NTUyNjUwfQ.-oKzXnTe6HAjJxQZPNY2dQm1CwG9ibqN1kVpcAUWMK0',
     user_id: '1774457787825_gKrL',
     role: 'SUPPLIER',
     counter_id: null,

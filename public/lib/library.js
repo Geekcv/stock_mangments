@@ -3989,23 +3989,22 @@ async function downloadChalanPDF(req, res) {
 
     const data = result.data;
 
-    const orgFolder = path.join("./public/uploads", "ShopMedia");
+    // ✅ Persistent Path (VPS)
+    const BASE_UPLOAD_PATH = "/home/uploads";
+    const orgFolder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+    // Create folder if not exists
     if (!fs.existsSync(orgFolder)) {
       fs.mkdirSync(orgFolder, { recursive: true });
     }
 
-    // 🔹 File name + path
+    // ✅ File name + path
     const fileName = `Report_${Date.now()}.pdf`;
     const filePath = path.join(orgFolder, fileName);
 
     const doc = new PDFDocument({ margin: 40 });
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=chalan_${chalan_id}.pdf`,
-    );
-
+    // Pipe to file
     doc.pipe(fs.createWriteStream(filePath));
 
     // ================= HEADER =================
@@ -4013,6 +4012,7 @@ async function downloadChalanPDF(req, res) {
       .fontSize(18)
       .fillColor("#2c3e50")
       .text("DISPATCH CHALAN", { align: "center" });
+
     doc.moveDown(0.5);
     doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
@@ -4022,8 +4022,9 @@ async function downloadChalanPDF(req, res) {
     doc
       .text(`Chalan ID: ${data[0].chalan_id}`, { continued: true })
       .text(`        Order ID: ${data[0].order_id}`, { align: "right" });
+
     doc.text(
-      `Dispatch Date: ${new Date(data[0].dispatch_date).toLocaleDateString()}`,
+      `Dispatch Date: ${new Date(data[0].dispatch_date).toLocaleDateString()}`
     );
     doc.moveDown();
 
@@ -4032,6 +4033,7 @@ async function downloadChalanPDF(req, res) {
       .fontSize(12)
       .fillColor("#34495e")
       .text("Supplier Details", { underline: true });
+
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor("#000");
     doc.text(`Name: ${data[0].supplier_name}`);
@@ -4044,6 +4046,7 @@ async function downloadChalanPDF(req, res) {
       .fontSize(12)
       .fillColor("#34495e")
       .text("Transport Details", { underline: true });
+
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor("#000");
     doc.text(`${data[0].transport_details}`);
@@ -4059,7 +4062,6 @@ async function downloadChalanPDF(req, res) {
 
     let tableTop = doc.y;
 
-    // ===== TABLE HEADER =====
     doc.rect(40, tableTop, 500, 20).fill("#f2f2f2");
     doc.fillColor("#000").fontSize(10);
     doc.text("Sweet Name", col1, tableTop + 5);
@@ -4068,15 +4070,12 @@ async function downloadChalanPDF(req, res) {
 
     let y = tableTop + 25;
 
-    // ===== TABLE ROWS =====
     data.forEach((item, index) => {
-      // Zebra row for readability
       if (index % 2 === 0) {
         doc.rect(40, y - 2, 500, 20).fill("#fafafa");
         doc.fillColor("#000");
       }
 
-      // Proper aligned columns
       doc.text(item.sweet_name, col1, y, { width: 200 });
       doc.text(item.quantity.toString(), col2, y);
       doc.text(item.unit, col3, y);
@@ -4093,14 +4092,16 @@ async function downloadChalanPDF(req, res) {
 
     doc.end();
 
-    const fileUrl = `uploads/${chalan_id}/${fileName}`;
-    const serverUrl = "https://stock-mangments.onrender.com/";
+    // ✅ Correct URL
+    const fileUrl = `/uploads/ShopMedia/${fileName}`;
+    const serverUrl = "https://stock.abhishekcv.in";
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
+
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
     res.status(500).send("Error generating PDF");

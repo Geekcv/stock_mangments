@@ -108,7 +108,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         originalname: file.originalname,
 
         // ✅ URL path
-        foPa: `uploads/ShopMedia/${file.filename}`,
+        foPa: `/uploads/ShopMedia/${file.filename}`,
 
         mimetype: file.mimetype,
         size: file.size,

@@ -129,7 +129,7 @@ router.post("/uploads", verifyToken, upload.any(), async (req, res) => {
         name: file.filename,
 
         // IMPORTANT: URL path (NOT system path)
-        foPa: `uploads/${foldername}/${file.filename}`,
+        foPa: `/uploads/${foldername}/${file.filename}`,
 
         mimetype: file.mimetype,
         size: file.size,

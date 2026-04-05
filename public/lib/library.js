@@ -46,6 +46,8 @@ let common_fn = {
   // order (Purchase order)
   cr_final_order: createFinalOrder,
   fe_all_req_counter: getAllCounterRequestsByShop,
+  fe_dep_by_admin: fetchDepartmentsByShop,
+  fe_cat_con_by_admin: fetchCountersAndCategoriesByShop,
 
   // counter
   cr_counter: createCounter,
@@ -2995,6 +2997,7 @@ async function updateOrderStatus(req, res) {
   try {
     const orderTable = schema + ".orders";
     const userTable = schema + ".users";
+    const chalanTable = schema + ".chalans"; // for checking chalan
 
     const { order_id, status } = req.data || {};
     const user = req.data;
@@ -3086,6 +3089,21 @@ async function updateOrderStatus(req, res) {
         status: 1,
         msg: `Invalid status transition from ${current} → ${status}`,
       });
+    }
+
+    // 🔎 SPECIAL CASE: DISPATCHED
+    if (status === "DISPATCHED") {
+      const existingChalan = await db_query.customQuery(`
+        SELECT 1 FROM ${chalanTable}
+        WHERE order_id = '${order_id.trim()}'
+      `);
+
+      if (!existingChalan.data?.length) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Chalan not created yet. Please create chalan first.",
+        });
+      }
     }
 
     // ✅ Update Order
@@ -5466,6 +5484,108 @@ async function fetchExpiryLogs(req, res) {
       status: 1,
       msg: "Something went wrong while fetching expiry logs",
       error: error.message,
+    });
+  }
+}
+
+async function fetchDepartmentsByShop(req, res) {
+  try {
+    const { shop_id } = req.data || {};
+    const user = req.data;
+    const table = "sms.departments";
+
+    // Role-based access
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, { status: 1, msg: "Access denied" });
+    }
+
+    let conditions = [];
+
+    // ADMIN can filter by shop_id
+    if (user.user_role === "ADMIN") {
+      if (shop_id) conditions.push(`shop_id = '${shop_id}'`);
+    } else {
+      // SHOP_ADMIN / COUNTER_USER -> only their shop
+      conditions.push(`shop_id = '${user.shop_id}'`);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    const query = `
+      SELECT row_id, department_name, description
+      FROM ${table}
+      ${whereClause}
+      ORDER BY department_name ASC
+    `;
+
+    const result = await db_query.customQuery(query);
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Departments fetched successfully",
+      data: result.data || [],
+    });
+  } catch (err) {
+    console.error("fetchDepartmentsByShop error:", err);
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Error fetching departments",
+      error: err.message,
+    });
+  }
+}
+
+async function fetchCountersAndCategoriesByShop(req, res) {
+  try {
+    const { shop_id } = req.data || {};
+    const user = req.data;
+
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, { status: 1, msg: "Access denied" });
+    }
+
+    // Determine shop_id
+    let finalShopId = shop_id || user.shop_id;
+    if (!finalShopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID is required",
+      });
+    }
+
+    // Fetch counters
+    const counterQuery = `
+      SELECT row_id, counter_name, location
+      FROM sms.counters
+      WHERE shop_id = '${finalShopId}'
+      ORDER BY counter_name ASC
+    `;
+    const countersResult = await db_query.customQuery(counterQuery);
+
+    // Fetch categories
+    const categoryQuery = `
+      SELECT row_id, category_name, department_id
+      FROM sms.categories
+      WHERE shop_id = '${finalShopId}'
+      ORDER BY category_name ASC
+    `;
+    const categoriesResult = await db_query.customQuery(categoryQuery);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Counters and categories fetched successfully",
+      data: {
+        counters: countersResult.data || [],
+        categories: categoriesResult.data || [],
+      },
+    });
+  } catch (err) {
+    console.error("fetchCountersAndCategoriesByShop error:", err);
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Error fetching counters and categories",
+      error: err.message,
     });
   }
 }

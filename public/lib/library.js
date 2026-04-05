@@ -5,6 +5,7 @@ const query = require("./connect_db/queries.js");
 const db_query = require("./connect_db/query_wrapper.js");
 const path = require("path");
 const runCron = require("./run_cron/crons.js");
+const cron = require("node-cron");
 // const auth = require('./authentication/connect.js');
 
 // var fs = require('fs');
@@ -88,6 +89,13 @@ let common_fn = {
   // profile
   fe_pro: getProfile,
   up_profile: updateProfile,
+
+  // notificatiosn
+  fe_notif: getNotifications,
+  read_notify: markNotificationRead,
+
+  // expaire
+  fe_expairy_items: fetchExpiryLogs,
 };
 
 const schema = "sms";
@@ -1604,7 +1612,6 @@ async function fetchAllSweets(req, res) {
 // ✔ min_stock, max_stock → optional
 // ✔ expiry_date → only useful in IN
 async function addStock(req, res) {
-  console.log(req);
   try {
     const inventoryTable = schema + ".inventory";
     const transactionTable = schema + ".stock_transactions";
@@ -1612,6 +1619,7 @@ async function addStock(req, res) {
     const categoryTable = schema + ".categories";
     const deptTable = schema + ".departments";
     const counterTable = schema + ".counters";
+    const userTable = schema + ".users";
 
     const {
       counter_id,
@@ -1635,7 +1643,6 @@ async function addStock(req, res) {
       });
     }
 
-    //  Basic validation
     if (!sweet_id || !transaction_type || !quantity) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1643,31 +1650,24 @@ async function addStock(req, res) {
       });
     }
 
-    //  Resolve counter_id based on role
-    let finalCounterId;
+    //  Resolve counter
+    let finalCounterId =
+      user.user_role === "COUNTER_USER" ? user.counterId : counter_id;
 
-    if (user.user_role === "COUNTER_USER") {
-      finalCounterId = user.counterId;
+    if (!finalCounterId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "counter_id is required",
+      });
     }
 
-    if (user.user_role === "SHOP_ADMIN") {
-      if (!counter_id) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "counter_id is required",
-        });
-      }
-      finalCounterId = counter_id;
-    }
-
-    //  Get Counter → Shop
+    // Counter check
     const counterCheck = await db_query.customQuery(`
-      SELECT shop_id
-      FROM ${counterTable}
+      SELECT shop_id FROM ${counterTable}
       WHERE row_id = '${finalCounterId}'
     `);
 
-    if (!counterCheck.data || counterCheck.data.length === 0) {
+    if (!counterCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid counter",
@@ -1676,26 +1676,21 @@ async function addStock(req, res) {
 
     const counterShopId = counterCheck.data[0].shop_id;
 
-    //  SHOP_ADMIN restriction
-    if (user.user_role === "SHOP_ADMIN") {
-      if (counterShopId !== user.shopId) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Unauthorized shop access",
-        });
-      }
-    }
-
-    const qty = Number(quantity);
-
-    if (isNaN(qty) || qty <= 0) {
+    if (user.user_role === "SHOP_ADMIN" && counterShopId !== user.shopId) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Quantity must be greater than 0",
+        msg: "Unauthorized shop access",
       });
     }
 
-    //  Transaction type validation
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid quantity",
+      });
+    }
+
     const validTypes = ["IN", "OUT", "ADJUST"];
     if (!validTypes.includes(transaction_type)) {
       return libFunc.sendResponse(res, {
@@ -1704,7 +1699,7 @@ async function addStock(req, res) {
       });
     }
 
-    //  Get Sweet → Shop
+    // 🍬 Sweet validation
     const sweetCheck = await db_query.customQuery(`
       SELECT d.shop_id
       FROM ${sweetTable} s
@@ -1713,37 +1708,24 @@ async function addStock(req, res) {
       WHERE s.row_id = '${sweet_id}'
     `);
 
-    if (!sweetCheck.data || sweetCheck.data.length === 0) {
+    if (!sweetCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid sweet",
       });
     }
 
-    const sweetShopId = sweetCheck.data[0].shop_id;
-
-    //  CORE VALIDATION
-    if (sweetShopId !== counterShopId) {
+    if (sweetCheck.data[0].shop_id !== counterShopId) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Sweet and Counter must belong to same shop",
+        msg: "Sweet & counter mismatch",
       });
     }
 
-    //  Min/Max validation
-    if (min_stock !== null && max_stock !== null) {
-      if (Number(min_stock) > Number(max_stock)) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Min stock cannot be greater than max stock",
-        });
-      }
-    }
-
-    //  START TRANSACTION
+    // 🟢 START TRANSACTION
     await connect_db.query("BEGIN");
 
-    //  Insert transaction
+    // 📦 Insert transaction
     await db_query.addData(
       transactionTable,
       {
@@ -1759,7 +1741,7 @@ async function addStock(req, res) {
       "Stock Transaction",
     );
 
-    //  Check inventory
+    // 📥 Get existing inventory
     const existing = await db_query.customQuery(`
       SELECT * FROM ${inventoryTable}
       WHERE counter_id = '${finalCounterId}'
@@ -1767,25 +1749,25 @@ async function addStock(req, res) {
     `);
 
     let newQty = qty;
+    let previousQty = 0;
+    let minStockValue = 0;
 
-    if (existing.data && existing.data.length > 0) {
-      const existingRow = existing.data[0];
-      const currentQty = Number(existingRow.quantity);
+    if (existing.data?.length) {
+      const row = existing.data[0];
+      previousQty = Number(row.quantity);
+      minStockValue = Number(row.min_stock || 0);
 
-      if (transaction_type === "IN") {
-        newQty = currentQty + qty;
-      } else if (transaction_type === "OUT") {
-        if (currentQty < qty) {
+      if (transaction_type === "IN") newQty = previousQty + qty;
+      else if (transaction_type === "OUT") {
+        if (previousQty < qty) {
           await connect_db.query("ROLLBACK");
           return libFunc.sendResponse(res, {
             status: 1,
             msg: "Insufficient stock",
           });
         }
-        newQty = currentQty - qty;
-      } else {
-        newQty = qty; // ADJUST
-      }
+        newQty = previousQty - qty;
+      } else newQty = qty;
 
       await db_query.addData(
         inventoryTable,
@@ -1795,7 +1777,7 @@ async function addStock(req, res) {
           ...(min_stock !== null && { min_stock }),
           ...(max_stock !== null && { max_stock }),
         },
-        existingRow.row_id,
+        row.row_id,
         "Inventory",
       );
     } else {
@@ -1806,6 +1788,10 @@ async function addStock(req, res) {
           msg: "No stock available",
         });
       }
+
+      newQty = qty;
+      previousQty = 0;
+      minStockValue = Number(min_stock || 0);
 
       await db_query.addData(
         inventoryTable,
@@ -1823,7 +1809,52 @@ async function addStock(req, res) {
       );
     }
 
+    // ✅ COMMIT
     await connect_db.query("COMMIT");
+
+    // ==============================
+    // 🔔 NOTIFICATIONS
+    // ==============================
+
+    // 👥 Get counter users
+    const counterUsers = await db_query.customQuery(`
+      SELECT row_id FROM ${userTable}
+      WHERE counter_id = '${finalCounterId}'
+    `);
+
+    // 🔴 Out of stock
+    if (newQty === 0) {
+      for (let u of counterUsers.data || []) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Out of Stock",
+          message: "Item is out of stock",
+          type: "STOCK",
+          reference_id: sweet_id,
+          priority: "HIGH",
+        });
+      }
+    }
+
+    // 🟡 Low stock (only when crossing threshold)
+    else if (
+      minStockValue > 0 &&
+      newQty <= minStockValue &&
+      previousQty > minStockValue
+    ) {
+      for (let u of counterUsers.data || []) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Low Stock Alert",
+          message: `Only ${newQty} items left`,
+          type: "STOCK",
+          reference_id: sweet_id,
+          priority: "HIGH",
+        });
+      }
+    }
+
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -2199,6 +2230,8 @@ async function createCounterRequest(req, res) {
 
     await connect_db.query("BEGIN");
 
+    let isRequestCreated = false; // 🔥 important flag
+
     for (let item of items) {
       const { sweet_id, quantity } = item;
 
@@ -2263,31 +2296,39 @@ async function createCounterRequest(req, res) {
         null,
         "Counter Request",
       );
+
+      isRequestCreated = true; // 🔥 mark success
     }
 
     await connect_db.query("COMMIT");
 
-    // Shop admin find karo
-    // const shopAdmin = await db_query.customQuery(`
-    // SELECT row_id FROM ${schema}.users
-    // WHERE role = 'SHOP_ADMIN'
-    // AND shop_id = (
-    //   SELECT shop_id FROM ${schema}.counters
-    //   WHERE row_id = '${finalCounterId}'
-    // )
-    // `);
-    // console.log("ddd",shopAdmin,shopAdmin.data.length > 0)
-    // if (shopAdmin.data.length > 0) {
-    // await createNotification(
-    //   shopAdmin.data[0].row_id,
-    //   "New Request",
-    //   "New stock request from counter"
-    // );
-    // }
+    // 🔔 Notification (AFTER COMMIT ONLY)
+    if (isRequestCreated) {
+      const shopAdmin = await db_query.customQuery(`
+        SELECT row_id FROM ${schema}.users
+        WHERE role = 'SHOP_ADMIN'
+        AND shop_id = (
+          SELECT shop_id FROM ${schema}.counters
+          WHERE row_id = '${finalCounterId}'
+        )
+      `);
+
+      if (shopAdmin.data && shopAdmin.data.length > 0) {
+        await createNotification({
+          user_id: shopAdmin.data[0].row_id,
+          title: "New Counter Request",
+          message: `${items.length} item(s) requested from counter`,
+          type: "REQUEST",
+          reference_id: finalCounterId,
+        });
+      }
+    }
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Request sent to shop admin",
+      msg: isRequestCreated
+        ? "Request sent to shop admin"
+        : "All items already requested",
     });
   } catch (error) {
     console.log("createCounterRequest error:", error);
@@ -2316,7 +2357,7 @@ async function createFinalOrder(req, res) {
 
     const { supplier_id, request_ids, shop_id } = req.data || {};
 
-    //  Role validation
+    // 🔐 Role validation
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2324,11 +2365,11 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    //  Resolve shop_id
+    // 🏪 Resolve shop_id
     let finalShopId;
 
     if (user.user_role === "SHOP_ADMIN") {
-      finalShopId = user.shopId; //  from token
+      finalShopId = user.shopId;
     }
 
     if (user.user_role === "ADMIN") {
@@ -2341,7 +2382,7 @@ async function createFinalOrder(req, res) {
       finalShopId = shop_id;
     }
 
-    //  Basic validation
+    // 📦 Validation
     if (!supplier_id || !request_ids || request_ids.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2351,7 +2392,7 @@ async function createFinalOrder(req, res) {
 
     await connect_db.query("BEGIN");
 
-    //  Validate Supplier
+    // ✅ Supplier validation
     const supplierCheck = await db_query.customQuery(`
       SELECT 1 FROM ${supplierTable}
       WHERE row_id = '${supplier_id}'
@@ -2365,7 +2406,7 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    //  Fetch PENDING requests + join counter → shop
+    // 📥 Fetch requests
     const requests = await db_query.customQuery(`
       SELECT r.*, c.shop_id
       FROM ${requestTable} r
@@ -2391,7 +2432,7 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    //  Shop validation
+    // 🏪 Shop validation
     for (let r of requests.data) {
       if (r.shop_id !== finalShopId) {
         await connect_db.query("ROLLBACK");
@@ -2402,9 +2443,8 @@ async function createFinalOrder(req, res) {
       }
     }
 
-    //  Combine sweets
+    // 🧮 Combine sweets
     const sweetMap = {};
-
     for (let r of requests.data) {
       if (!sweetMap[r.sweet_id]) {
         sweetMap[r.sweet_id] = 0;
@@ -2412,7 +2452,7 @@ async function createFinalOrder(req, res) {
       sweetMap[r.sweet_id] += Number(r.quantity);
     }
 
-    //  Create Order
+    // 🧾 Create Order
     const orderRowId = libFunc.randomid();
 
     await db_query.addData(
@@ -2427,7 +2467,7 @@ async function createFinalOrder(req, res) {
       "Order",
     );
 
-    //  Insert Order Items
+    // 📦 Order Items
     for (let sweet_id in sweetMap) {
       await db_query.addData(
         itemTable,
@@ -2442,27 +2482,62 @@ async function createFinalOrder(req, res) {
       );
     }
 
-    //  Update requests → APPROVED
+    // 🔄 Update requests
     await db_query.customQuery(`
       UPDATE ${requestTable}
       SET status = 'APPROVED'
       WHERE row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
     `);
 
+    // ✅ COMMIT
     await connect_db.query("COMMIT");
 
-    //     const supplierUsers = await db_query.customQuery(`
-    //   SELECT row_id FROM ${schema}.users
-    //   WHERE supplier_id = '${supplier_id}'
-    // `);
+    // ==============================
+    // 🔔 NOTIFICATIONS START HERE
+    // ==============================
 
-    // for (let u of supplierUsers.data) {
-    //   await createNotification(
-    //     u.row_id,
-    //     "New Order",
-    //     "You have received a new order"
-    //   );
-    // }
+    // 🔵 1. Notify Supplier
+    const supplierUsers = await db_query.customQuery(`
+      SELECT row_id FROM ${schema}.users
+      WHERE supplier_id = '${supplier_id}'
+    `);
+
+    if (supplierUsers.data?.length) {
+      for (let u of supplierUsers.data) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "New Order Received",
+          message: `New order created with ${Object.keys(sweetMap).length} item(s)`,
+          type: "ORDER",
+          reference_id: orderRowId,
+        });
+      }
+    }
+
+    // 🟢 2. Notify Counter Users (Request Approved)
+    const counterUsers = await db_query.customQuery(`
+      SELECT u.row_id
+      FROM ${requestTable} r
+      LEFT JOIN ${schema}.users u 
+        ON u.counter_id = r.counter_id
+      WHERE r.row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
+    `);
+
+    if (counterUsers.data?.length) {
+      const uniqueUsers = [...new Set(counterUsers.data.map((u) => u.row_id))];
+
+      for (let userId of uniqueUsers) {
+        await createNotification({
+          user_id: userId,
+          title: "Request Approved",
+          message: `${request_ids.length} request(s) approved`,
+          type: "REQUEST",
+          reference_id: orderRowId,
+        });
+      }
+    }
+
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -2728,91 +2803,126 @@ async function getCounterRequests(req, res) {
 //   "to_date": "2026-03-21"
 // }
 
-async function updateOrderStatus(req, res) {
-  try {
-    const orderTable = schema + ".orders";
+// async function updateOrderStatus(req, res) {
+//   try {
+//     const orderTable = schema + ".orders";
+//     const userTable = schema + ".users";
 
-    // console.log("request",req)
-    const { order_id, order_status } = req.data || {};
+//     const { order_id, order_status } = req.data || {};
 
-    // 🔹 Validation
-    if (!order_id || !order_status) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Order ID and Status required",
-      });
-    }
+//     // 🔹 Validation
+//     if (!order_id || !order_status) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order ID and Status required",
+//       });
+//     }
 
-    // 🔹 Check order exists
-    const orderCheck = await db_query.customQuery(`
-      SELECT order_status FROM ${orderTable}
-      WHERE row_id = '${order_id.trim()}'
-    `);
+//     // 🔹 Check order exists + get shop_id
+//     const orderCheck = await db_query.customQuery(`
+//       SELECT order_status, shop_id
+//       FROM ${orderTable}
+//       WHERE row_id = '${order_id.trim()}'
+//     `);
 
-    if (!orderCheck.data || orderCheck.data.length === 0) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Invalid order",
-      });
-    }
+//     if (!orderCheck.data || orderCheck.data.length === 0) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Invalid order",
+//       });
+//     }
 
-    const currentStatus = orderCheck.data[0].order_status;
+//     const currentStatus = orderCheck.data[0].order_status;
+//     const shopId = orderCheck.data[0].shop_id;
 
-    // 🔥 Rules
-    if (currentStatus === "COMPLETED") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Completed order cannot be updated",
-      });
-    }
+//     // 🔥 Rules
+//     if (currentStatus === "COMPLETED") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Completed order cannot be updated",
+//       });
+//     }
 
-    if (currentStatus === "PENDING" && order_status !== "DISPATCHED") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Only DISPATCHED allowed from PENDING",
-      });
-    }
+//     if (currentStatus === "PENDING" && order_status !== "DISPATCHED") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Only DISPATCHED allowed from PENDING",
+//       });
+//     }
 
-    if (currentStatus === "DISPATCHED" && order_status !== "COMPLETED") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Only COMPLETED allowed from DISPATCHED",
-      });
-    }
+//     if (currentStatus === "DISPATCHED" && order_status !== "COMPLETED") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Only COMPLETED allowed from DISPATCHED",
+//       });
+//     }
 
-    // 🔹 Update
-    const resp = await db_query.addData(
-      orderTable,
-      { order_status },
-      order_id.trim(),
-      "Order",
-    );
+//     // 🔹 Update
+//     const resp = await db_query.addData(
+//       orderTable,
+//       { order_status },
+//       order_id.trim(),
+//       "Order",
+//     );
 
-    // const shopAdmin = await db_query.customQuery(`
-    //   SELECT row_id FROM ${userTable}
-    //   WHERE role = 'SHOP_ADMIN'
-    //   AND shop_id = '${shopId}'
-    // `);
+//     // 🔔 Notification (AFTER UPDATE SUCCESS)
 
-    // if (shopAdmin.data && shopAdmin.data.length > 0) {
-    //   await createNotification(
-    //     shopAdmin.data[0].row_id,
-    //     "Order Status Updated",
-    //     `Order ${order_status}`
-    //   );
-    // }
+//     // 🟠 Notify Shop Admin
+//     const shopAdmins = await db_query.customQuery(`
+//       SELECT row_id FROM ${userTable}
+//       WHERE role = 'SHOP_ADMIN'
+//       AND shop_id = '${shopId}'
+//     `);
 
-    return libFunc.sendResponse(res, resp);
-  } catch (error) {
-    console.log("updateOrderStatus error:", error);
+//     if (shopAdmins.data?.length) {
+//       for (let admin of shopAdmins.data) {
+//         await createNotification({
+//           user_id: admin.row_id,
+//           title: "Order Status Updated",
+//           message: `Order ${order_status}`,
+//           type: "ORDER",
+//           reference_id: order_id,
+//         });
+//       }
+//     }
 
-    return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Something went wrong",
-      error: error.message,
-    });
-  }
-}
+//     // 🔵 (Optional) Notify Counter Users
+//     const counterUsers = await db_query.customQuery(`
+//       SELECT DISTINCT u.row_id
+//       FROM ${schema}.counter_requests r
+//       LEFT JOIN ${userTable} u
+//         ON u.counter_id = r.counter_id
+//       WHERE r.row_id IN (
+//         SELECT r.row_id FROM ${schema}.counter_requests r
+//         JOIN ${schema}.order_items oi
+//           ON oi.sweet_id = r.sweet_id
+//         WHERE oi.order_id = '${order_id}'
+//       )
+//     `);
+
+//     if (counterUsers.data?.length) {
+//       for (let u of counterUsers.data) {
+//         await createNotification({
+//           user_id: u.row_id,
+//           title: "Order Update",
+//           message: `Your requested items are ${order_status}`,
+//           type: "ORDER",
+//           reference_id: order_id,
+//         });
+//       }
+//     }
+
+//     return libFunc.sendResponse(res, resp);
+//   } catch (error) {
+//     console.log("updateOrderStatus error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
 
 // PENDING → DISPATCHED → COMPLETED
 //    ↓
@@ -2884,13 +2994,14 @@ async function cancelOrder(req, res) {
 async function updateOrderStatus(req, res) {
   try {
     const orderTable = schema + ".orders";
+    const userTable = schema + ".users";
 
     const { order_id, status } = req.data || {};
     const user = req.data;
 
     const validStatuses = ["ACCEPTED", "REJECTED", "DISPATCHED", "DELIVERED"];
 
-    //  Validation
+    // ✅ Validation
     if (!order_id || !status) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2905,14 +3016,14 @@ async function updateOrderStatus(req, res) {
       });
     }
 
-    //  Get order
+    // ✅ Get order
     const orderCheck = await db_query.customQuery(`
       SELECT supplier_id, shop_id, order_status
       FROM ${orderTable}
       WHERE row_id = '${order_id.trim()}'
     `);
 
-    if (!orderCheck.data || orderCheck.data.length === 0) {
+    if (!orderCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid order",
@@ -2921,7 +3032,7 @@ async function updateOrderStatus(req, res) {
 
     const order = orderCheck.data[0];
 
-    //  Role-based access
+    // ✅ Role validation
     if (user.user_role === "SUPPLIER") {
       if (order.supplier_id !== user.supplierId) {
         return libFunc.sendResponse(res, {
@@ -2961,7 +3072,7 @@ async function updateOrderStatus(req, res) {
       });
     }
 
-    //  Status flow validation
+    // ✅ Status flow validation
     const current = order.order_status;
 
     const validFlow = {
@@ -2977,13 +3088,81 @@ async function updateOrderStatus(req, res) {
       });
     }
 
-    //  Update
+    // ✅ Update Order
     await db_query.addData(
       orderTable,
       { order_status: status },
       order_id.trim(),
       "Order",
     );
+
+    // =====================================
+    // 🔔 NOTIFICATIONS START HERE
+    // =====================================
+
+    // 🟠 1. Notify Shop Admin
+    const shopAdmins = await db_query.customQuery(`
+      SELECT row_id FROM ${userTable}
+      WHERE role = 'SHOP_ADMIN'
+      AND shop_id = '${order.shop_id}'
+    `);
+
+    if (shopAdmins.data?.length) {
+      for (let admin of shopAdmins.data) {
+        await createNotification({
+          user_id: admin.row_id,
+          title: "Order Status Updated",
+          message: `Order is ${status}`,
+          type: "ORDER",
+          reference_id: order_id,
+        });
+      }
+    }
+
+    // 🔵 2. Notify Supplier Users
+    const supplierUsers = await db_query.customQuery(`
+      SELECT row_id FROM ${userTable}
+      WHERE supplier_id = '${order.supplier_id}'
+    `);
+
+    if (supplierUsers.data?.length) {
+      for (let u of supplierUsers.data) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Order Update",
+          message: `Order is ${status}`,
+          type: "ORDER",
+          reference_id: order_id,
+        });
+      }
+    }
+
+    // 🟢 3. Notify Counter Users (optional but powerful 🔥)
+    const counterUsers = await db_query.customQuery(`
+      SELECT DISTINCT u.row_id
+      FROM ${schema}.counter_requests r
+      LEFT JOIN ${userTable} u 
+        ON u.counter_id = r.counter_id
+      WHERE r.status = 'APPROVED'
+      AND r.sweet_id IN (
+        SELECT sweet_id FROM ${schema}.order_items
+        WHERE order_id = '${order_id}'
+      )
+    `);
+
+    if (counterUsers.data?.length) {
+      for (let u of counterUsers.data) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Order Update",
+          message: `Your requested items are ${status}`,
+          type: "ORDER",
+          reference_id: order_id,
+        });
+      }
+    }
+
+    // =====================================
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -3004,11 +3183,14 @@ async function createChalan(req, res) {
   try {
     const chalanTable = schema + ".chalans";
     const orderTable = schema + ".orders";
+    const userTable = schema + ".users";
+    const requestTable = schema + ".counter_requests";
+    const itemTable = schema + ".order_items";
 
     const { order_id, dispatch_date, transport_details = "" } = req.data || {};
     const user = req.data;
 
-    // Role validation
+    // 🔐 Role validation
     if (user.user_role !== "SUPPLIER") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -3023,14 +3205,14 @@ async function createChalan(req, res) {
       });
     }
 
-    //  Get Order
+    // 📥 Get Order
     const orderCheck = await db_query.customQuery(`
-      SELECT supplier_id, order_status
+      SELECT supplier_id, order_status, shop_id
       FROM ${orderTable}
       WHERE row_id = '${order_id.trim()}'
     `);
 
-    if (!orderCheck.data || orderCheck.data.length === 0) {
+    if (!orderCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid order",
@@ -3039,7 +3221,7 @@ async function createChalan(req, res) {
 
     const order = orderCheck.data[0];
 
-    //  Ensure supplier owns order
+    // 🔐 Supplier ownership check
     if (order.supplier_id !== user.supplierId) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -3047,7 +3229,7 @@ async function createChalan(req, res) {
       });
     }
 
-    //  Status check
+    // 🚦 Status validation
     if (order.order_status === "DISPATCHED") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -3062,34 +3244,35 @@ async function createChalan(req, res) {
       });
     }
 
+    // 🔄 TRANSACTION START
     await connect_db.query("BEGIN");
 
-    //  Double check (avoid race condition)
+    // 🔁 Double check
     const existingChalan = await db_query.customQuery(`
       SELECT 1 FROM ${chalanTable}
       WHERE order_id = '${order_id.trim()}'
     `);
 
-    if (existingChalan.data && existingChalan.data.length > 0) {
+    if (existingChalan.data?.length) {
       await connect_db.query("ROLLBACK");
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Chalan already exists for this order",
+        msg: "Chalan already exists",
       });
     }
 
-    //  Create Chalan
+    // 📦 Create Chalan
     const chalanRowId = libFunc.randomid();
 
     await db_query.addData(chalanTable, {
       row_id: chalanRowId,
       order_id: order_id.trim(),
-      supplier_id: user.supplierId, //  from token, not request
-      dispatch_date: dispatch_date,
+      supplier_id: user.supplierId,
+      dispatch_date,
       transport_details: transport_details.trim(),
     });
 
-    //  Update Order Status
+    // 📊 Update Order
     await db_query.addData(
       orderTable,
       { order_status: "DISPATCHED" },
@@ -3097,7 +3280,57 @@ async function createChalan(req, res) {
       "Order",
     );
 
+    // ✅ COMMIT
     await connect_db.query("COMMIT");
+
+    // ==============================
+    // 🔔 NOTIFICATIONS
+    // ==============================
+
+    // 🟠 1. Notify Shop Admin
+    const shopAdmins = await db_query.customQuery(`
+      SELECT row_id FROM ${userTable}
+      WHERE role = 'SHOP_ADMIN'
+      AND shop_id = '${order.shop_id}'
+    `);
+
+    if (shopAdmins.data?.length) {
+      for (let admin of shopAdmins.data) {
+        await createNotification({
+          user_id: admin.row_id,
+          title: "Order Dispatched",
+          message: "Order has been dispatched by supplier",
+          type: "CHALLAN",
+          reference_id: chalanRowId,
+        });
+      }
+    }
+
+    // 🔵 2. Notify Counter Users
+    const counterUsers = await db_query.customQuery(`
+      SELECT DISTINCT u.row_id
+      FROM ${requestTable} r
+      LEFT JOIN ${userTable} u ON u.counter_id = r.counter_id
+      WHERE r.status = 'APPROVED'
+      AND r.sweet_id IN (
+        SELECT sweet_id FROM ${itemTable}
+        WHERE order_id = '${order_id}'
+      )
+    `);
+
+    if (counterUsers.data?.length) {
+      for (let u of counterUsers.data) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Order Dispatched",
+          message: "Your requested items have been dispatched",
+          type: "CHALLAN",
+          reference_id: chalanRowId,
+        });
+      }
+    }
+
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -4034,7 +4267,7 @@ async function downloadChalanPDF(req, res) {
         data[0].dispatch_date
           ? new Date(data[0].dispatch_date).toLocaleDateString()
           : "-"
-      }`
+      }`,
     );
 
     doc.moveDown();
@@ -4135,7 +4368,6 @@ async function downloadChalanPDF(req, res) {
       msg: "PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
-
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
     return res.status(500).send("Error generating PDF");
@@ -4559,53 +4791,53 @@ async function createNotification(user_id, title, message) {
   }
 }
 
-async function getNotifications(req, res) {
-  try {
-    const user = req.data;
+// async function getNotifications(req, res) {
+//   try {
+//     const user = req.data;
 
-    const result = await db_query.customQuery(`
-      SELECT row_id, title, message, is_read, cr_on
-      FROM ${schema}.notifications
-      WHERE user_id = '${user.row_id}'
-      ORDER BY cr_on DESC
-      LIMIT 20
-    `);
+//     const result = await db_query.customQuery(`
+//       SELECT row_id, title, message, is_read, cr_on
+//       FROM ${schema}.notifications
+//       WHERE user_id = '${user.row_id}'
+//       ORDER BY cr_on DESC
+//       LIMIT 20
+//     `);
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      data: result.data,
-    });
-  } catch (error) {
-    return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Error fetching notifications",
-    });
-  }
-}
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       data: result.data,
+//     });
+//   } catch (error) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Error fetching notifications",
+//     });
+//   }
+// }
 
-async function getNotifications(req, res) {
-  try {
-    const user = req.data;
+// async function getNotifications(req, res) {
+//   try {
+//     const user = req.data;
 
-    const result = await db_query.customQuery(`
-      SELECT row_id, title, message, is_read, cr_on
-      FROM ${schema}.notifications
-      WHERE user_id = '${user.row_id}'
-      ORDER BY cr_on DESC
-      LIMIT 20
-    `);
+//     const result = await db_query.customQuery(`
+//       SELECT row_id, title, message, is_read, cr_on
+//       FROM ${schema}.notifications
+//       WHERE user_id = '${user.row_id}'
+//       ORDER BY cr_on DESC
+//       LIMIT 20
+//     `);
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      data: result.data,
-    });
-  } catch (error) {
-    return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Error fetching notifications",
-    });
-  }
-}
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       data: result.data,
+//     });
+//   } catch (error) {
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Error fetching notifications",
+//     });
+//   }
+// }
 
 async function getAllCounterRequestsByShop(req, res) {
   try {
@@ -4969,6 +5201,270 @@ async function updateProfile(req, res) {
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function createNotification(data) {
+  await db_query.customQuery(
+    `
+    INSERT INTO sms.notifications
+    (row_id, user_id, title, message, type, reference_id)
+    VALUES ('${libFunc.randomid()}','${data.user_id}','${data.title}','${data.message}','${data.type}','${data.reference_id}')
+  `,
+  );
+}
+
+async function getNotifications(req, res) {
+  console.log("req", req);
+  try {
+    const table = schema + ".notifications";
+    const user = req.data;
+
+    const { page = 1, limit = 10, type, is_read } = req.data || {};
+
+    const offset = (page - 1) * limit;
+
+    // 🔐 user_id always from token
+    const userId = user.userId;
+
+    let where = `WHERE user_id = '${userId}' AND is_deleted = false`;
+
+    // 🎯 Optional filters
+    if (type) {
+      where += ` AND type = '${type}'`;
+    }
+
+    if (is_read !== undefined) {
+      where += ` AND is_read = ${is_read}`;
+    }
+
+    // 📥 Get Notifications
+    const notifications = await db_query.customQuery(`
+      SELECT *
+      FROM ${table}
+      ${where}
+      ORDER BY cr_on DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    // 🔢 Total Count
+    const countRes = await db_query.customQuery(`
+      SELECT COUNT(*) as total
+      FROM ${table}
+      ${where}
+    `);
+
+    const total = countRes.data[0]?.total || 0;
+
+    // 🔔 Unread Count (important for bell icon)
+    const unreadRes = await db_query.customQuery(`
+      SELECT COUNT(*) as unread
+      FROM ${table}
+      WHERE user_id = '${userId}'
+      AND is_read = false
+      AND is_deleted = false
+    `);
+
+    const unread = unreadRes.data[0]?.unread || 0;
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Notifications fetched",
+      data: {
+        notifications: notifications.data || [],
+        total,
+        unread,
+        page,
+        limit,
+      },
+    });
+  } catch (error) {
+    console.log("getNotifications error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function markNotificationRead(req, res) {
+  try {
+    const table = schema + ".notifications";
+    const { notification_id } = req.data;
+
+    if (!notification_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "notification_id required",
+      });
+    }
+
+    await db_query.customQuery(`
+      UPDATE ${table}
+      SET is_read = true
+      WHERE row_id = '${notification_id}'
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Notification marked as read",
+    });
+  } catch (error) {
+    console.log("markNotificationRead error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+function formatDateForPostgres(date) {
+  if (!date) return null;
+  const d = new Date(date);
+  return d.toISOString().split("T")[0]; // returns 'YYYY-MM-DD'
+}
+
+async function runExpiryCheck() {
+  console.log("🔄 Running expiry check manually...");
+
+  try {
+    const inventoryTable = "sms.inventory";
+    const expiryTable = "sms.expiry_logs";
+    const sweetTable = "sms.sweets";
+    const userTable = "sms.users";
+
+    // Step 1: Get expired items
+    const expiredItems = await db_query.customQuery(`
+  SELECT i.*, s.price
+  FROM sms.inventory i
+  LEFT JOIN sms.sweets s ON s.row_id = i.sweet_id
+  WHERE i.expiry_date IS NOT NULL
+    AND i.expiry_date <= CURRENT_DATE
+    AND i.quantity::int > 0
+`);
+
+    if (!expiredItems.data?.length) {
+      console.log("✅ No expired items");
+      return;
+    }
+
+    // Step 2: Loop each item
+    for (let item of expiredItems.data) {
+      const loss = Number(item.quantity) * Number(item.price || 0);
+
+      await db_query.addData(expiryTable, {
+        row_id: libFunc.randomid(),
+        counter_id: item.counter_id,
+        sweet_id: item.sweet_id,
+        inventory_id: item.row_id,
+        quantity: item.quantity,
+        expiry_date: formatDateForPostgres(item.expiry_date),
+        loss_amount: loss,
+        reason: "Expired stock",
+      });
+
+      await db_query.customQuery(`
+        UPDATE ${inventoryTable}
+        SET quantity = 0
+        WHERE row_id = '${item.row_id}'
+      `);
+
+      const users = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE counter_id = '${item.counter_id}'
+      `);
+
+      for (let u of users.data || []) {
+        await createNotification({
+          user_id: u.row_id,
+          title: "Stock Expired",
+          message: "Some items expired and removed from inventory",
+          type: "EXPIRY",
+          reference_id: item.sweet_id,
+          priority: "HIGH",
+        });
+      }
+    }
+
+    console.log("✅ Expiry check completed");
+  } catch (err) {
+    console.error("❌ Expiry check error:", err);
+  }
+}
+
+// daily 8 o clock
+cron.schedule("00 08 * * *", () => {
+  console.log("🕒 Running daily expiry check via cron...");
+  runExpiryCheck();
+});
+
+// Fetch Expiry Logs
+async function fetchExpiryLogs(req, res) {
+  try {
+    const user = req.data; // token info
+    const { sweet_id, start_date, end_date, counter_id } = req.data || {};
+    const expiryTable = "sms.expiry_logs";
+    const sweetTable = "sms.sweets";
+    const counterTable = "sms.counters";
+
+    // Base query
+    let query = `
+      SELECT e.*, s.sweet_name, c.counter_name
+      FROM ${expiryTable} e
+      LEFT JOIN ${sweetTable} s ON s.row_id = e.sweet_id
+      LEFT JOIN ${counterTable} c ON c.row_id = e.counter_id
+      WHERE 1=1
+    `;
+
+    // Role-based filtering
+    if (user.user_role === "SHOP_ADMIN") {
+      // Shop admin: must provide counter_id to fetch logs for that counter
+      if (counter_id) {
+        query += ` AND e.counter_id = '${counter_id}'`;
+      } else {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Please provide counter_id for shop admin",
+        });
+      }
+    } else if (user.user_role === "COUNTER_USER") {
+      // Counter user: automatically use their counterId
+      if (user.counterId) {
+        query += ` AND e.counter_id = '${user.counterId}'`;
+      } else {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Counter ID missing in user token",
+        });
+      }
+    }
+
+    // Additional filters
+    if (sweet_id) query += ` AND e.sweet_id = '${sweet_id}'`;
+    if (start_date) query += ` AND e.expiry_date >= '${start_date}'`;
+    if (end_date) query += ` AND e.expiry_date <= '${end_date}'`;
+
+    query += " ORDER BY e.expiry_date DESC";
+
+    // Execute query
+    const result = await db_query.customQuery(query);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Expiry logs fetched successfully",
+      data: result.data || [],
+    });
+  } catch (error) {
+    console.error("fetchExpiryLogs error:", error);
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong while fetching expiry logs",
       error: error.message,
     });
   }

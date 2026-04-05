@@ -265,3 +265,33 @@ ADD COLUMN shop_id TEXT;
 
 ALTER TABLE sms.users
 ADD COLUMN supplier_id TEXT 
+
+
+
+ALTER TABLE sms.notifications
+ADD COLUMN type TEXT,
+ADD COLUMN reference_id TEXT,
+ADD COLUMN reference_type TEXT,
+ADD COLUMN priority TEXT DEFAULT 'NORMAL',
+ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE;
+
+DROP TABLE IF EXISTS sms.expiry_logs;
+
+CREATE TABLE sms.expiry_logs (
+ id SERIAL NOT NULL,
+ row_id TEXT NOT NULL PRIMARY KEY,
+
+ counter_id TEXT REFERENCES sms.counters(row_id),
+ sweet_id TEXT REFERENCES sms.sweets(row_id),
+ inventory_id TEXT,
+
+ quantity NUMERIC NOT NULL,
+ expiry_date DATE,
+
+ loss_amount NUMERIC(10,2) DEFAULT 0,
+
+ reason TEXT DEFAULT 'EXPIRED',
+
+ cr_on TIMESTAMP DEFAULT now() NOT NULL,
+ up_on TIMESTAMP DEFAULT now() NOT NULL
+);

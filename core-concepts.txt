@@ -425,3 +425,18 @@ res {
     supplier_id: '1774457787816_Wri8'
   }
 }
+
+
+
+
+🎯 1. Golden Rule (Yaad rakh)
+
+👉 Notification = Event based
+
+Event	Notification
+Request create	Shop Admin
+Request approve/reject	Counter
+Order create	Supplier
+Order update	Shop Admin
+Stock low	Counter
+Expiry	Counter

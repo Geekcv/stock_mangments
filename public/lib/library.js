@@ -917,6 +917,7 @@ async function fetchCounters(req, res) {
 
     const counterTable = schema + ".counters";
     const shopTable = schema + ".shops";
+    const userTable = schema + ".users";
 
     //  Role validation
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
@@ -959,10 +960,13 @@ async function fetchCounters(req, res) {
         c.counter_name,
         c.location,
         c.shop_id,
-        s.shop_name
+        s.shop_name,
+            u.phone AS mobile_number
       FROM ${counterTable} c
       LEFT JOIN ${shopTable} s
         ON s.row_id = c.shop_id
+    LEFT JOIN ${userTable} u
+     ON u.counter_id = c.row_id
       ${whereClause}
       ORDER BY c.counter_name ASC
     `;

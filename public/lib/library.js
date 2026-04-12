@@ -2778,7 +2778,7 @@ async function getCounterRequests(req, res) {
         r.row_id,
         r.quantity,
         r.status,
-        r.cr_on,
+        r.cr_on AT TIME ZONE 'Asia/Kolkata' AS cr_on,
 
         c.row_id AS counter_id,
         c.counter_name,
@@ -5903,10 +5903,16 @@ async function runExpiryCheck() {
 }
 
 // daily 8 o clock
-cron.schedule("00 08 * * *", () => {
-  console.log("🕒 Running daily expiry check via cron...");
-  runExpiryCheck();
-});
+cron.schedule(
+  "00 08 * * *",
+  () => {
+    console.log("🕒 Running daily expiry check via cron...");
+    runExpiryCheck();
+  },
+  {
+    timezone: "Asia/Kolkata",
+  }
+);
 
 // Fetch Expiry Logs
 async function fetchExpiryLogs(req, res) {

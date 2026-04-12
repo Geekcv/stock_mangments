@@ -2070,8 +2070,6 @@ async function getInventory(req, res) {
 
     let whereConditions = ["i.quantity::int > 0"];
 
-    // 🔴 ADMIN → sab dekh sakta hai (no extra filter)
-
     // 🟠 SHOP ADMIN → only own shop counters
     if (user.user_role === "SHOP_ADMIN") {
       whereConditions.push(`c.shop_id = '${user.shopId}'`);
@@ -2082,7 +2080,7 @@ async function getInventory(req, res) {
       whereConditions.push(`i.counter_id = '${user.counterId}'`);
     }
 
-    // 🟢 SUPPLIER → access deny (optional)
+    // 🟢 SUPPLIER → access deny
     if (user.user_role === "SUPPLIER") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2092,7 +2090,7 @@ async function getInventory(req, res) {
 
     const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
-    const data = await db_query.customQuery(`
+    const result = await db_query.customQuery(`
       SELECT 
         i.row_id,
         i.quantity,
@@ -2123,11 +2121,37 @@ async function getInventory(req, res) {
       ORDER BY i.cr_on DESC
     `);
 
+    console.log("inventory result:", result);
+
+    // ==============================
+    // ✅ SAFE DATA HANDLING
+    // ==============================
+    let inventoryData = [];
+
+    if (result.status === 0 && result.data) {
+      inventoryData = result.data;
+    }
+
+    // ==============================
+    // ⚠️ NO DATA CASE
+    // ==============================
+    if (inventoryData.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "No inventory found",
+        data: [],
+      });
+    }
+
+    // ==============================
+    // ✅ SUCCESS
+    // ==============================
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Inventory fetched successfully",
-      data: data.data,
+      data: inventoryData,
     });
+
   } catch (error) {
     console.log("getInventory error:", error);
 

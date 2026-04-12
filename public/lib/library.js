@@ -4891,7 +4891,7 @@ async function downloadChalanPDF(req, res) {
 
     // ================= RESPONSE =================
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
-    const serverUrl = "https://jodhpur.stock.abhishekcv.in";
+    const serverUrl = "https://stock.abhishekcv.in";
 
     return libFunc.sendResponse(res, {
       status: 0,

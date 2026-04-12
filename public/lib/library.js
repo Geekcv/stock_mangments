@@ -3514,13 +3514,13 @@ async function getAllChalans(req, res) {
       where += ` AND o.shop_id = '${user.shopId}'`;
     }
 
-    // 🔴 ADMIN → no filter
-
     const result = await db_query.customQuery(`
       SELECT
         ch.row_id AS chalan_id,
         ch.dispatch_date,
         ch.transport_details,
+        ch.is_verified,
+        ch.verification_code,
 
         o.row_id AS order_id,
         o.order_status,
@@ -3568,6 +3568,9 @@ async function getAllChalans(req, res) {
           chalan_id: row.chalan_id,
           dispatch_date: row.dispatch_date,
           transport_details: row.transport_details,
+
+          is_verified: row.is_verified,
+          verification_code: row.verification_code, // optional (hide if needed)
 
           order_id: row.order_id,
           order_status: row.order_status,
@@ -5911,7 +5914,7 @@ cron.schedule(
   },
   {
     timezone: "Asia/Kolkata",
-  }
+  },
 );
 
 // Fetch Expiry Logs

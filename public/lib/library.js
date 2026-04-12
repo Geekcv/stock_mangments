@@ -4708,8 +4708,8 @@ async function downloadChalanPDF(req, res) {
       // ================= BASIC INFO =================
       doc.fontSize(10).fillColor("#000").font("Helvetica");
 
-      // doc.text(`Chalan ID: ${data[0].chalan_id}`);
-      // doc.text(`Order ID: ${data[0].order_id}`);
+      doc.text(`Chalan ID: ${data[0].chalan_id}`);
+      doc.text(`Order ID: ${data[0].order_id}`);
       doc.text(
         `Dispatch Date: ${
           data[0].dispatch_date

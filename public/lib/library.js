@@ -2151,7 +2151,6 @@ async function getInventory(req, res) {
       msg: "Inventory fetched successfully",
       data: inventoryData,
     });
-
   } catch (error) {
     console.log("getInventory error:", error);
 
@@ -4892,7 +4891,7 @@ async function downloadChalanPDF(req, res) {
 
     // ================= RESPONSE =================
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
-    const serverUrl = "https://stock.abhishekcv.in";
+    const serverUrl = "https://jodhpur.stock.abhishekcv.in";
 
     return libFunc.sendResponse(res, {
       status: 0,

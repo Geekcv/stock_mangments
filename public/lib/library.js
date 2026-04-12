@@ -2778,7 +2778,7 @@ async function getCounterRequests(req, res) {
         r.row_id,
         r.quantity,
         r.status,
-        r.cr_on,
+        TO_CHAR(r.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
 
         c.row_id AS counter_id,
         c.counter_name,

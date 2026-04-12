@@ -135,5 +135,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 // ================== SERVER ==================
 
 app.listen(PORT, () => {
+  console.log("Current Time:", new Date());
   console.log(`Server running on port ${PORT} 🚀`);
 });

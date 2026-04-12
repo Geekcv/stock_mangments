@@ -6372,17 +6372,23 @@ async function verifyChalan(req, res) {
 
     await client.query("BEGIN");
 
-    // 📥 Get chalan
-    const chalanRes = await db_query.customQuery(`
-      SELECT * FROM ${schema}.chalans
-      WHERE row_id='${chalan_id}'
+    // ==============================
+    // 1. GET CHALAN
+    // ==============================
+    const chalanRes = await client.query(`
+      SELECT * FROM ${schema}.chalans 
+      WHERE row_id = '${chalan_id}'
     `);
 
-    if (!chalanRes.data.length) {
+    // console.log("chalanRes", chalanRes);
+
+    if (chalanRes.rows.length === 0) {
       throw new Error("Invalid chalan");
     }
 
-    const chalan = chalanRes.data[0];
+    const chalan = chalanRes.rows[0];
+
+    // console.log("chalan", chalan);
 
     if (chalan.is_verified) {
       throw new Error("Already verified");
@@ -6392,99 +6398,116 @@ async function verifyChalan(req, res) {
       throw new Error("Invalid OTP");
     }
 
-    // 📥 Get order items + shelf life
-    const items = await db_query.customQuery(`
+    // ==============================
+    // 2. GET ORDER ITEMS
+    // ==============================
+    const itemsRes = await client.query(`
       SELECT oi.sweet_id, oi.supplied_quantity, s.shelf_life_days
       FROM ${schema}.order_items oi
       LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
       WHERE oi.order_id = '${chalan.order_id}'
     `);
 
-    // 📥 Get counter mapping
-    const counters = await db_query.customQuery(`
-      SELECT DISTINCT sweet_id, counter_id
+    console.log("itemsRes", itemsRes);
+    const items = itemsRes.rows;
+
+    // ==============================
+    // 3. GET COUNTER MAPPING
+    // ==============================
+    const counterRes = await client.query(`
+      SELECT sweet_id, counter_id
       FROM ${schema}.counter_requests
       WHERE status = 'APPROVED'
     `);
 
-    // map
     const counterMap = {};
-    for (let c of counters.data) {
+    for (let c of counterRes.rows) {
       if (!counterMap[c.sweet_id]) {
         counterMap[c.sweet_id] = c.counter_id;
       }
     }
 
-    // 🔁 Loop items
-    for (let item of items.data) {
+    // ==============================
+    // 4. PROCESS INVENTORY
+    // ==============================
+    for (let item of items) {
       const sweet_id = item.sweet_id;
       const qty = Number(item.supplied_quantity || 0);
+
       if (qty <= 0) continue;
 
       const counter_id = counterMap[sweet_id];
       if (!counter_id) continue;
 
-      // 🔥 Expiry calculation
+      // 📅 Expiry calculation
       const shelfLife = Number(item.shelf_life_days || 0);
       const d = new Date(chalan.dispatch_date);
       d.setDate(d.getDate() + shelfLife);
       const expiry_date = d.toISOString().split("T")[0];
 
-      // 🔍 Check inventory
-      const invCheck = await db_query.customQuery(`
-        SELECT quantity FROM ${schema}.inventory
-        WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
+      // ==============================
+      // 🔥 UPSERT INVENTORY (TEXT FIX)
+      // ==============================
+      await client.query(`
+        INSERT INTO ${schema}.inventory 
+        (row_id, counter_id, sweet_id, quantity, expiry_date)
+        VALUES (
+          '${libFunc.randomid()}',
+          '${counter_id}',
+          '${sweet_id}',
+          '${qty}',
+          '${expiry_date}'
+        )
+        ON CONFLICT (counter_id, sweet_id)
+        DO UPDATE SET 
+          quantity = (
+            ${schema}.inventory.quantity::NUMERIC + EXCLUDED.quantity::NUMERIC
+          )::TEXT,
+          expiry_date = EXCLUDED.expiry_date
       `);
 
-      if (invCheck.data.length > 0) {
-        const newQty = Number(invCheck.data[0].quantity) + qty;
-
-        await client.query(`
-          UPDATE ${schema}.inventory
-          SET quantity=${newQty}, expiry_date='${expiry_date}'
-          WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
-        `);
-      } else {
-        await db_query.addData(schema + ".inventory", {
-          row_id: libFunc.randomid(),
-          counter_id,
-          sweet_id,
-          quantity: qty,
-          expiry_date,
-        });
-      }
-
-      // 🧾 Stock log
-      await db_query.addData(schema + ".stock_transactions", {
-        row_id: libFunc.randomid(),
-        counter_id,
-        sweet_id,
-        transaction_type: "IN",
-        quantity: qty,
-        reference_id: chalan_id,
-        notes: "Verified stock",
-      });
+      // ==============================
+      // 🧾 STOCK LOG
+      // ==============================
+      await client.query(`
+        INSERT INTO ${schema}.stock_transactions
+        (row_id, counter_id, sweet_id, transaction_type, quantity, reference_id, notes)
+        VALUES (
+          '${libFunc.randomid()}',
+          '${counter_id}',
+          '${sweet_id}',
+          'IN',
+          '${qty}',
+          '${chalan_id}',
+          'Verified stock'
+        )
+      `);
     }
 
-    // mark verified
-    await db_query.addData(
-      schema + ".chalans",
-      { is_verified: true },
-      chalan_id,
-      "Chalan",
-    );
+    // ==============================
+    // 5. MARK VERIFIED
+    // ==============================
+    await client.query(`
+      UPDATE ${schema}.chalans
+      SET is_verified = TRUE,
+          up_on = NOW()
+      WHERE row_id = '${chalan_id}'
+    `);
 
     await client.query("COMMIT");
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Chalan verified & inventory updated",
+      msg: "Chalan verified & inventory updated successfully",
     });
   } catch (err) {
     await client.query("ROLLBACK");
+
+    // console.log("verifyChalan error:", err);
+
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: err.message,
+      msg: err.message || "Something went wrong",
     });
   }
 }

@@ -134,7 +134,13 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
 // ================== SERVER ==================
 
+function time() {
+  return new Date().toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata"
+  });
+}
+
 app.listen(PORT, () => {
-  console.log("Current Time:", new Date());
+   console.log(time());
   console.log(`Server running on port ${PORT} 🚀`);
 });

@@ -295,3 +295,20 @@ CREATE TABLE sms.expiry_logs (
  cr_on TIMESTAMP DEFAULT now() NOT NULL,
  up_on TIMESTAMP DEFAULT now() NOT NULL
 );
+
+
+ALTER TABLE sms.order_items
+ADD COLUMN item_status TEXT DEFAULT 'PENDING',
+ADD COLUMN supplied_quantity NUMERIC DEFAULT 0,
+ADD COLUMN reject_reason TEXT;
+
+
+
+
+ALTER TABLE sms.chalans
+ADD COLUMN verification_code TEXT,
+ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;
+
+
+ALTER TABLE sms.order_items
+ADD COLUMN counter_id TEXT REFERENCES sms.counters(row_id);

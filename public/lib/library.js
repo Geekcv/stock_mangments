@@ -48,6 +48,8 @@ let common_fn = {
   fe_all_req_counter: getAllCounterRequestsByShop,
   fe_dep_by_admin: fetchDepartmentsByShop,
   fe_cat_con_by_admin: fetchCountersAndCategoriesByShop,
+  verfiy_challan: verifyChalan,
+  fetch_order_challan: getShopChalanFullDetails,
 
   // counter
   cr_counter: createCounter,
@@ -60,6 +62,7 @@ let common_fn = {
   fe_supplier: fetchSuppliers,
   fe_my_ord: getSupplierOrders,
   up_ord_stu: updateOrderStatus,
+  up_or_items: updateOrderItemsBySupplier,
   //Challan
   cr_challan: createChalan,
   fe_challan: getAllChalans,
@@ -917,7 +920,6 @@ async function fetchCounters(req, res) {
 
     const counterTable = schema + ".counters";
     const shopTable = schema + ".shops";
-    const userTable = schema + ".users";
 
     //  Role validation
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
@@ -960,13 +962,10 @@ async function fetchCounters(req, res) {
         c.counter_name,
         c.location,
         c.shop_id,
-        s.shop_name,
-            u.phone AS mobile_number
+        s.shop_name
       FROM ${counterTable} c
       LEFT JOIN ${shopTable} s
         ON s.row_id = c.shop_id
-    LEFT JOIN ${userTable} u
-     ON u.counter_id = c.row_id
       ${whereClause}
       ORDER BY c.counter_name ASC
     `;
@@ -2363,6 +2362,8 @@ async function createFinalOrder(req, res) {
 
     const { supplier_id, request_ids, shop_id } = req.data || {};
 
+    console.log("reuestings", req.data);
+
     // 🔐 Role validation
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
@@ -2404,7 +2405,7 @@ async function createFinalOrder(req, res) {
       WHERE row_id = '${supplier_id}'
     `);
 
-    if (!supplierCheck.data.length) {
+    if (!supplierCheck.data?.length) {
       await connect_db.query("ROLLBACK");
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2448,14 +2449,21 @@ async function createFinalOrder(req, res) {
         });
       }
     }
+    // 🧮 Combine sweets WITH COUNTER
+    const itemMap = {};
 
-    // 🧮 Combine sweets
-    const sweetMap = {};
     for (let r of requests.data) {
-      if (!sweetMap[r.sweet_id]) {
-        sweetMap[r.sweet_id] = 0;
+      const key = `${r.sweet_id}_${r.counter_id}`;
+
+      if (!itemMap[key]) {
+        itemMap[key] = {
+          sweet_id: r.sweet_id,
+          counter_id: r.counter_id,
+          quantity: 0,
+        };
       }
-      sweetMap[r.sweet_id] += Number(r.quantity);
+
+      itemMap[key].quantity += Number(r.quantity);
     }
 
     // 🧾 Create Order
@@ -2473,15 +2481,18 @@ async function createFinalOrder(req, res) {
       "Order",
     );
 
-    // 📦 Order Items
-    for (let sweet_id in sweetMap) {
+    // 📦 Order Items WITH COUNTER
+    for (let key in itemMap) {
+      const item = itemMap[key];
+
       await db_query.addData(
         itemTable,
         {
           row_id: libFunc.randomid(),
           order_id: orderRowId,
-          sweet_id,
-          quantity: sweetMap[sweet_id],
+          sweet_id: item.sweet_id,
+          counter_id: item.counter_id, // ✅ IMPORTANT
+          quantity: item.quantity,
         },
         null,
         "Order Item",
@@ -2513,7 +2524,7 @@ async function createFinalOrder(req, res) {
         await createNotification({
           user_id: u.row_id,
           title: "New Order Received",
-          message: `New order created with ${Object.keys(sweetMap).length} item(s)`,
+          message: `New order created with ${Object.keys(itemMap).length} item(s)`,
           type: "ORDER",
           reference_id: orderRowId,
         });
@@ -3006,8 +3017,14 @@ async function updateOrderStatus(req, res) {
     const { order_id, status } = req.data || {};
     const user = req.data;
 
-    const validStatuses = ["ACCEPTED", "REJECTED", "DISPATCHED", "DELIVERED"];
-
+    const validStatuses = [
+      "PENDING",
+      "ACCEPTED",
+      "PARTIAL", // 🔥 ADD THIS
+      "REJECTED",
+      "DISPATCHED",
+      "DELIVERED",
+    ];
     // ✅ Validation
     if (!order_id || !status) {
       return libFunc.sendResponse(res, {
@@ -3201,180 +3218,278 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-async function createChalan(req, res) {
-  try {
-    const chalanTable = schema + ".chalans";
-    const orderTable = schema + ".orders";
-    const userTable = schema + ".users";
-    const requestTable = schema + ".counter_requests";
-    const itemTable = schema + ".order_items";
+// async function createChalan(req, res) {
+//   const client = connect_db;
 
-    const { order_id, dispatch_date, transport_details = "" } = req.data || {};
-    const user = req.data;
+//   try {
+//     const chalanTable = schema + ".chalans";
+//     const orderTable = schema + ".orders";
+//     const userTable = schema + ".users";
+//     const requestTable = schema + ".counter_requests";
+//     const itemTable = schema + ".order_items";
+//     const chalanItemTable = schema + ".chalan_items";
 
-    // 🔐 Role validation
-    if (user.user_role !== "SUPPLIER") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Only supplier can dispatch order",
-      });
-    }
+//     const { order_id, dispatch_date, transport_details = "" } = req.data || {};
+//     const user = req.data;
 
-    if (!order_id) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Order ID required",
-      });
-    }
+//     // 🔐 Role validation
+//     if (user.user_role !== "SUPPLIER") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Only supplier can dispatch order",
+//       });
+//     }
 
-    // 📥 Get Order
-    const orderCheck = await db_query.customQuery(`
-      SELECT supplier_id, order_status, shop_id
-      FROM ${orderTable}
-      WHERE row_id = '${order_id.trim()}'
-    `);
+//     if (!order_id) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order ID required",
+//       });
+//     }
 
-    if (!orderCheck.data?.length) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Invalid order",
-      });
-    }
+//     // 📥 Get Order
+//     const orderCheck = await db_query.customQuery(`
+//       SELECT supplier_id, order_status, shop_id
+//       FROM ${orderTable}
+//       WHERE row_id = '${order_id.trim()}'
+//     `);
 
-    const order = orderCheck.data[0];
+//     if (!orderCheck.data?.length) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Invalid order",
+//       });
+//     }
 
-    // 🔐 Supplier ownership check
-    if (order.supplier_id !== user.supplierId) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Unauthorized order access",
-      });
-    }
+//     const order = orderCheck.data[0];
 
-    // 🚦 Status validation
-    if (order.order_status === "DISPATCHED") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Order already dispatched",
-      });
-    }
+//     // 🔐 Supplier ownership check
+//     if (order.supplier_id !== user.supplierId) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Unauthorized order access",
+//       });
+//     }
 
-    if (order.order_status !== "ACCEPTED") {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Order must be ACCEPTED before dispatch",
-      });
-    }
+//     // 🚦 Status validation
+//     if (order.order_status === "DISPATCHED") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order already dispatched",
+//       });
+//     }
 
-    // 🔄 TRANSACTION START
-    await connect_db.query("BEGIN");
+//     if (order.order_status !== "ACCEPTED") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order must be ACCEPTED before dispatch",
+//       });
+//     }
 
-    // 🔁 Double check
-    const existingChalan = await db_query.customQuery(`
-      SELECT 1 FROM ${chalanTable}
-      WHERE order_id = '${order_id.trim()}'
-    `);
+//     // 🔄 TRANSACTION START
+//     await client.query("BEGIN");
 
-    if (existingChalan.data?.length) {
-      await connect_db.query("ROLLBACK");
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Chalan already exists",
-      });
-    }
+//     // 🔁 Check existing chalan
+//     const existingChalan = await db_query.customQuery(`
+//       SELECT 1 FROM ${chalanTable}
+//       WHERE order_id = '${order_id.trim()}'
+//     `);
 
-    // 📦 Create Chalan
-    const chalanRowId = libFunc.randomid();
+//     if (existingChalan.data?.length) {
+//       await client.query("ROLLBACK");
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Chalan already exists",
+//       });
+//     }
 
-    await db_query.addData(chalanTable, {
-      row_id: chalanRowId,
-      order_id: order_id.trim(),
-      supplier_id: user.supplierId,
-      dispatch_date,
-      transport_details: transport_details.trim(),
-    });
+//     // 📦 Create Chalan
+//     const chalanRowId = libFunc.randomid();
 
-    // 📊 Update Order
-    await db_query.addData(
-      orderTable,
-      { order_status: "DISPATCHED" },
-      order_id.trim(),
-      "Order",
-    );
+//     await db_query.addData(chalanTable, {
+//       row_id: chalanRowId,
+//       order_id: order_id.trim(),
+//       supplier_id: user.supplierId,
+//       dispatch_date,
+//       transport_details: transport_details.trim(),
+//     });
 
-    // ✅ COMMIT
-    await connect_db.query("COMMIT");
+//     // ===========================
+//     // 🔥 MAIN LOGIC START
+//     // ===========================
 
-    // ==============================
-    // 🔔 NOTIFICATIONS
-    // ==============================
+//     // 📥 Get order items + shelf life
+//     const items = await db_query.customQuery(`
+//       SELECT oi.sweet_id, oi.supplied_quantity, s.shelf_life_days
+//       FROM ${itemTable} oi
+//       LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+//       WHERE oi.order_id = '${order_id.trim()}'
+//     `);
 
-    // 🟠 1. Notify Shop Admin
-    const shopAdmins = await db_query.customQuery(`
-      SELECT row_id FROM ${userTable}
-      WHERE role = 'SHOP_ADMIN'
-      AND shop_id = '${order.shop_id}'
-    `);
+//     if (!items.data?.length) {
+//       throw new Error("No items found in order");
+//     }
 
-    if (shopAdmins.data?.length) {
-      for (let admin of shopAdmins.data) {
-        await createNotification({
-          user_id: admin.row_id,
-          title: "Order Dispatched",
-          message: "Order has been dispatched by supplier",
-          type: "CHALLAN",
-          reference_id: chalanRowId,
-        });
-      }
-    }
+//     // 📥 Get counter mapping
+//     const counters = await db_query.customQuery(`
+//       SELECT DISTINCT sweet_id, counter_id
+//       FROM ${requestTable}
+//       WHERE status = 'APPROVED'
+//     `);
 
-    // 🔵 2. Notify Counter Users
-    const counterUsers = await db_query.customQuery(`
-      SELECT DISTINCT u.row_id
-      FROM ${requestTable} r
-      LEFT JOIN ${userTable} u ON u.counter_id = r.counter_id
-      WHERE r.status = 'APPROVED'
-      AND r.sweet_id IN (
-        SELECT sweet_id FROM ${itemTable}
-        WHERE order_id = '${order_id}'
-      )
-    `);
+//     // ✅ Create counter map (FIX)
+//     const counterMap = {};
+//     for (let c of counters.data) {
+//       if (!counterMap[c.sweet_id]) {
+//         counterMap[c.sweet_id] = c.counter_id;
+//       }
+//     }
 
-    if (counterUsers.data?.length) {
-      for (let u of counterUsers.data) {
-        await createNotification({
-          user_id: u.row_id,
-          title: "Order Dispatched",
-          message: "Your requested items have been dispatched",
-          type: "CHALLAN",
-          reference_id: chalanRowId,
-        });
-      }
-    }
+//     // 🔁 Loop items
+//     for (let item of items.data) {
+//       const sweet_id = item.sweet_id;
+//       const qty = Number(item.supplied_quantity || 0);
 
-    // ==============================
+//       if (qty <= 0) continue;
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      msg: "Chalan created and order dispatched",
-      data: {
-        chalan_id: chalanRowId,
-      },
-    });
-  } catch (error) {
-    console.log("createChalan error:", error);
+//       const counter_id = counterMap[sweet_id];
 
-    try {
-      await connect_db.query("ROLLBACK");
-    } catch (e) {}
+//       // 🔥 EXPIRY CALCULATION
+//       const shelfLife = Number(item.shelf_life_days || 0);
+//       const dispatchDateObj = new Date(dispatch_date);
+//       dispatchDateObj.setDate(dispatchDateObj.getDate() + shelfLife);
+//       const expiry_date = dispatchDateObj.toISOString().split("T")[0];
 
-    return libFunc.sendResponse(res, {
-      status: 1,
-      msg: "Something went wrong",
-      error: error.message,
-    });
-  }
-}
+//       // 1️⃣ Insert chalan_items
+//       await db_query.addData(chalanItemTable, {
+//         row_id: libFunc.randomid(),
+//         chalan_id: chalanRowId,
+//         sweet_id,
+//         dispatched_quantity: qty,
+//       });
+
+//       if (!counter_id) {
+//         console.log("No counter found for sweet:", sweet_id);
+//         continue;
+//       }
+
+//       // 🔍 Check inventory
+//       const invCheck = await db_query.customQuery(`
+//         SELECT quantity FROM ${schema}.inventory
+//         WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
+//       `);
+
+//       if (invCheck.data?.length > 0) {
+//         const existingQty = Number(invCheck.data[0].quantity || 0);
+//         const newQty = existingQty + qty;
+
+//         await client.query(`
+//           UPDATE ${schema}.inventory
+//           SET quantity = ${newQty},
+//               expiry_date = '${expiry_date}'
+//           WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
+//         `);
+//       } else {
+//         await db_query.addData(schema + ".inventory", {
+//           row_id: libFunc.randomid(),
+//           counter_id,
+//           sweet_id,
+//           quantity: qty,
+//           expiry_date: expiry_date,
+//         });
+//       }
+
+//       // 🧾 Stock transaction log
+//       await db_query.addData(schema + ".stock_transactions", {
+//         row_id: libFunc.randomid(),
+//         counter_id,
+//         sweet_id,
+//         transaction_type: "IN",
+//         quantity: qty,
+//         reference_id: chalanRowId,
+//         notes: "Stock added via chalan",
+//       });
+//     }
+
+//     // ===========================
+//     // 🔥 MAIN LOGIC END
+//     // ===========================
+
+//     // 📊 Update Order
+//     await db_query.addData(
+//       orderTable,
+//       { order_status: "DISPATCHED" },
+//       order_id.trim(),
+//       "Order",
+//     );
+
+//     // ✅ COMMIT
+//     await client.query("COMMIT");
+
+//     // ==============================
+//     // 🔔 NOTIFICATIONS (same)
+//     // ==============================
+
+//     const shopAdmins = await db_query.customQuery(`
+//       SELECT row_id FROM ${userTable}
+//       WHERE role = 'SHOP_ADMIN'
+//       AND shop_id = '${order.shop_id}'
+//     `);
+
+//     if (shopAdmins.data?.length) {
+//       for (let admin of shopAdmins.data) {
+//         await createNotification({
+//           user_id: admin.row_id,
+//           title: "Order Dispatched",
+//           message: "Order has been dispatched by supplier",
+//           type: "CHALLAN",
+//           reference_id: chalanRowId,
+//         });
+//       }
+//     }
+
+//     const counterUsers = await db_query.customQuery(`
+//       SELECT DISTINCT u.row_id
+//       FROM ${requestTable} r
+//       LEFT JOIN ${userTable} u ON u.counter_id = r.counter_id
+//       WHERE r.status = 'APPROVED'
+//       AND r.sweet_id IN (
+//         SELECT sweet_id FROM ${itemTable}
+//         WHERE order_id = '${order_id}'
+//       )
+//     `);
+
+//     if (counterUsers.data?.length) {
+//       for (let u of counterUsers.data) {
+//         await createNotification({
+//           user_id: u.row_id,
+//           title: "Order Dispatched",
+//           message: "Your requested items have been dispatched",
+//           type: "CHALLAN",
+//           reference_id: chalanRowId,
+//         });
+//       }
+//     }
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Chalan created + inventory updated",
+//       data: { chalan_id: chalanRowId },
+//     });
+//   } catch (error) {
+//     console.log("createChalan error:", error);
+
+//     try {
+//       await connect_db.query("ROLLBACK");
+//     } catch (e) {}
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
 
 async function getAllChalans(req, res) {
   try {
@@ -4203,16 +4318,291 @@ async function downloadOrderPDF(req, res) {
     res.status(500).send("Error generating PDF");
   }
 }
+// async function downloadChalanPDF(req, res) {
+//   try {
+//     const { chalan_id } = req.data;
+
+//     const chalanTable = schema + ".chalans";
+//     const orderTable = schema + ".orders";
+//     const supplierTable = schema + ".suppliers";
+//     const shopTable = schema + ".shops";
+//     const itemTable = schema + ".order_items";
+//     const sweetTable = schema + ".sweets";
+
+//     // ================= QUERY =================
+//     const result = await db_query.customQuery(`
+//       SELECT
+//         ch.row_id AS chalan_id,
+//         ch.dispatch_date,
+//         ch.transport_details,
+
+//         o.row_id AS order_id,
+
+//         s.supplier_name,
+//         s.phone AS supplier_phone,
+//         s.address AS supplier_address,
+
+//         sh.shop_name,
+//         sh.city,
+//         sh.state,
+//         sh.address AS shop_address,
+//         sh.phone AS shop_phone,
+
+//         oi.supplied_quantity,
+//         sw.sweet_name,
+//         sw.unit,
+
+//         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+//         COALESCE(cat.category_name, 'Others') AS category_name
+
+//       FROM ${chalanTable} ch
+//       LEFT JOIN ${orderTable} o ON o.row_id = ch.order_id
+//       LEFT JOIN ${supplierTable} s ON s.row_id = ch.supplier_id
+//       LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+//         AND oi.item_status = 'ACCEPTED'
+
+//       LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
+//       LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
+//       LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
+
+//       WHERE ch.row_id = '${chalan_id}'
+//       AND oi.sweet_id IS NOT NULL
+//     `);
+
+//     if (!result.data?.length) {
+//       return res.status(404).send("No accepted items found");
+//     }
+
+//     const data = result.data;
+
+//     // ================= GROUPING =================
+//     const groupedData = {};
+
+//     data.forEach((item) => {
+//       const counter = item.counter_name || "Default Counter";
+//       const category = item.category_name || "Others";
+
+//       if (!groupedData[counter]) groupedData[counter] = {};
+//       if (!groupedData[counter][category]) groupedData[counter][category] = [];
+
+//       groupedData[counter][category].push(item);
+//     });
+
+//     // ================= FILE SETUP =================
+//     const BASE_UPLOAD_PATH = "./public/uploads";
+//     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, { recursive: true });
+//     }
+
+//     const fileName = `Chalan_${Date.now()}.pdf`;
+//     const filePath = path.join(folder, fileName);
+
+//     const doc = new PDFDocument({ margin: 40 });
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // ================= HEADER =================
+//     doc
+//       .fontSize(18)
+//       .fillColor("#2c3e50")
+//       .text("DISPATCH CHALAN", { align: "center" });
+
+//     doc.moveDown(0.5);
+//     doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+//     doc.moveDown();
+
+//     // ================= BASIC INFO =================
+//     doc.fontSize(11).fillColor("#000");
+
+//     doc.text(`Chalan ID: ${data[0].chalan_id}`);
+//     doc.text(`Order ID: ${data[0].order_id}`);
+//     doc.text(
+//       `Dispatch Date: ${
+//         data[0].dispatch_date
+//           ? new Date(data[0].dispatch_date).toLocaleDateString()
+//           : "-"
+//       }`,
+//     );
+
+//     doc.moveDown();
+
+//     // ================= SUPPLIER =================
+//     doc
+//       .fontSize(12)
+//       .fillColor("#34495e")
+//       .text("Supplier Details", { underline: true });
+//     doc.moveDown(0.3).fontSize(10);
+
+//     doc.text(`Name: ${data[0].supplier_name || "-"}`);
+//     doc.text(`Phone: ${data[0].supplier_phone || "-"}`);
+//     doc.text(`Address: ${data[0].supplier_address || "-"}`);
+
+//     doc.moveDown();
+
+//     // ================= SHOP =================
+//     doc
+//       .fontSize(12)
+//       .fillColor("#34495e")
+//       .text("Shop Details", { underline: true });
+//     doc.moveDown(0.3).fontSize(10);
+
+//     doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
+//     doc.text(`Phone: ${data[0].shop_phone || "-"}`);
+//     doc.text(`Address: ${data[0].shop_address || "-"}`);
+//     doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+
+//     doc.moveDown();
+
+//     // ================= TRANSPORT =================
+//     doc
+//       .fontSize(12)
+//       .fillColor("#34495e")
+//       .text("Transport Details", { underline: true });
+//     doc.moveDown(0.3).fontSize(10);
+
+//     doc.text(`${data[0].transport_details || "-"}`);
+
+//     doc.moveDown();
+
+//     // ================= ITEMS =================
+//     doc.fontSize(12).fillColor("#000").text("Items", { underline: true });
+//     doc.moveDown();
+
+//     const startX = 40;
+//     const colWidths = { name: 260, qty: 100, unit: 80 };
+//     const rowHeight = 20;
+
+//     for (let counter in groupedData) {
+//       doc
+//         .fontSize(11)
+//         .fillColor("#2980b9")
+//         .font("Helvetica-Bold")
+//         .text(`Counter: ${counter}`);
+//       doc.moveDown(0.3);
+
+//       for (let category in groupedData[counter]) {
+//         doc
+//           .fontSize(10)
+//           .fillColor("#8e44ad")
+//           .font("Helvetica-Bold")
+//           .text(`Category: ${category}`);
+//         doc.moveDown(0.3);
+
+//         let y = doc.y;
+
+//         // Header Row
+//         doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+
+//         doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+
+//         doc.text("Sweet Name", startX + 5, y + 5, {
+//           width: colWidths.name,
+//         });
+
+//         doc.text("Qty", startX + colWidths.name, y + 5, {
+//           width: colWidths.qty,
+//           align: "center",
+//         });
+
+//         doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
+//           width: colWidths.unit,
+//           align: "center",
+//         });
+
+//         y += rowHeight;
+//         let total = 0;
+
+//         // Items
+//         groupedData[counter][category].forEach((item, index) => {
+//           const qty = Number(item.supplied_quantity || 0);
+//           total += qty;
+
+//           if (index % 2 === 0) {
+//             doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
+//           }
+
+//           doc.fillColor("#000").fontSize(9).font("Helvetica");
+
+//           doc.text(item.sweet_name || "-", startX + 5, y + 5, {
+//             width: colWidths.name,
+//           });
+
+//           doc.text(qty.toString(), startX + colWidths.name, y + 5, {
+//             width: colWidths.qty,
+//             align: "center",
+//           });
+
+//           doc.text(
+//             item.unit || "-",
+//             startX + colWidths.name + colWidths.qty,
+//             y + 5,
+//             {
+//               width: colWidths.unit,
+//               align: "center",
+//             },
+//           );
+
+//           y += rowHeight;
+//         });
+
+//         // Total Row
+//         doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+
+//         doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
+
+//         doc.text("Total", startX + 5, y + 5, {
+//           width: colWidths.name,
+//         });
+
+//         doc.text(total.toString(), startX + colWidths.name, y + 5, {
+//           width: colWidths.qty,
+//           align: "center",
+//         });
+
+//         doc.moveDown(2);
+//       }
+
+//       doc.moveDown();
+//     }
+
+//     // ================= FOOTER =================
+//     doc.moveDown(2);
+//     doc
+//       .fontSize(9)
+//       .fillColor("gray")
+//       .text("This is a system generated document.", { align: "center" });
+
+//     doc.end();
+
+//     // ================= RESPONSE =================
+//     const fileUrl = `/uploads/ShopMedia/${fileName}`;
+//     const serverUrl = "https://stock.abhishekcv.in";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadChalanPDF error:", error);
+//     return res.status(500).send("Error generating PDF");
+//   }
+// }
+
 async function downloadChalanPDF(req, res) {
   try {
     const { chalan_id } = req.data;
 
     const chalanTable = schema + ".chalans";
     const orderTable = schema + ".orders";
-    const itemTable = schema + ".order_items";
-    const sweetTable = schema + ".sweets";
     const supplierTable = schema + ".suppliers";
     const shopTable = schema + ".shops";
+    const itemTable = schema + ".order_items";
+    const sweetTable = schema + ".sweets";
 
     // ================= QUERY =================
     const result = await db_query.customQuery(`
@@ -4233,151 +4623,243 @@ async function downloadChalanPDF(req, res) {
         sh.address AS shop_address,
         sh.phone AS shop_phone,
 
-        oi.quantity,
+        oi.supplied_quantity,
         sw.sweet_name,
-        sw.unit
+        sw.unit,
+
+        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+        COALESCE(cat.category_name, 'Others') AS category_name
 
       FROM ${chalanTable} ch
       LEFT JOIN ${orderTable} o ON o.row_id = ch.order_id
       LEFT JOIN ${supplierTable} s ON s.row_id = ch.supplier_id
       LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
-      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
+
+      LEFT JOIN ${itemTable} oi 
+        ON oi.order_id = o.row_id 
+        AND oi.item_status = 'ACCEPTED'
+
       LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
+      LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
+      LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
 
       WHERE ch.row_id = '${chalan_id}'
+      AND oi.sweet_id IS NOT NULL
     `);
 
-    if (!result.data || result.data.length === 0) {
-      return res.status(404).send("Chalan not found");
+    if (!result.data?.length) {
+      return res.status(404).send("No accepted items found");
     }
 
     const data = result.data;
 
-    // ================= FILE PATH =================
-    const BASE_UPLOAD_PATH = "/home/uploads";
-    const orgFolder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+    // ================= GROUPING =================
+    const groupedData = {};
 
-    if (!fs.existsSync(orgFolder)) {
-      fs.mkdirSync(orgFolder, { recursive: true });
+    data.forEach((item) => {
+      const counter = item.counter_name || "Default Counter";
+      const category = item.category_name || "Others";
+
+      if (!groupedData[counter]) groupedData[counter] = {};
+      if (!groupedData[counter][category]) groupedData[counter][category] = [];
+
+      groupedData[counter][category].push(item);
+    });
+
+    // ================= FILE SETUP =================
+    const BASE_UPLOAD_PATH = "/home/uploads";
+    const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
     }
 
     const fileName = `Chalan_${Date.now()}.pdf`;
-    const filePath = path.join(orgFolder, fileName);
+    const filePath = path.join(folder, fileName);
 
     const doc = new PDFDocument({ margin: 40 });
     doc.pipe(fs.createWriteStream(filePath));
 
-    // ================= HEADER =================
-    doc
-      .fontSize(18)
-      .fillColor("#2c3e50")
-      .text("DISPATCH CHALAN", { align: "center" });
+    const startX = 40;
+    const colWidths = { name: 260, qty: 100, unit: 80 };
+    const rowHeight = 20;
 
-    doc.moveDown(0.5);
-    doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown();
+    let isFirstPage = true;
 
-    // ================= BASIC INFO =================
-    doc.fontSize(11).fillColor("#000");
+    // ================= LOOP COUNTERS =================
+    for (let counter in groupedData) {
+      // 👉 New page except first
+      if (!isFirstPage) {
+        doc.addPage();
+      }
+      isFirstPage = false;
 
-    doc
-      .text(`Chalan ID: ${data[0].chalan_id}`, { continued: true })
-      .text(`        Order ID: ${data[0].order_id}`, { align: "right" });
+      // ================= HEADER =================
+      doc
+        .fontSize(16)
+        .fillColor("#2c3e50")
+        .font("Helvetica-Bold")
+        .text("DISPATCH CHALAN", { align: "center" });
 
-    doc.text(
-      `Dispatch Date: ${
-        data[0].dispatch_date
-          ? new Date(data[0].dispatch_date).toLocaleDateString()
-          : "-"
-      }`,
-    );
+      doc.moveDown(0.5);
+      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown();
 
-    doc.moveDown();
+      // ================= BASIC INFO =================
+      doc.fontSize(10).fillColor("#000").font("Helvetica");
 
-    // ================= SUPPLIER =================
-    doc
-      .fontSize(12)
-      .fillColor("#34495e")
-      .text("Supplier Details", { underline: true });
+      // doc.text(`Chalan ID: ${data[0].chalan_id}`);
+      // doc.text(`Order ID: ${data[0].order_id}`);
+      doc.text(
+        `Dispatch Date: ${
+          data[0].dispatch_date
+            ? new Date(data[0].dispatch_date).toLocaleDateString()
+            : "-"
+        }`,
+      );
 
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor("#000");
+      doc.moveDown();
 
-    doc.text(`Name: ${data[0].supplier_name || "-"}`);
-    doc.text(`Phone: ${data[0].supplier_phone || "-"}`);
-    doc.text(`Address: ${data[0].supplier_address || "-"}`);
+      // ================= SUPPLIER =================
+      doc
+        .fontSize(11)
+        .fillColor("#34495e")
+        .font("Helvetica-Bold")
+        .text("Supplier Details", { underline: true });
 
-    doc.moveDown();
+      doc.moveDown(0.3).fontSize(10).font("Helvetica");
 
-    // ================= SHOP =================
-    doc
-      .fontSize(12)
-      .fillColor("#34495e")
-      .text("Shop Details", { underline: true });
+      doc.text(`Name: ${data[0].supplier_name || "-"}`);
+      doc.text(`Phone: ${data[0].supplier_phone || "-"}`);
+      doc.text(`Address: ${data[0].supplier_address || "-"}`);
 
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor("#000");
+      doc.moveDown();
 
-    doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
-    doc.text(`Phone: ${data[0].shop_phone || "-"}`);
-    doc.text(`Address: ${data[0].shop_address || "-"}`);
-    doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+      // ================= SHOP =================
+      doc
+        .fontSize(11)
+        .fillColor("#34495e")
+        .font("Helvetica-Bold")
+        .text("Shop Details", { underline: true });
 
-    doc.moveDown();
+      doc.moveDown(0.3).fontSize(10).font("Helvetica");
 
-    // ================= TRANSPORT =================
-    doc
-      .fontSize(12)
-      .fillColor("#34495e")
-      .text("Transport Details", { underline: true });
+      doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
+      doc.text(`Phone: ${data[0].shop_phone || "-"}`);
+      doc.text(`Address: ${data[0].shop_address || "-"}`);
+      doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
 
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor("#000");
+      doc.moveDown();
 
-    doc.text(`${data[0].transport_details || "-"}`);
+      // ================= TRANSPORT =================
+      doc
+        .fontSize(11)
+        .fillColor("#34495e")
+        .font("Helvetica-Bold")
+        .text("Transport Details", { underline: true });
 
-    doc.moveDown();
+      doc.moveDown(0.3).fontSize(10).font("Helvetica");
 
-    // ================= ITEMS TABLE =================
-    doc.fontSize(12).fillColor("#000").text("Items", { underline: true });
-    doc.moveDown(0.5);
+      doc.text(`${data[0].transport_details || "-"}`);
 
-    const col1 = 50;
-    const col2 = 300;
-    const col3 = 400;
+      doc.moveDown();
 
-    let tableTop = doc.y;
+      // ================= COUNTER =================
+      doc
+        .fontSize(13)
+        .fillColor("#2980b9")
+        .font("Helvetica-Bold")
+        .text(`Counter: ${counter}`);
 
-    // Header row
-    doc.rect(40, tableTop, 500, 20).fill("#f2f2f2");
-    doc.fillColor("#000").fontSize(10);
+      doc.moveDown(0.5);
 
-    doc.text("Sweet Name", col1, tableTop + 5);
-    doc.text("Qty", col2, tableTop + 5);
-    doc.text("Unit", col3, tableTop + 5);
+      // ================= CATEGORY LOOP =================
+      for (let category in groupedData[counter]) {
+        doc
+          .fontSize(11)
+          .fillColor("#8e44ad")
+          .font("Helvetica-Bold")
+          .text(`Category: ${category}`);
 
-    let y = tableTop + 25;
+        doc.moveDown(0.3);
 
-    // Rows
-    data.forEach((item, index) => {
-      if (index % 2 === 0) {
-        doc.rect(40, y - 2, 500, 20).fill("#fafafa");
-        doc.fillColor("#000");
+        let y = doc.y;
+
+        // Header Row
+        doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+
+        doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+
+        doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
+
+        doc.text("Qty", startX + colWidths.name, y + 5, {
+          width: colWidths.qty,
+          align: "center",
+        });
+
+        doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
+          width: colWidths.unit,
+          align: "center",
+        });
+
+        y += rowHeight;
+        let total = 0;
+
+        // ================= ITEMS =================
+        groupedData[counter][category].forEach((item, index) => {
+          const qty = Number(item.supplied_quantity || 0);
+          total += qty;
+
+          if (index % 2 === 0) {
+            doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
+          }
+
+          doc.fillColor("#000").fontSize(9).font("Helvetica");
+
+          doc.text(item.sweet_name || "-", startX + 5, y + 5, {
+            width: colWidths.name,
+          });
+
+          doc.text(qty.toString(), startX + colWidths.name, y + 5, {
+            width: colWidths.qty,
+            align: "center",
+          });
+
+          doc.text(
+            item.unit || "-",
+            startX + colWidths.name + colWidths.qty,
+            y + 5,
+            {
+              width: colWidths.unit,
+              align: "center",
+            },
+          );
+
+          y += rowHeight;
+        });
+
+        // ================= TOTAL =================
+        doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+
+        doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
+
+        doc.text("Total", startX + 5, y + 5, { width: colWidths.name });
+
+        doc.text(total.toString(), startX + colWidths.name, y + 5, {
+          width: colWidths.qty,
+          align: "center",
+        });
+
+        doc.moveDown(2);
       }
 
-      doc.text(item.sweet_name || "-", col1, y, { width: 200 });
-      doc.text((item.quantity || 0).toString(), col2, y);
-      doc.text(item.unit || "-", col3, y);
-
-      y += 20;
-    });
-
-    // ================= FOOTER =================
-    doc.moveDown(2);
-    doc
-      .fontSize(9)
-      .fillColor("gray")
-      .text("This is a system generated document.", { align: "center" });
+      // ================= FOOTER =================
+      doc.moveDown(2);
+      doc
+        .fontSize(9)
+        .fillColor("gray")
+        .text("This is a system generated document.", { align: "center" });
+    }
 
     doc.end();
 
@@ -5590,6 +6072,672 @@ async function fetchCountersAndCategoriesByShop(req, res) {
       status: 1,
       msg: "Error fetching counters and categories",
       error: err.message,
+    });
+  }
+}
+
+async function updateOrderStatusBasedOnItems(order_id) {
+  try {
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+
+    const itemsRes = await db_query.customQuery(`
+      SELECT item_status 
+      FROM ${itemTable}
+      WHERE order_id = '${order_id}'
+    `);
+
+    const items = itemsRes.data || [];
+
+    if (!items.length) return;
+
+    let total = items.length;
+    let accepted = 0;
+    let rejected = 0;
+
+    for (let item of items) {
+      if (item.item_status === "ACCEPTED") accepted++;
+      if (item.item_status === "REJECTED") rejected++;
+    }
+
+    let finalStatus = "PENDING";
+
+    if (accepted === total) {
+      finalStatus = "ACCEPTED";
+    } else if (rejected === total) {
+      finalStatus = "REJECTED";
+    } else if (accepted > 0 && rejected > 0) {
+      finalStatus = "PARTIAL";
+    }
+
+    await db_query.addData(
+      orderTable,
+      { order_status: finalStatus },
+      order_id,
+      "Order",
+    );
+  } catch (err) {
+    console.error("updateOrderStatusBasedOnItems error:", err);
+  }
+}
+
+async function updateOrderItemsBySupplier(req, res) {
+  try {
+    const { order_id, items } = req.data;
+    console.log("req", req);
+    const user = req.data;
+
+    if (user.user_role !== "SUPPLIER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only supplier allowed",
+      });
+    }
+
+    if (!order_id || !items?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order and items required",
+      });
+    }
+
+    await connect_db.query("BEGIN");
+
+    for (let item of items) {
+      const { sweet_id, supplied_quantity = 0, status, reason = "" } = item;
+
+      if (!["ACCEPTED", "REJECTED"].includes(status)) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid item status",
+        });
+      }
+
+      await db_query.customQuery(`
+        UPDATE ${schema}.order_items
+        SET 
+          item_status = '${status}',
+          supplied_quantity = ${Number(supplied_quantity)},
+          reject_reason = '${reason.replaceAll("'", "`")}'
+        WHERE order_id = '${order_id}'
+        AND sweet_id = '${sweet_id}'
+      `);
+    }
+
+    // 🔥 IMPORTANT
+    await updateOrderStatusBasedOnItems(order_id);
+
+    await connect_db.query("COMMIT");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Items updated successfully",
+    });
+  } catch (error) {
+    await connect_db.query("ROLLBACK");
+
+    console.log("updateOrderItemsBySupplier error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+// {
+//   "order_id": "ORD123456",
+//   "items": [
+//     {
+//       "sweet_id": "SWT001",
+//       "status": "ACCEPTED",
+//       "supplied_quantity": 10
+//     },
+//     {
+//       "sweet_id": "SWT002",
+//       "status": "ACCEPTED",
+//       "supplied_quantity": 5
+//     },
+//     {
+//       "sweet_id": "SWT003",
+//       "status": "REJECTED",
+//       "supplied_quantity": 0,
+//       "reason": "Out of stock"
+//     }
+//   ]
+// }
+
+async function updateInventory(
+  client,
+  counter_id,
+  sweet_id,
+  qty,
+  type,
+  ref_id,
+) {
+  // Check if inventory exists
+  const check = await client.query(
+    `SELECT * FROM sms.inventory 
+     WHERE counter_id=$1 AND sweet_id=$2`,
+    [counter_id, sweet_id],
+  );
+
+  if (check.rows.length > 0) {
+    if (type === "IN") {
+      await client.query(
+        `UPDATE sms.inventory 
+         SET quantity = quantity::NUMERIC + $1 
+         WHERE counter_id=$2 AND sweet_id=$3`,
+        [qty, counter_id, sweet_id],
+      );
+    } else {
+      await client.query(
+        `UPDATE sms.inventory 
+         SET quantity = quantity::NUMERIC - $1 
+         WHERE counter_id=$2 AND sweet_id=$3`,
+        [qty, counter_id, sweet_id],
+      );
+    }
+  } else {
+    await client.query(
+      `INSERT INTO sms.inventory 
+       (row_id, counter_id, sweet_id, quantity) 
+       VALUES ($1,$2,$3,$4)`,
+      [Date.now().toString(), counter_id, sweet_id, qty],
+    );
+  }
+
+  // Insert stock transaction
+  await client.query(
+    `INSERT INTO sms.stock_transactions 
+    (row_id, counter_id, sweet_id, transaction_type, quantity, reference_id) 
+    VALUES ($1,$2,$3,$4,$5,$6)`,
+    [Date.now().toString(), counter_id, sweet_id, type, qty, ref_id],
+  );
+}
+
+async function createChalan(req, res) {
+  const client = connect_db;
+
+  try {
+    const chalanTable = schema + ".chalans";
+    const orderTable = schema + ".orders";
+
+    const { order_id, dispatch_date, transport_details = "" } = req.data || {};
+    const user = req.data;
+
+    if (user.user_role !== "SUPPLIER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only supplier allowed",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const chalanRowId = libFunc.randomid();
+
+    // 🔥 OTP generate
+    const verification_code = Math.floor(
+      100000 + Math.random() * 900000,
+    ).toString();
+
+    await db_query.addData(chalanTable, {
+      row_id: chalanRowId,
+      order_id,
+      supplier_id: user.supplierId,
+      dispatch_date,
+      transport_details,
+      verification_code,
+      is_verified: false,
+    });
+
+    // update order
+    await db_query.addData(
+      orderTable,
+      { order_status: "DISPATCHED" },
+      order_id,
+      "Order",
+    );
+
+    await client.query("COMMIT");
+
+    // ==============================
+    // 🔔 NOTIFICATIONS (YAHI ADD KARO)
+    // ==============================
+
+    const userTable = schema + ".users";
+
+    // order ka shop_id nikalna
+    const orderData = await db_query.customQuery(`
+  SELECT shop_id FROM ${orderTable}
+  WHERE row_id = '${order_id}'
+`);
+
+    const shop_id = orderData.data?.[0]?.shop_id;
+
+    // 🏪 Shop Admins ko notify karo
+    const shopAdmins = await db_query.customQuery(`
+  SELECT row_id FROM ${userTable}
+  WHERE role = 'SHOP_ADMIN'
+  AND shop_id = '${shop_id}'
+`);
+
+    if (shopAdmins.data?.length) {
+      for (let admin of shopAdmins.data) {
+        await createNotification({
+          user_id: admin.row_id,
+          title: "Order Dispatched (OTP)",
+          message: `Order dispatched. OTP: ${verification_code}`,
+          type: "CHALLAN",
+          reference_id: chalanRowId,
+        });
+      }
+    }
+
+    // ==============================
+    // 🔔 END
+    // ==============================
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Chalan created (waiting for verification)",
+      data: {
+        chalan_id: chalanRowId,
+        otp: verification_code,
+      },
+    });
+  } catch (err) {
+    await connect_db.query("ROLLBACK");
+    return libFunc.sendResponse(res, { status: 1, msg: err.message });
+  }
+}
+
+async function verifyChalan(req, res) {
+  const client = connect_db;
+
+  try {
+    const { chalan_id, otp } = req.data;
+
+    await client.query("BEGIN");
+
+    // 📥 Get chalan
+    const chalanRes = await db_query.customQuery(`
+      SELECT * FROM ${schema}.chalans
+      WHERE row_id='${chalan_id}'
+    `);
+
+    if (!chalanRes.data.length) {
+      throw new Error("Invalid chalan");
+    }
+
+    const chalan = chalanRes.data[0];
+
+    if (chalan.is_verified) {
+      throw new Error("Already verified");
+    }
+
+    if (chalan.verification_code !== otp) {
+      throw new Error("Invalid OTP");
+    }
+
+    // 📥 Get order items + shelf life
+    const items = await db_query.customQuery(`
+      SELECT oi.sweet_id, oi.supplied_quantity, s.shelf_life_days
+      FROM ${schema}.order_items oi
+      LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+      WHERE oi.order_id = '${chalan.order_id}'
+    `);
+
+    // 📥 Get counter mapping
+    const counters = await db_query.customQuery(`
+      SELECT DISTINCT sweet_id, counter_id
+      FROM ${schema}.counter_requests
+      WHERE status = 'APPROVED'
+    `);
+
+    // map
+    const counterMap = {};
+    for (let c of counters.data) {
+      if (!counterMap[c.sweet_id]) {
+        counterMap[c.sweet_id] = c.counter_id;
+      }
+    }
+
+    // 🔁 Loop items
+    for (let item of items.data) {
+      const sweet_id = item.sweet_id;
+      const qty = Number(item.supplied_quantity || 0);
+      if (qty <= 0) continue;
+
+      const counter_id = counterMap[sweet_id];
+      if (!counter_id) continue;
+
+      // 🔥 Expiry calculation
+      const shelfLife = Number(item.shelf_life_days || 0);
+      const d = new Date(chalan.dispatch_date);
+      d.setDate(d.getDate() + shelfLife);
+      const expiry_date = d.toISOString().split("T")[0];
+
+      // 🔍 Check inventory
+      const invCheck = await db_query.customQuery(`
+        SELECT quantity FROM ${schema}.inventory
+        WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
+      `);
+
+      if (invCheck.data.length > 0) {
+        const newQty = Number(invCheck.data[0].quantity) + qty;
+
+        await client.query(`
+          UPDATE ${schema}.inventory
+          SET quantity=${newQty}, expiry_date='${expiry_date}'
+          WHERE counter_id='${counter_id}' AND sweet_id='${sweet_id}'
+        `);
+      } else {
+        await db_query.addData(schema + ".inventory", {
+          row_id: libFunc.randomid(),
+          counter_id,
+          sweet_id,
+          quantity: qty,
+          expiry_date,
+        });
+      }
+
+      // 🧾 Stock log
+      await db_query.addData(schema + ".stock_transactions", {
+        row_id: libFunc.randomid(),
+        counter_id,
+        sweet_id,
+        transaction_type: "IN",
+        quantity: qty,
+        reference_id: chalan_id,
+        notes: "Verified stock",
+      });
+    }
+
+    // mark verified
+    await db_query.addData(
+      schema + ".chalans",
+      { is_verified: true },
+      chalan_id,
+      "Chalan",
+    );
+
+    await client.query("COMMIT");
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Chalan verified & inventory updated",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: err.message,
+    });
+  }
+}
+
+// Supplier → Create Chalan
+//          ↓
+// OTP Generated
+//          ↓
+// Shop Admin Enter OTP
+//          ↓
+// verifyChalan API
+//          ↓
+// Inventory Update
+//          ↓
+// Stock History Save
+
+// async function getShopChalanWithOTP(req, res) {
+//   try {
+//     const user = req.data;
+//     console.log("req", req);
+
+//     // if (user.user_role !== "SHOP_ADMIN") {
+//     //   return libFunc.sendResponse(res, {
+//     //     status: 1,
+//     //     msg: "Only shop admin allowed",
+//     //   });
+//     // }
+
+//     const shop_id = user.shopId;
+
+//     // 📦 Fetch chalan + order + supplier
+//     const data = await db_query.customQuery(`
+//       SELECT
+//         c.row_id AS chalan_id,
+//         c.order_id,
+//         c.dispatch_date,
+//         c.transport_details,
+//         c.verification_code,
+//         c.is_verified,
+
+//         o.shop_id,
+
+//         u.name AS supplier_name
+
+//       FROM ${schema}.chalans c
+//       LEFT JOIN ${schema}.orders o ON o.row_id = c.order_id
+//       LEFT JOIN ${schema}.users u ON u.supplier_id = c.supplier_id
+
+//       WHERE o.shop_id = '${shop_id}'
+//       ORDER BY c.cr_on DESC
+//     `);
+
+//     console.log("dat", data);
+
+//     const result = [];
+
+//     for (let row of data.data) {
+//       // 📥 Fetch items for each chalan
+//       const items = await db_query.customQuery(`
+//         SELECT
+//           s.sweet_name,
+//           oi.supplied_quantity
+
+//         FROM ${schema}.order_items oi
+//         LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+
+//         WHERE oi.order_id = '${row.order_id}'
+//       `);
+
+//       result.push({
+//         chalan_id: row.chalan_id,
+//         order_id: row.order_id,
+//         supplier_name: row.supplier_name,
+//         dispatch_date: row.dispatch_date,
+//         transport_details: row.transport_details,
+//         otp: row.verification_code,
+//         is_verified: row.is_verified,
+//         items: items.data || [],
+//       });
+//     }
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Shop challans fetched",
+//       data: result,
+//     });
+//   } catch (error) {
+//     console.log("getShopChalanWithOTP error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
+async function getShopChalanFullDetails(req, res) {
+  try {
+    const user = req.data;
+
+    if (user.user_role !== "SHOP_ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only shop admin allowed",
+      });
+    }
+
+    const shop_id = user.shopId;
+
+    // 🔥 SAFE WRAPPER
+    function safeData(res) {
+      return res && res.status === 0 && Array.isArray(res.data) ? res.data : [];
+    }
+
+    // ==============================
+    // 📦 1. FETCH CHALANS
+    // ==============================
+    const chalansRes = await db_query.customQuery(`
+      SELECT 
+        c.row_id AS chalan_id,
+        c.order_id,
+        c.dispatch_date,
+        c.transport_details,
+        c.verification_code,
+        c.is_verified,
+        u.name AS supplier_name
+
+      FROM ${schema}.chalans c
+      LEFT JOIN ${schema}.orders o ON o.row_id = c.order_id
+      LEFT JOIN ${schema}.users u ON u.supplier_id = c.supplier_id
+
+      WHERE o.shop_id = '${shop_id}'
+      ORDER BY c.cr_on DESC
+    `);
+
+    const chalans = safeData(chalansRes);
+
+    console.log("chalans", chalans);
+
+    const result = [];
+
+    // ==============================
+    // 🔁 LOOP EACH CHALAN
+    // ==============================
+    for (let ch of chalans) {
+      // ==========================
+      // 📦 2. CHALAN ITEMS
+      // ==========================
+      const chalanItemsRes = await db_query.customQuery(`
+        SELECT 
+          ci.sweet_id,
+          s.sweet_name,
+          ci.dispatched_quantity
+        FROM ${schema}.chalan_items ci
+        LEFT JOIN ${schema}.sweets s ON s.row_id = ci.sweet_id
+        WHERE ci.chalan_id = '${ch.chalan_id}'
+      `);
+
+      const chalanItems = safeData(chalanItemsRes);
+
+      console.log("chalanItems", chalanItems);
+
+      // ==========================
+      // 📦 3. ORDER ITEMS
+      // ==========================
+      const orderItemsRes = await db_query.customQuery(`
+        SELECT 
+          oi.sweet_id,
+          s.sweet_name,
+          oi.quantity AS ordered_qty,
+          oi.supplied_quantity
+        FROM ${schema}.order_items oi
+        LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+        WHERE oi.order_id = '${ch.order_id}'
+      `);
+
+      const orderItems = safeData(orderItemsRes);
+
+      console.log("orderItems", orderItems);
+
+      // ==========================
+      // 📦 4. REQUESTED ITEMS
+      // ==========================
+      const requestedItemsRes = await db_query.customQuery(`
+        SELECT 
+          sweet_id,
+          SUM(quantity) AS requested_qty
+        FROM ${schema}.counter_requests
+        WHERE status = 'APPROVED'
+        GROUP BY sweet_id
+      `);
+
+      const requestedItems = safeData(requestedItemsRes);
+      console.log("requestedItems", requestedItems);
+
+      // ==========================
+      // 🐞 DEBUG LOG (optional)
+      // ==========================
+      console.log({
+        chalan_id: ch.chalan_id,
+        chalanItems,
+        orderItems,
+        requestedItems,
+      });
+
+      // ==========================
+      // 🔥 MERGE DATA
+      // ==========================
+      const finalItems = [];
+
+      for (let oi of orderItems) {
+        const sweet_id = oi.sweet_id;
+
+        const req = requestedItems.find((r) => r.sweet_id === sweet_id);
+        const chItem = chalanItems.find((c) => c.sweet_id === sweet_id);
+
+        const requested_qty = req ? Number(req.requested_qty) : 0;
+        const ordered_qty = Number(oi.ordered_qty || 0);
+        const supplied_qty = Number(oi.supplied_quantity || 0);
+        const dispatched_qty = chItem ? Number(chItem.dispatched_quantity) : 0;
+
+        finalItems.push({
+          sweet_id,
+          sweet_name: oi.sweet_name,
+
+          // requested_qty,
+          ordered_qty,
+          supplied_qty,
+          // dispatched_qty,
+
+          // difference: supplied_qty - requested_qty,
+        });
+      }
+
+      // ==========================
+      // 📦 PUSH RESULT
+      // ==========================
+      result.push({
+        chalan_id: ch.chalan_id,
+        order_id: ch.order_id,
+        supplier_name: ch.supplier_name,
+        dispatch_date: ch.dispatch_date,
+        transport_details: ch.transport_details,
+        otp: ch.verification_code,
+        is_verified: ch.is_verified,
+        items: finalItems,
+      });
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Full chalan details for verification",
+      data: result,
+    });
+  } catch (error) {
+    console.log("getShopChalanFullDetails error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
     });
   }
 }

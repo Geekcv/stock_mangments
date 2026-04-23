@@ -372,8 +372,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzY3ODE3ODQsImV4cCI6MTc3NzA0MDk4NH0.6cghCz1Wf8NR_PR2dl0DhQQ5CSAHRECc_3LY8pxiGps"
-user_id: "1773576248141_czEK',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzY5NTg1NDYsImV4cCI6MTc3NzIxNzc0Nn0.fBx-HW7usY7R0gZ8cqdBcbLSg1kysdLrUwtmaGn9epU',
     user_id: '1773576248141_czEK',
     role: 'ADMIN',
     counter_id: '0',

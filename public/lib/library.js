@@ -279,6 +279,7 @@ async function createShop(req, res) {
     const userTable = schema + ".users";
 
     const {
+      row_id, // ✅ NEW (for update)
       shop_name,
       address = "",
       city = "",
@@ -301,18 +302,81 @@ async function createShop(req, res) {
     }
 
     //  Validation
-    if (!shop_name || !owner_name || !email || !phone || !password) {
+    if (!shop_name || !owner_name || !email || !phone) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Shop + Owner login details required",
+        msg: "Shop + Owner details required",
       });
     }
 
-    //  Normalize
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhone = phone.trim();
 
-    //  Duplicate user check
+    // ================================
+    // ✅ START TRANSACTION
+    // ================================
+    await connect_db.query("BEGIN");
+
+    // 🔵 UPDATE FLOW (ONLY THIS CHANGED)
+    // =====================================
+    if (row_id) {
+      // check shop exist
+      const shopCheck = await db_query.customQuery(`
+    SELECT * FROM ${shopTable}
+    WHERE row_id = '${row_id}'
+  `);
+
+      if (!shopCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop not found",
+        });
+      }
+
+      // ✅ CUSTOM UPDATE QUERY (no addData)
+      await db_query.customQuery(`
+    UPDATE ${shopTable}
+    SET 
+      shop_name = '${shop_name.trim().replaceAll("'", "`")}',
+      address = '${address.trim()}',
+      city = '${city.trim()}',
+      state = '${state.trim()}',
+      pincode = '${pincode.trim()}',
+      phone = '${cleanPhone}',
+      email = '${cleanEmail}',
+      gst_number = '${gst_number.trim()}',
+      owner_name = '${owner_name.trim()}',
+      logo_url = '${logo_url.trim()}'
+    WHERE row_id = '${row_id}'
+  `);
+
+      // update shop admin user
+      await db_query.customQuery(`
+    UPDATE ${userTable}
+    SET 
+      name = '${owner_name}',
+      email = '${cleanEmail}',
+      phone = '${cleanPhone}',
+      ${password ? `password = '${password}',` : ""}
+      up_on = now()
+    WHERE shop_id = '${row_id}'
+    AND role = 'SHOP_ADMIN'
+  `);
+
+      await connect_db.query("COMMIT");
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Shop updated successfully",
+      });
+    }
+
+    // =====================================
+    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // =====================================
+
+    // Duplicate user check
     const existingUser = await db_query.customQuery(`
       SELECT phone, email FROM ${userTable}
       WHERE phone = '${cleanPhone}'
@@ -323,6 +387,7 @@ async function createShop(req, res) {
       const u = existingUser.data[0];
 
       if (u.phone === cleanPhone) {
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
@@ -330,6 +395,7 @@ async function createShop(req, res) {
       }
 
       if (u.email === cleanEmail) {
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -344,18 +410,16 @@ async function createShop(req, res) {
     `);
 
     if (existingShop.data?.length > 0) {
+      await connect_db.query("ROLLBACK");
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Shop already exists",
       });
     }
 
-    //  START TRANSACTION
-    await connect_db.query("BEGIN");
-
     const shopRowId = libFunc.randomid();
 
-    //  Create Shop
+    // Create Shop
     const shopResp = await db_query.addData(shopTable, {
       row_id: shopRowId,
       shop_name: shop_name.trim().replaceAll("'", "`"),
@@ -376,13 +440,13 @@ async function createShop(req, res) {
       return libFunc.sendResponse(res, shopResp);
     }
 
-    // 👤 Create SHOP_ADMIN (plain password)
+    // Create SHOP_ADMIN
     const userResp = await db_query.addData(userTable, {
       row_id: libFunc.randomid(),
       name: owner_name.trim(),
       email: cleanEmail,
       phone: cleanPhone,
-      password: password.trim(), //  no hashing
+      password: password.trim(),
       role: "SHOP_ADMIN",
       shop_id: shopRowId,
     });
@@ -400,8 +464,6 @@ async function createShop(req, res) {
       data: { shop_id: shopRowId },
     });
   } catch (error) {
-    console.log("createShop error:", error);
-
     try {
       await connect_db.query("ROLLBACK");
     } catch (e) {}
@@ -544,6 +606,7 @@ async function createCounter(req, res) {
     const userTable = schema + ".users";
 
     const {
+      row_id, // ✅ NEW (for update)
       shop_id,
       counter_name,
       location = "",
@@ -557,21 +620,17 @@ async function createCounter(req, res) {
 
     // Role validation
     if (!["ADMIN", "SHOP_ADMIN"].includes(loggedInUser.user_role)) {
-      console.log("access denided");
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
       });
     }
 
-    //  Resolve Shop ID
+    // Resolve Shop ID
     let finalShopId;
 
     if (loggedInUser.user_role === "ADMIN") {
-      console.log("inside admin");
       if (!shop_id) {
-        console.log("shop_id is required for admin");
-
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "shop_id is required for admin",
@@ -581,11 +640,7 @@ async function createCounter(req, res) {
     }
 
     if (loggedInUser.user_role === "SHOP_ADMIN") {
-      console.log("inside shop admin");
-
       if (shop_id && shop_id !== loggedInUser.shopId) {
-        console.log("You can only create counter in your shop");
-
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "You can only create counter in your shop",
@@ -594,35 +649,84 @@ async function createCounter(req, res) {
       finalShopId = loggedInUser.shopId;
     }
 
-    //  Validation
-    if (
-      !finalShopId ||
-      !counter_name ||
-      !name ||
-      !email ||
-      !phone ||
-      !password
-    ) {
-      console.log("Required fields missing");
+    // Validation
+    if (!finalShopId || !counter_name || !name || !email || !phone) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Required fields missing",
       });
     }
 
-    //  Duplicate check (SQL Injection Safe)
+    // ================================
+    // BEGIN TRANSACTION
+    // ================================
+    await connect_db.query("BEGIN");
+
+    // =====================================
+    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // =====================================
+    if (row_id) {
+      // check counter exists
+      const counterCheck = await db_query.customQuery(`
+    SELECT * FROM ${counterTable}
+    WHERE row_id = '${row_id}'
+  `);
+
+      if (!counterCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Counter not found",
+        });
+      }
+
+      // ✅ CUSTOM UPDATE QUERY (no addData)
+      await db_query.customQuery(`
+    UPDATE ${counterTable}
+    SET 
+      shop_id = '${finalShopId}',
+      counter_name = '${counter_name.trim().replaceAll("'", "`")}',
+      location = '${location.trim()}',
+      up_on = now()
+    WHERE row_id = '${row_id}'
+  `);
+
+      // update counter user
+      await db_query.customQuery(`
+    UPDATE ${userTable}
+    SET 
+      name = '${name}',
+      email = '${email}',
+      phone = '${phone}',
+      ${password ? `password = '${password}',` : ""}
+      up_on = now()
+    WHERE counter_id = '${row_id}'
+    AND role = 'COUNTER_USER'
+  `);
+
+      await connect_db.query("COMMIT");
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Counter updated successfully",
+      });
+    }
+
+    // =====================================
+    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // =====================================
+
+    // Duplicate check
     const existingUser = await db_query.customQuery(
       `SELECT phone, email FROM ${userTable}
        WHERE phone = '${phone.trim()}' OR email = '${email.trim()}'`,
     );
 
-    console.log("exising usrs", existingUser);
-
     if (existingUser.data && existingUser.data.length > 0) {
       const user = existingUser.data[0];
 
       if (user.phone === phone.trim()) {
-        console.log("phone already exists");
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
@@ -630,8 +734,7 @@ async function createCounter(req, res) {
       }
 
       if (user.email === email.trim()) {
-        console.log("email already exists");
-
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -639,12 +742,9 @@ async function createCounter(req, res) {
       }
     }
 
-    //  BEGIN TRANSACTION
-    await connect_db.query("BEGIN");
-
     const counterRowId = libFunc.randomid();
 
-    //  Insert Counter
+    // Insert Counter
     const counterColumns = {
       row_id: counterRowId,
       shop_id: finalShopId,
@@ -659,13 +759,13 @@ async function createCounter(req, res) {
       return libFunc.sendResponse(res, counterResp);
     }
 
-    // 👤 Insert Counter User
+    // Insert Counter User
     const userColumns = {
       row_id: libFunc.randomid(),
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
-      password: password.trim(), //  (later hash karna)
+      password: password.trim(),
       role: "COUNTER_USER",
       counter_id: counterRowId,
       shop_id: finalShopId,
@@ -678,7 +778,6 @@ async function createCounter(req, res) {
       return libFunc.sendResponse(res, userResp);
     }
 
-    //  COMMIT
     await connect_db.query("COMMIT");
 
     return libFunc.sendResponse(res, {
@@ -711,6 +810,7 @@ async function createSupplier(req, res) {
     const userTable = schema + ".users";
 
     const {
+      row_id, // ✅ NEW
       supplier_name,
       phone,
       email,
@@ -718,28 +818,94 @@ async function createSupplier(req, res) {
       password,
     } = req.data || {};
 
-    //  Validation
-    if (!supplier_name || !email || !phone || !password) {
+    // Validation
+    if (!supplier_name || !email || !phone) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Required fields missing",
       });
     }
 
-    //  Duplicate check
+    // ================================
+    // BEGIN TRANSACTION
+    // ================================
+    await connect_db.query("BEGIN TRANSACTION");
+
+    // =====================================
+    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // =====================================
+    if (row_id) {
+      // check supplier exists
+      const supplierCheck = await db_query.customQuery(`
+    SELECT row_id FROM ${supplierTable}
+    WHERE row_id = '${row_id}'
+  `);
+
+      if (!supplierCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier not found",
+        });
+      }
+
+      // ✅ CUSTOM UPDATE QUERY (no addData)
+      await db_query.customQuery(`
+    UPDATE ${supplierTable}
+    SET 
+      supplier_name = '${supplier_name.trim().replaceAll("'", "`")}',
+      phone = '${phone.trim()}',
+      email = '${email.trim()}',
+      address = '${address.trim()}',
+      up_on = now()
+    WHERE row_id = '${row_id}'
+  `);
+
+      // update supplier user
+      await db_query.customQuery(`
+    UPDATE ${userTable}
+    SET 
+      name = '${supplier_name}',
+      email = '${email}',
+      phone = '${phone}',
+      ${password ? `password = '${password}',` : ""}
+      up_on = now()
+    WHERE supplier_id = '${row_id}'
+    AND role = 'SUPPLIER'
+  `);
+
+      await connect_db.query("COMMIT");
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Supplier updated successfully",
+      });
+    }
+
+    // =====================================
+    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // =====================================
+
+    if (!password) {
+      await connect_db.query("ROLLBACK");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Password is required",
+      });
+    }
+
+    // Duplicate check
     const existingUser = await db_query.customQuery(`
       SELECT phone, email FROM ${userTable}
       WHERE phone = '${phone.trim()}'
       OR email = '${email.trim()}'
     `);
 
-    console.log("existingUser", existingUser);
-
     if (existingUser.data && existingUser.data.length > 0) {
       const user = existingUser.data[0];
 
       if (user.phone === phone.trim()) {
-        console.log("Phone already exists");
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
@@ -747,7 +913,7 @@ async function createSupplier(req, res) {
       }
 
       if (user.email === email.trim()) {
-        console.log("Email already exists");
+        await connect_db.query("ROLLBACK");
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -755,12 +921,9 @@ async function createSupplier(req, res) {
       }
     }
 
-    //  BEGIN TRANSACTION
-    await connect_db.query("BEGIN TRANSACTION");
-
     const supplierRowId = libFunc.randomid();
 
-    //  Insert Supplier
+    // Insert Supplier
     const supplierColumns = {
       row_id: supplierRowId,
       supplier_name: supplier_name.trim().replaceAll("'", "`"),
@@ -772,7 +935,7 @@ async function createSupplier(req, res) {
     const supplierResp = await db_query.addData(supplierTable, supplierColumns);
 
     if (supplierResp.status === 0) {
-      //  Insert User
+      // Insert User
       const userColumns = {
         row_id: libFunc.randomid(),
         name: supplier_name.trim(),
@@ -786,7 +949,6 @@ async function createSupplier(req, res) {
       const userResp = await db_query.addData(userTable, userColumns);
 
       if (userResp.status === 0) {
-        //  SUCCESS → COMMIT
         await connect_db.query("COMMIT");
 
         return libFunc.sendResponse(res, {
@@ -797,21 +959,16 @@ async function createSupplier(req, res) {
           },
         });
       } else {
-        //  User insert failed
         await connect_db.query("ROLLBACK");
-
         return libFunc.sendResponse(res, userResp);
       }
     } else {
-      //  Supplier insert failed
       await connect_db.query("ROLLBACK");
-
       return libFunc.sendResponse(res, supplierResp);
     }
   } catch (error) {
     console.log("createSupplier error:", error);
 
-    //  Any error → rollback
     await connect_db.query("ROLLBACK");
 
     return libFunc.sendResponse(res, {
@@ -1014,10 +1171,16 @@ async function createDepartment(req, res) {
   try {
     const tablename = schema + ".departments";
 
-    const { department_name, description = "", shop_id } = req.data || {};
+    const {
+      row_id, // ✅ NEW
+      department_name,
+      description = "",
+      shop_id,
+    } = req.data || {};
+
     const user = req.data;
 
-    //  Role validation
+    // Role validation
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1025,7 +1188,7 @@ async function createDepartment(req, res) {
       });
     }
 
-    //  Validation
+    // Validation
     if (!department_name) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1033,10 +1196,9 @@ async function createDepartment(req, res) {
       });
     }
 
-    //  Resolve shop_id
+    // Resolve shop_id
     let finalShopId;
 
-    //  ADMIN
     if (user.user_role === "ADMIN") {
       if (!shop_id) {
         return libFunc.sendResponse(res, {
@@ -1047,7 +1209,6 @@ async function createDepartment(req, res) {
       finalShopId = shop_id.trim();
     }
 
-    //  SHOP_ADMIN
     if (user.user_role === "SHOP_ADMIN") {
       if (shop_id && shop_id !== user.shopId) {
         return libFunc.sendResponse(res, {
@@ -1058,7 +1219,59 @@ async function createDepartment(req, res) {
       finalShopId = user.shopId;
     }
 
-    //  Duplicate check (same shop)
+    // =====================================
+    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // =====================================
+    if (row_id) {
+      // check exist
+      const existingDept = await db_query.customQuery(`
+    SELECT row_id FROM ${tablename}
+    WHERE row_id = '${row_id}'
+  `);
+
+      if (!existingDept.data?.length) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Department not found",
+        });
+      }
+
+      // duplicate check (exclude same row)
+      const duplicate = await db_query.customQuery(`
+    SELECT row_id FROM ${tablename}
+    WHERE department_name = '${department_name.trim()}'
+    AND shop_id = '${finalShopId}'
+    AND row_id != '${row_id}'
+  `);
+
+      if (duplicate.data?.length > 0) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Department already exists in this shop",
+        });
+      }
+
+      // ✅ CUSTOM UPDATE QUERY (no addData)
+      await db_query.customQuery(`
+    UPDATE ${tablename}
+    SET 
+      department_name = '${department_name.trim().replaceAll("'", "`")}',
+      description = '${description.trim()}',
+      shop_id = '${finalShopId}',
+      up_on = now()
+    WHERE row_id = '${row_id}'
+  `);
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Department updated successfully",
+      });
+    }
+
+    // =====================================
+    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // =====================================
+
     const existing = await db_query.customQuery(`
       SELECT row_id FROM ${tablename}
       WHERE department_name = '${department_name.trim()}'
@@ -1072,7 +1285,6 @@ async function createDepartment(req, res) {
       });
     }
 
-    //  Insert
     const columns = {
       row_id: libFunc.randomid(),
       department_name: department_name.trim().replaceAll("'", "`"),
@@ -1169,10 +1381,16 @@ async function createCategory(req, res) {
     const tablename = schema + ".categories";
     const deptTable = schema + ".departments";
 
-    const { department_id, category_name, shop_id } = req.data || {};
+    const {
+      row_id, // ✅ NEW
+      department_id,
+      category_name,
+      shop_id,
+    } = req.data || {};
+
     const user = req.data;
 
-    //  Role validation
+    // Role validation
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1180,7 +1398,7 @@ async function createCategory(req, res) {
       });
     }
 
-    //  Basic validation
+    // Basic validation
     if (!department_id || !category_name) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1188,7 +1406,7 @@ async function createCategory(req, res) {
       });
     }
 
-    //  Check department exists + get shop_id
+    // Check department exists + get shop_id
     const deptCheck = await db_query.customQuery(`
       SELECT row_id, shop_id 
       FROM ${deptTable}
@@ -1215,7 +1433,7 @@ async function createCategory(req, res) {
       finalShopId = shop_id.trim();
     }
 
-    //  SHOP ACCESS CONTROL
+    // SHOP_ADMIN access control
     if (user.user_role === "SHOP_ADMIN") {
       if (department.shop_id !== user.shopId) {
         return libFunc.sendResponse(res, {
@@ -1226,7 +1444,59 @@ async function createCategory(req, res) {
       finalShopId = user.shopId;
     }
 
-    //  Duplicate check (same department)
+    // =====================================
+    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // =====================================
+    if (row_id) {
+      // check category exists
+      const catCheck = await db_query.customQuery(`
+    SELECT row_id FROM ${tablename}
+    WHERE row_id = '${row_id}'
+  `);
+
+      if (!catCheck.data?.length) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Category not found",
+        });
+      }
+
+      // duplicate check (exclude same row)
+      const duplicate = await db_query.customQuery(`
+    SELECT row_id FROM ${tablename}
+    WHERE category_name = '${category_name.trim()}'
+    AND department_id = '${department_id}'
+    AND row_id != '${row_id}'
+  `);
+
+      if (duplicate.data?.length > 0) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Category already exists in this department",
+        });
+      }
+
+      // ✅ CUSTOM UPDATE QUERY (no addData)
+      await db_query.customQuery(`
+    UPDATE ${tablename}
+    SET 
+      department_id = '${department_id.trim()}',
+      category_name = '${category_name.trim().replaceAll("'", "`")}',
+      shop_id = '${finalShopId}',
+      up_on = now()
+    WHERE row_id = '${row_id}'
+  `);
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Category updated successfully",
+      });
+    }
+
+    // =====================================
+    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // =====================================
+
     const existing = await db_query.customQuery(`
       SELECT row_id FROM ${tablename}
       WHERE category_name = '${category_name.trim()}'
@@ -1240,7 +1510,6 @@ async function createCategory(req, res) {
       });
     }
 
-    //  Insert
     const columns = {
       row_id: libFunc.randomid(),
       department_id: department_id.trim(),
@@ -4696,7 +4965,7 @@ async function downloadChalanPDF(req, res) {
 
     // ================= FILE SETUP =================
     // const BASE_UPLOAD_PATH = "./public/uploads";
-        const BASE_UPLOAD_PATH = "/home/uploads";
+    const BASE_UPLOAD_PATH = "/home/uploads";
     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
 
     if (!fs.existsSync(folder)) {

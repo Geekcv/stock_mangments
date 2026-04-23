@@ -87,9 +87,11 @@ let common_fn = {
   //pdf
   dow_pdf: downloadOrderPDF,
   dow_ch_pdf: downloadChalanPDF,
+  dow_ord_req: downloadOrderRequestPDF,
 
   // dhasboard
   fe_dash: getDashboardData,
+  fe_dash_role: getDashboardDatarole,
 
   // profile
   fe_pro: getProfile,
@@ -4693,7 +4695,8 @@ async function downloadChalanPDF(req, res) {
     });
 
     // ================= FILE SETUP =================
-    const BASE_UPLOAD_PATH = "/home/uploads";
+    // const BASE_UPLOAD_PATH = "./public/uploads";
+        const BASE_UPLOAD_PATH = "/home/uploads";
     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
 
     if (!fs.existsSync(folder)) {
@@ -4900,6 +4903,247 @@ async function downloadChalanPDF(req, res) {
     });
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
+    return res.status(500).send("Error generating PDF");
+  }
+}
+
+async function downloadOrderRequestPDF(req, res) {
+  try {
+    const { order_id } = req.data;
+
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+    const shopTable = schema + ".shops";
+    const sweetTable = schema + ".sweets";
+
+    // ================= QUERY =================
+    const result = await db_query.customQuery(`
+      SELECT
+        o.row_id AS order_id,
+        o.order_status,
+        o.order_date,
+
+        sh.shop_name,
+        sh.address AS shop_address,
+        sh.city,
+        sh.state,
+        sh.phone AS shop_phone,
+
+        oi.quantity,
+        oi.item_status,
+
+        COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
+        COALESCE(sw.unit, '-') AS unit,
+
+        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+        COALESCE(cat.category_name, 'Others') AS category_name
+
+      FROM ${orderTable} o
+      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
+      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
+      LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
+      LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
+      LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
+
+      WHERE o.row_id = '${order_id}'
+    `);
+
+    const data = result.data;
+
+    if (!data || data.length === 0) {
+      return res.status(404).send("No order found");
+    }
+
+    // ================= GROUPING =================
+    const groupedData = {};
+
+    data.forEach((item) => {
+      const counter = item.counter_name || "Default Counter";
+      const category = item.category_name || "Others";
+
+      if (!groupedData[counter]) groupedData[counter] = {};
+      if (!groupedData[counter][category]) groupedData[counter][category] = [];
+
+      groupedData[counter][category].push(item);
+    });
+
+    // ================= FILE SETUP =================
+    // const BASE_UPLOAD_PATH = "./public/uploads";
+    const BASE_UPLOAD_PATH = "/home/uploads";
+    const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+    }
+
+    const fileName = `OrderRequest_${Date.now()}.pdf`;
+    const filePath = path.join(folder, fileName);
+
+    const doc = new PDFDocument({ margin: 40 });
+    doc.pipe(fs.createWriteStream(filePath));
+
+    let isFirstPage = true;
+
+    // ================= LOOP =================
+    for (let counter in groupedData) {
+      for (let category in groupedData[counter]) {
+        // NEW PAGE FOR EACH CATEGORY
+        if (!isFirstPage) doc.addPage();
+        isFirstPage = false;
+
+        // ================= HEADER =================
+        doc.fontSize(16).font("Helvetica-Bold").text("ORDER REQUEST", {
+          align: "center",
+        });
+
+        doc.moveDown();
+        doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown();
+
+        // ================= ORDER INFO =================
+        doc.fontSize(10).font("Helvetica");
+
+        doc.text(`Order ID: ${data[0].order_id}`);
+        doc.text(`Status: ${data[0].order_status}`);
+        doc.text(
+          `Order Date: ${
+            data[0].order_date
+              ? new Date(data[0].order_date).toLocaleDateString()
+              : "-"
+          }`,
+        );
+
+        doc.moveDown();
+
+        // ================= SHOP =================
+        doc.fontSize(11).font("Helvetica-Bold").text("Shop Details", {
+          underline: true,
+        });
+
+        doc.moveDown(0.3).fontSize(10).font("Helvetica");
+
+        doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
+        doc.text(`Phone: ${data[0].shop_phone || "-"}`);
+        doc.text(`Address: ${data[0].shop_address || "-"}`);
+        doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+
+        doc.moveDown();
+
+        // ================= COUNTER + CATEGORY =================
+        doc.fontSize(13).font("Helvetica-Bold").text(`Counter: ${counter}`);
+
+        doc.fontSize(12).font("Helvetica-Bold").text(`Category: ${category}`);
+
+        doc.moveDown(0.5);
+
+        let y = doc.y;
+
+        const startX = 40;
+        const rowHeight = 20;
+        const colWidths = { name: 260, qty: 80, unit: 60, status: 100 };
+
+        // ================= TABLE HEADER =================
+        doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+        doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+
+        doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
+        doc.text("Qty", startX + colWidths.name, y + 5, {
+          width: colWidths.qty,
+          align: "center",
+        });
+        doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
+          width: colWidths.unit,
+          align: "center",
+        });
+        doc.text(
+          "Status",
+          startX + colWidths.name + colWidths.qty + colWidths.unit,
+          y + 5,
+          { width: colWidths.status, align: "center" },
+        );
+
+        y += rowHeight;
+
+        let total = 0;
+
+        // ================= ITEMS =================
+        groupedData[counter][category].forEach((item, index) => {
+          const qty = Number(item.quantity || 0);
+          total += qty;
+
+          // PAGE BREAK INSIDE TABLE
+          if (y > 750) {
+            doc.addPage();
+            y = 50;
+          }
+
+          if (index % 2 === 0) {
+            doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
+            doc.fillColor("#000");
+          }
+
+          doc.fontSize(9).font("Helvetica");
+
+          doc.text(item.sweet_name, startX + 5, y + 5, {
+            width: colWidths.name,
+          });
+
+          doc.text(qty.toString(), startX + colWidths.name, y + 5, {
+            width: colWidths.qty,
+            align: "center",
+          });
+
+          doc.text(item.unit, startX + colWidths.name + colWidths.qty, y + 5, {
+            width: colWidths.unit,
+            align: "center",
+          });
+
+          doc.text(
+            item.item_status,
+            startX + colWidths.name + colWidths.qty + colWidths.unit,
+            y + 5,
+            { width: colWidths.status, align: "center" },
+          );
+
+          y += rowHeight;
+        });
+
+        // ================= TOTAL =================
+        doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+        doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
+
+        doc.text("Total", startX + 5, y + 5, {
+          width: colWidths.name,
+        });
+
+        doc.text(total.toString(), startX + colWidths.name, y + 5, {
+          width: colWidths.qty,
+          align: "center",
+        });
+
+        doc.moveDown(2);
+
+        // ================= FOOTER =================
+        doc
+          .fontSize(9)
+          .fillColor("gray")
+          .text("System generated order request.", { align: "center" });
+      }
+    }
+
+    doc.end();
+
+    // ================= RESPONSE =================
+    const fileUrl = `/uploads/OrderRequests/${fileName}`;
+    const serverUrl = "https://stock.abhishekcv.in";
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Order request PDF generated",
+      filePath: serverUrl + fileUrl,
+    });
+  } catch (error) {
+    console.log("downloadOrderRequestPDF error:", error);
     return res.status(500).send("Error generating PDF");
   }
 }
@@ -6794,5 +7038,334 @@ async function getShopChalanFullDetails(req, res) {
       msg: "Something went wrong",
       error: error.message,
     });
+  }
+}
+
+async function getDashboardDatarole(req, res) {
+  try {
+    const user = req.data;
+    let result = null;
+    let msg = "";
+    console.log("user", req);
+
+    switch (user.user_role) {
+      case "ADMIN":
+        result = await getAdminDashboard();
+        msg = "Admin dashboard data";
+        break;
+
+      case "SHOP_ADMIN":
+        result = await getShopDashboard(user);
+        msg = "Shop dashboard data";
+        break;
+
+      case "COUNTER_USER":
+        result = await getCounterDashboard(user);
+        msg = "Counter dashboard data";
+        break;
+
+      case "SUPPLIER":
+        result = await getSupplierDashboard(user);
+        msg = "Supplier dashboard data";
+        break;
+
+      default:
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid role",
+          data: [],
+        });
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: msg,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Dashboard Error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Failed to fetch dashboard",
+      data: [],
+    });
+  }
+}
+
+async function getAdminDashboard() {
+  try {
+    const summaryQuery = `
+      SELECT 
+        (SELECT COUNT(*) FROM sms.shops) AS total_shops,
+        (SELECT COUNT(*) FROM sms.shops WHERE is_active = true) AS active_shops,
+        (SELECT COUNT(*) FROM sms.users) AS total_users,
+        (SELECT COUNT(*) FROM sms.suppliers) AS total_suppliers,
+        (SELECT COUNT(*) FROM sms.orders) AS total_orders
+    `;
+
+    const ordersTrendQuery = `
+      SELECT DATE(order_date) as date, COUNT(*) as count
+      FROM sms.orders
+      GROUP BY DATE(order_date)
+      ORDER BY date DESC
+      LIMIT 7
+    `;
+
+    const recentOrdersQuery = `
+      SELECT row_id, order_status, order_date
+      FROM sms.orders
+      ORDER BY order_date DESC
+      LIMIT 10
+    `;
+
+    const [summary, trend, recent] = await Promise.all([
+      db_query.customQuery(summaryQuery),
+      db_query.customQuery(ordersTrendQuery),
+      db_query.customQuery(recentOrdersQuery),
+    ]);
+
+    // console.log("symmary", summary, "trend", trend, "recent", recent);
+
+    return {
+      summary: summary.data,
+      charts: { orders_trend: trend.data },
+      recent_orders: recent.data,
+    };
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function getShopDashboard(user) {
+  try {
+    const shopId = user.shopId;
+
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_orders,
+        COUNT(*) FILTER (WHERE order_status='PENDING') as pending,
+        COUNT(*) FILTER (WHERE order_status='APPROVED') as approved,
+        COUNT(*) FILTER (WHERE order_status='REJECTED') as rejected
+      FROM sms.orders
+      WHERE shop_id = '${shopId}'
+    `;
+
+    const lowStockQuery = `
+      SELECT i.*, s.sweet_name
+      FROM sms.inventory i
+      JOIN sms.sweets s ON s.row_id = i.sweet_id
+      WHERE i.quantity::int <= i.min_stock
+      AND s.shop_id = '${shopId}'
+      LIMIT 10
+    `;
+
+    const outStockQuery = `
+    SELECT i.*, s.sweet_name
+    FROM sms.inventory i
+    JOIN sms.sweets s ON s.row_id = i.sweet_id
+    WHERE i.quantity::numeric = 0
+    AND s.shop_id = '${shopId}'
+  `;
+
+    const expiryQuery = `
+      SELECT *
+      FROM sms.inventory
+      WHERE expiry_date <= CURRENT_DATE + INTERVAL '3 days'
+      AND counter_id IN (
+        SELECT row_id FROM sms.counters WHERE shop_id = '${shopId}'
+      )
+      LIMIT 10
+    `;
+
+    const trendQuery = `
+      SELECT DATE(order_date) as date, COUNT(*) as count
+      FROM sms.orders
+      WHERE shop_id = '${shopId}'
+      GROUP BY DATE(order_date)
+      ORDER BY date DESC
+      LIMIT 7
+    `;
+
+    const financialQuery = `
+    SELECT COALESCE(SUM(oi.quantity::numeric * s.price),0) as total_amount
+    FROM sms.order_items oi
+    JOIN sms.sweets s ON s.row_id = oi.sweet_id
+    JOIN sms.orders o ON o.row_id = oi.order_id
+    WHERE o.shop_id = '${shopId}'
+  `;
+
+    const [summary, lowStock, expiry, trend, out, financial] =
+      await Promise.all([
+        db_query.customQuery(summaryQuery),
+        db_query.customQuery(lowStockQuery),
+        db_query.customQuery(expiryQuery),
+        db_query.customQuery(trendQuery),
+        db_query.customQuery(outStockQuery),
+        db_query.customQuery(financialQuery),
+      ]);
+
+    return {
+      summary: summary.data,
+      inventory: {
+        low_stock: lowStock.data,
+        out_of_stock: out.data,
+        // expiring: expiry.data,
+      },
+      financials: financial.data[0] || {},
+      charts: {
+        orders_trend: trend.data,
+      },
+      alerts: {
+        expiry: expiry.data,
+      },
+    };
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function getCounterDashboard(user) {
+  try {
+    const counterId = user.counterId;
+
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_items
+      FROM sms.inventory
+      WHERE counter_id = '${counterId}'
+    `;
+
+    const inventoryQuery = `
+      SELECT i.*, s.sweet_name
+      FROM sms.inventory i
+      JOIN sms.sweets s ON s.row_id = i.sweet_id
+      WHERE i.counter_id = '${counterId}'
+      LIMIT 20
+    `;
+
+    const requestsQuery = `
+      SELECT *
+      FROM sms.counter_requests
+      WHERE counter_id = '${counterId}'
+      ORDER BY cr_on DESC
+      LIMIT 10
+    `;
+
+    const expiryQuery = `
+      SELECT *
+      FROM sms.inventory
+      WHERE counter_id = '${counterId}'
+      AND expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+    `;
+
+    const movementQuery = `
+    SELECT transaction_type, SUM(quantity::numeric) as total
+    FROM sms.stock_transactions
+    WHERE counter_id = '${counterId}'
+    GROUP BY transaction_type
+  `;
+
+    const [summary, inventory, requests, expiry, movement] = await Promise.all([
+      db_query.customQuery(summaryQuery),
+      db_query.customQuery(inventoryQuery),
+      db_query.customQuery(requestsQuery),
+      db_query.customQuery(expiryQuery),
+      db_query.customQuery(movementQuery),
+    ]);
+
+    return {
+      summary: summary.data,
+      inventory: inventory.data,
+      requests: requests.data,
+      charts: {
+        stock_movement: movement.data,
+      },
+      alerts: {
+        expiry: expiry.data,
+      },
+    };
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function getSupplierDashboard(user) {
+  try {
+    const supplierId = user.supplierId;
+
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_orders,
+        COUNT(*) FILTER (WHERE order_status='PENDING') as pending,
+        COUNT(*) FILTER (WHERE order_status='APPROVED') as approved,
+        COUNT(*) FILTER (WHERE order_status='REJECTED') as rejected
+      FROM sms.orders
+      WHERE supplier_id = '${supplierId}'
+    `;
+
+    const ordersQuery = `
+      SELECT row_id, order_status, order_date
+      FROM sms.orders
+      WHERE supplier_id = '${supplierId}'
+      ORDER BY order_date DESC
+      LIMIT 10
+    `;
+
+    const returnsQuery = `
+      SELECT r.*
+      FROM sms.returns r
+      JOIN sms.orders o ON o.row_id = r.order_id
+      WHERE o.supplier_id = '${supplierId}'
+      LIMIT 10
+    `;
+
+    const trendQuery = `
+      SELECT DATE(order_date) as date, COUNT(*) as count
+      FROM sms.orders
+      WHERE supplier_id = '${supplierId}'
+      GROUP BY DATE(order_date)
+      ORDER BY date DESC
+      LIMIT 7
+    `;
+
+    const pendingItemsQuery = `
+    SELECT COUNT(*) as pending_items
+    FROM sms.order_items oi
+    JOIN sms.orders o ON o.row_id = oi.order_id
+    WHERE o.supplier_id = '${supplierId}'
+    AND oi.item_status = 'PENDING'
+  `;
+
+    const chalanQuery = `
+    SELECT COUNT(*) as unverified
+    FROM sms.chalans
+    WHERE supplier_id = '${supplierId}' AND is_verified = false
+  `;
+
+    const [summary, orders, returns, trend, pending, chalan] =
+      await Promise.all([
+        db_query.customQuery(summaryQuery),
+        db_query.customQuery(ordersQuery),
+        db_query.customQuery(returnsQuery),
+        db_query.customQuery(trendQuery),
+        db_query.customQuery(pendingItemsQuery),
+        db_query.customQuery(chalanQuery),
+      ]);
+
+    return {
+      summary: summary.data,
+      orders: orders.data,
+      returns: returns.data,
+      charts: {
+        orders_trend: trend.data,
+      },
+      stats: {
+        pending_items: pending.data[0]?.pending_items || 0,
+        unverified_chalans: chalan.data[0]?.unverified || 0,
+      },
+    };
+  } catch (err) {
+    throw err;
   }
 }

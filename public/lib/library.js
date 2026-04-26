@@ -103,6 +103,12 @@ let common_fn = {
 
   // expaire
   fe_expairy_items: fetchExpiryLogs,
+
+  // admin side
+  // back_data: backupAPI,
+  // restore_data: restoreAPI, // delete table and restore
+  // de_data: deleteAPI, // hard reset and backup
+  // de_ness_data: deleteAPIforcleandata,
 };
 
 const schema = "sms";
@@ -7382,10 +7388,37 @@ async function getAdminDashboard() {
     `;
 
     const recentOrdersQuery = `
-      SELECT row_id, order_status, order_date
-      FROM sms.orders
-      ORDER BY order_date DESC
-      LIMIT 10
+SELECT 
+  o.row_id,
+  o.order_status,
+  o.order_date,
+
+  s.shop_name,
+
+  c.counter_name,
+
+  STRING_AGG(sw.sweet_name, ', ') AS sweets
+
+FROM sms.orders o
+
+LEFT JOIN sms.shops s 
+  ON o.shop_id = s.row_id
+
+LEFT JOIN sms.order_items oi 
+  ON oi.order_id = o.row_id
+
+LEFT JOIN sms.sweets sw 
+  ON oi.sweet_id = sw.row_id
+
+LEFT JOIN sms.counters c 
+  ON oi.counter_id = c.row_id
+
+GROUP BY 
+  o.row_id, o.order_status, o.order_date,
+  s.shop_name, c.counter_name
+
+ORDER BY o.order_date DESC
+LIMIT 10;
     `;
 
     const [summary, trend, recent] = await Promise.all([
@@ -7438,13 +7471,21 @@ async function getShopDashboard(user) {
   `;
 
     const expiryQuery = `
-      SELECT *
-      FROM sms.inventory
-      WHERE expiry_date <= CURRENT_DATE + INTERVAL '3 days'
-      AND counter_id IN (
-        SELECT row_id FROM sms.counters WHERE shop_id = '${shopId}'
-      )
-      LIMIT 10
+ SELECT 
+  i.*,
+  s.sweet_name
+FROM sms.inventory i
+
+LEFT JOIN sms.sweets s 
+  ON s.row_id = i.sweet_id
+
+WHERE i.expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+AND i.counter_id IN (
+  SELECT row_id FROM sms.counters WHERE shop_id = '${shopId}'
+)
+
+ORDER BY i.expiry_date ASC
+LIMIT 10;
     `;
 
     const trendQuery = `
@@ -7514,18 +7555,31 @@ async function getCounterDashboard(user) {
     `;
 
     const requestsQuery = `
-      SELECT *
-      FROM sms.counter_requests
-      WHERE counter_id = '${counterId}'
-      ORDER BY cr_on DESC
-      LIMIT 10
+SELECT 
+  cr.*,
+  s.sweet_name
+FROM sms.counter_requests cr
+
+LEFT JOIN sms.sweets s 
+  ON s.row_id = cr.sweet_id
+
+WHERE cr.counter_id = '${counterId}'
+ORDER BY cr.cr_on DESC
+LIMIT 10;
     `;
 
     const expiryQuery = `
-      SELECT *
-      FROM sms.inventory
-      WHERE counter_id = '${counterId}'
-      AND expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+SELECT 
+  i.*,
+  s.sweet_name
+FROM sms.inventory i
+
+LEFT JOIN sms.sweets s 
+  ON s.row_id = i.sweet_id
+
+WHERE i.counter_id = '${counterId}'
+AND i.expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+ORDER BY i.expiry_date ASC;
     `;
 
     const movementQuery = `
@@ -7574,11 +7628,33 @@ async function getSupplierDashboard(user) {
     `;
 
     const ordersQuery = `
-      SELECT row_id, order_status, order_date
-      FROM sms.orders
-      WHERE supplier_id = '${supplierId}'
-      ORDER BY order_date DESC
-      LIMIT 10
+SELECT 
+  o.row_id,
+  o.order_status,
+  o.order_date,
+
+  s.shop_name,
+
+  STRING_AGG(DISTINCT c.counter_name, ', ') AS counters
+
+FROM sms.orders o
+
+LEFT JOIN sms.shops s 
+  ON s.row_id = o.shop_id
+
+LEFT JOIN sms.order_items oi 
+  ON oi.order_id = o.row_id
+
+LEFT JOIN sms.counters c 
+  ON c.row_id = oi.counter_id
+
+WHERE o.supplier_id = '${supplierId}'
+
+GROUP BY 
+  o.row_id, o.order_status, o.order_date, s.shop_name
+
+ORDER BY o.order_date DESC
+LIMIT 10;
     `;
 
     const returnsQuery = `
@@ -7638,3 +7714,650 @@ async function getSupplierDashboard(user) {
     throw err;
   }
 }
+
+const { exec } = require("child_process");
+
+function backupDatabase() {
+  return new Promise((resolve, reject) => {
+    const backupDir = path.join(__dirname, "backups");
+
+    // 📁 ensure folder exists
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir);
+    }
+
+    const fileName = `backup_${Date.now()}.sql`;
+    const filePath = path.join(backupDir, fileName);
+
+    const pgDumpPath = `"E:\\PostgresSQL18\\bin\\pg_dump.exe"`;
+
+    // ✅ clean command (no set PGPASSWORD)
+    const command = `${pgDumpPath} -U postgres -h localhost -p 5432 -d stock_magement -f "${filePath}"`;
+
+    exec(
+      command,
+      {
+        env: {
+          ...process.env,
+          PGPASSWORD: "root", // 👈 yaha password do
+        },
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error("Backup Error:", error);
+          return reject(error);
+        }
+
+        console.log("Backup Created:", filePath);
+        resolve(filePath);
+      },
+    );
+  });
+}
+
+async function backupAPI(req, res) {
+  try {
+    const file = await backupDatabase();
+
+    res.json({
+      success: true,
+      message: "Backup created ✅",
+      file,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Backup failed",
+    });
+  }
+}
+
+async function restoreDatabase(fileName) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const filePath = path.join(__dirname, "backups", fileName);
+
+      const psqlPath = `"E:\\PostgresSQL18\\bin\\psql.exe"`;
+
+      // 🔥 STEP 1: CLEAN DB (DROP ALL TABLES)
+      await db_query.customQuery(`
+        DO $$ DECLARE
+          r RECORD;
+        BEGIN
+          FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'sms')
+          LOOP
+            EXECUTE 'DROP TABLE IF EXISTS sms.' || quote_ident(r.tablename) || ' CASCADE';
+          END LOOP;
+        END $$;
+      `);
+
+      console.log("All tables dropped ✅");
+
+      // 🔥 STEP 2: RESTORE
+      const command = `${psqlPath} -U postgres -h localhost -p 5432 -d stock_magement -f "${filePath}"`;
+
+      exec(
+        command,
+        {
+          env: {
+            ...process.env,
+            PGPASSWORD: "root",
+          },
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error("Restore Error:", error);
+            return reject(error);
+          }
+
+          console.log("Restore Done ✅");
+          resolve("Restore successful");
+        },
+      );
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function restoreAPI(req, res) {
+  try {
+    const { fileName } = req.data;
+
+    if (!fileName) {
+      return res.status(400).json({
+        message: "fileName required",
+      });
+    }
+
+    await restoreDatabase(fileName);
+
+    res.json({
+      success: true,
+      message: "Database restored (clean + restore) ✅",
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Restore failed",
+    });
+  }
+}
+
+async function deleteAllData() {
+  try {
+    // await db_query.customQuery(`
+    //   TRUNCATE TABLE
+    //   sms.audit_logs,
+    //   sms.notifications,
+    //   sms.counter_requests,
+    //   sms.expiry_logs,
+    //   sms.returns,
+    //   sms.chalans,
+    //   sms.order_items,
+    //   sms.orders,
+    //   sms.stock_transactions,
+    //   sms.inventory
+    //   RESTART IDENTITY CASCADE;
+    // `);
+
+    await db_query.customQuery(`
+  TRUNCATE TABLE 
+  sms.audit_logs,
+  sms.notifications,
+  sms.counter_requests,
+  sms.expiry_logs,
+  sms.returns,
+  sms.chalans,
+  sms.order_items,
+  sms.orders,
+  sms.stock_transactions,
+  sms.inventory,
+  sms.sweets,
+  sms.categories,
+  sms.departments,
+  sms.suppliers,
+  sms.users,
+  sms.counters,
+  sms.shops
+  RESTART IDENTITY CASCADE;
+`);
+
+    return "All transactional data deleted ✅";
+  } catch (error) {
+    console.error("Delete Error:", error);
+    throw error;
+  }
+}
+
+async function insertDefaultAdmin() {
+  try {
+    await db_query.customQuery(`
+      INSERT INTO sms.users (
+        row_id,
+        name,
+        email,
+        phone,
+        password,
+        role
+      ) VALUES (
+        '1773576248141_czEK',
+        'test 1owner',
+        't2estshop@gmail.com',
+        '9999999999',
+        '123456',
+        'ADMIN'
+      );
+    `);
+
+    console.log("Default admin created ✅");
+  } catch (error) {
+    console.error("Admin Insert Error:", error);
+    throw error;
+  }
+}
+
+async function deleteAPI(req, res) {
+  try {
+    // const user = req.user;
+
+    // // 🔐 Role check
+    // if (user.role !== "SUPER_ADMIN") {
+    //   return res.status(403).json({
+    //     message: "Unauthorized"
+    //   });
+    // }
+
+    // // ⚠️ Confirmation check
+    // if (req.body.confirm !== "DELETE") {
+    //   return res.status(400).json({
+    //     message: "Type DELETE to confirm"
+    //   });
+    // }
+
+    // 🔥 STEP 1: AUTO BACKUP BEFORE DELETE
+    const backupFile = await backupDatabase();
+
+    console.log("Backup created before delete:", backupFile);
+
+    await deleteAllData();
+
+    // 🔥 STEP 3: Insert default admin
+    await insertDefaultAdmin();
+
+    res.json({
+      success: true,
+      message: "Data deleted successfully 🚀",
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Delete failed",
+    });
+  }
+}
+
+// 👉 Delete karo:
+
+// orders, stock, logs, etc.
+
+// 👉 ❌ Delete mat karo:
+
+// shops
+// users
+// suppliers
+// categories
+// sweets
+// departments
+
+async function deleteNecessaryData() {
+  try {
+    await db_query.customQuery(`
+      TRUNCATE TABLE 
+      sms.audit_logs,
+      sms.notifications,
+      sms.counter_requests,
+      sms.expiry_logs,
+      sms.returns,
+      sms.chalans,
+      sms.order_items,
+      sms.orders,
+      sms.stock_transactions,
+      sms.inventory
+      RESTART IDENTITY CASCADE;
+    `);
+
+    return "Only transactional data deleted ✅";
+  } catch (error) {
+    console.error("Delete Error:", error);
+    throw error;
+  }
+}
+
+async function deleteAPIforcleandata(req, res) {
+  try {
+    // 🔥 Backup first
+    const backupFile = await backupDatabase();
+
+    console.log("Backup created:", backupFile);
+
+    // 🔥 Only necessary delete
+    await deleteNecessaryData();
+
+    res.json({
+      success: true,
+      message: "Transactional data deleted ✅",
+      backupFile,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Delete failed",
+    });
+  }
+}
+
+// const { exec } = require("child_process");
+// const path = require("path");
+// const fs = require("fs");
+
+// function backupDatabase() {
+//   return new Promise((resolve, reject) => {
+//     // 📁 Use process.cwd() (VPS safe)
+//     const backupDir = path.join(process.cwd(), "backups");
+
+//     // 📁 Ensure folder exists
+//     if (!fs.existsSync(backupDir)) {
+//       fs.mkdirSync(backupDir, { recursive: true });
+//     }
+
+//     const fileName = `backup_${Date.now()}.sql`;
+//     const filePath = path.join(backupDir, fileName);
+
+//     // 🔥 VPS command (NO .exe, NO windows path)
+//     const command = `pg_dump -U ${process.env.DB_USER} -h ${process.env.DB_HOST} -p ${process.env.DB_PORT} -d ${process.env.DB_NAME} -f "${filePath}"`;
+
+//     exec(
+//       command,
+//       {
+//         env: {
+//           ...process.env,
+//           PGPASSWORD: process.env.DB_PASSWORD, // 🔐 secure
+//         },
+//       },
+//       (error, stdout, stderr) => {
+//         if (error) {
+//           console.error("Backup Error:", error);
+//           console.error("stderr:", stderr);
+//           return reject(error);
+//         }
+
+//         console.log("Backup Created:", filePath);
+//         resolve(fileName); // sirf fileName return karo
+//       }
+//     );
+//   });
+// }
+
+// // API
+// async function backupAPI(req, res) {
+//   try {
+//     const fileName = await backupDatabase();
+
+//     res.json({
+//       success: true,
+//       message: "Backup created ✅",
+//       fileName,
+//       downloadUrl: `/backups/${fileName}`, // 👈 optional
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       message: "Backup failed",
+//     });
+//   }
+// }
+
+// const { exec } = require("child_process");
+// const path = require("path");
+// const fs = require("fs");
+
+// async function restoreDatabase(fileName) {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       // 📁 VPS safe path
+//       const backupDir = path.join(process.cwd(), "backups");
+//       const filePath = path.join(backupDir, fileName);
+
+//       // 🔒 Check file exists
+//       if (!fs.existsSync(filePath)) {
+//         return reject(new Error("Backup file not found"));
+//       }
+
+//       // 🔥 STEP 1: DROP ALL TABLES (clean DB)
+//       await db_query.customQuery(`
+//         DO $$ DECLARE
+//           r RECORD;
+//         BEGIN
+//           FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'sms')
+//           LOOP
+//             EXECUTE 'DROP TABLE IF EXISTS sms.' || quote_ident(r.tablename) || ' CASCADE';
+//           END LOOP;
+//         END $$;
+//       `);
+
+//       console.log("All tables dropped ✅");
+
+//       // 🔥 STEP 2: RESTORE (Linux command)
+//       const command = `psql -U ${process.env.DB_USER} -h ${process.env.DB_HOST} -p ${process.env.DB_PORT} -d ${process.env.DB_NAME} -f "${filePath}"`;
+
+//       exec(
+//         command,
+//         {
+//           env: {
+//             ...process.env,
+//             PGPASSWORD: process.env.DB_PASSWORD,
+//           },
+//         },
+//         (error, stdout, stderr) => {
+//           if (error) {
+//             console.error("Restore Error:", error);
+//             console.error("stderr:", stderr);
+//             return reject(error);
+//           }
+
+//           console.log("Restore Done ✅");
+//           resolve("Restore successful");
+//         }
+//       );
+
+//     } catch (err) {
+//       reject(err);
+//     }
+//   });
+// }
+
+// async function restoreAPI(req, res) {
+//   try {
+//     const { fileName } = req.data;
+
+//     if (!fileName) {
+//       return res.status(400).json({
+//         message: "fileName required",
+//       });
+//     }
+
+//     await restoreDatabase(fileName);
+
+//     res.json({
+//       success: true,
+//       message: "Database restored (clean + restore) ✅",
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       message: "Restore failed",
+//     });
+//   }
+// }
+
+// async function deleteAllData() {
+//   const client = await db_query.getClient(); // assuming pool
+
+//   try {
+//     await client.query("BEGIN");
+
+//     await client.query(`
+//       TRUNCATE TABLE
+//       sms.audit_logs,
+//       sms.notifications,
+//       sms.counter_requests,
+//       sms.expiry_logs,
+//       sms.returns,
+//       sms.chalans,
+//       sms.order_items,
+//       sms.orders,
+//       sms.stock_transactions,
+//       sms.inventory,
+//       sms.sweets,
+//       sms.categories,
+//       sms.departments,
+//       sms.suppliers,
+//       sms.users,
+//       sms.counters,
+//       sms.shops
+//       RESTART IDENTITY CASCADE;
+//     `);
+
+//     await client.query("COMMIT");
+
+//     return "All data deleted ✅";
+
+//   } catch (error) {
+//     await client.query("ROLLBACK");
+//     console.error("Delete Error:", error);
+//     throw error;
+//   } finally {
+//     client.release();
+//   }
+// }
+
+// async function insertDefaultData() {
+//   try {
+//     // 🔐 Password hash (recommended)
+//     const bcrypt = require("bcrypt");
+//     const hashedPassword = await bcrypt.hash("123456", 10);
+
+//     // ✅ Default Shop
+//     await db_query.customQuery(`
+//       INSERT INTO sms.shops (row_id, shop_name, cr_on, up_on)
+//       VALUES ('SHOP_1', 'Default Shop', now(), now());
+//     `);
+
+//     // ✅ Default Counter
+//     await db_query.customQuery(`
+//       INSERT INTO sms.counters (row_id, shop_id, counter_name, cr_on, up_on)
+//       VALUES ('COUNTER_1', 'SHOP_1', 'Main Counter', now(), now());
+//     `);
+
+//     // ✅ Default Admin
+//     await db_query.customQuery(`
+//       INSERT INTO sms.users (
+//         row_id,
+//         name,
+//         email,
+//         phone,
+//         password,
+//         role,
+//         shop_id,
+//         counter_id,
+//         cr_on,
+//         up_on
+//       ) VALUES (
+//         'ADMIN_1',
+//         'Admin',
+//         'admin@gmail.com',
+//         '9999999999',
+//         '${hashedPassword}',
+//         'ADMIN',
+//         'SHOP_1',
+//         'COUNTER_1',
+//         now(),
+//         now()
+//       );
+//     `);
+
+//     console.log("Default system recreated ✅");
+
+//   } catch (error) {
+//     console.error("Default Insert Error:", error);
+//     throw error;
+//   }
+// }
+
+// async function deleteAPI(req, res) {
+//   try {
+//     // 🔐 PRODUCTION SAFETY
+//     if (req.body.confirm !== "DELETE") {
+//       return res.status(400).json({
+//         message: "Type DELETE to confirm ⚠️",
+//       });
+//     }
+
+//     // 🔐 Role check (optional but recommended)
+//     // if (req.user.role !== "SUPER_ADMIN") {
+//     //   return res.status(403).json({ message: "Unauthorized" });
+//     // }
+
+//     // 🔥 STEP 1: Backup
+//     const backupFile = await backupDatabase();
+//     console.log("Backup created:", backupFile);
+
+//     // 🔥 STEP 2: Delete
+//     await deleteAllData();
+
+//     // 🔥 STEP 3: Recreate system
+//     await insertDefaultData();
+
+//     res.json({
+//       success: true,
+//       message: "System reset successfully 🚀",
+//       backupFile
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       message: "Delete failed",
+//     });
+//   }
+// }
+
+// async function deleteNecessaryData() {
+//   const client = await db_query.getClient();
+
+//   try {
+//     await client.query("BEGIN");
+
+//     await client.query(`
+//       TRUNCATE TABLE
+//       sms.audit_logs,
+//       sms.notifications,
+//       sms.counter_requests,
+//       sms.expiry_logs,
+//       sms.returns,
+//       sms.chalans,
+//       sms.order_items,
+//       sms.orders,
+//       sms.stock_transactions,
+//       sms.inventory
+//       RESTART IDENTITY CASCADE;
+//     `);
+
+//     await client.query("COMMIT");
+
+//     return "Transactional data deleted ✅";
+
+//   } catch (error) {
+//     await client.query("ROLLBACK");
+//     console.error("Delete Error:", error);
+//     throw error;
+//   } finally {
+//     client.release();
+//   }
+// }
+
+// async function deleteAPIforcleandata(req, res) {
+//   try {
+//     // 🔐 Confirmation required
+//     if (req.body.confirm !== "CLEAN") {
+//       return res.status(400).json({
+//         message: "Type CLEAN to confirm ⚠️",
+//       });
+//     }
+
+//     // 🔐 Role check (recommended)
+//     // if (req.user.role !== "SUPER_ADMIN") {
+//     //   return res.status(403).json({
+//     //     message: "Unauthorized",
+//     //   });
+//     // }
+
+//     // 🔥 STEP 1: Backup
+//     const backupFile = await backupDatabase();
+//     console.log("Backup created:", backupFile);
+
+//     // 🔥 STEP 2: Delete transactional data
+//     await deleteNecessaryData();
+
+//     res.json({
+//       success: true,
+//       message: "Transactional data cleaned successfully ✅",
+//       backupFile,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       message: "Clean failed",
+//     });
+//   }
+// }

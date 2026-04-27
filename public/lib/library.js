@@ -7381,7 +7381,7 @@ async function getAdminDashboard() {
 
     const ordersTrendQuery = `
    SELECT 
-  order_date::date AS date,
+  order_date::date::text AS date,
   COUNT(*) as count
 FROM sms.orders
 GROUP BY order_date::date

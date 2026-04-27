@@ -7380,11 +7380,11 @@ async function getAdminDashboard() {
     `;
 
     const ordersTrendQuery = `
-    SELECT 
-  DATE(order_date) as date,
+   SELECT 
+  order_date::date AS date,
   COUNT(*) as count
 FROM sms.orders
-GROUP BY DATE(order_date)
+GROUP BY order_date::date
 ORDER BY date DESC
 LIMIT 7;
     `;

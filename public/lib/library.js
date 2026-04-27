@@ -7380,12 +7380,13 @@ async function getAdminDashboard() {
     `;
 
     const ordersTrendQuery = `
-    SELECT
-        DATE(order_date AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*) as count
-      FROM sms.orders
-      GROUP BY DATE(order_date AT TIME ZONE 'Asia/Kolkata')
-      ORDER BY date DESC
-      LIMIT 7
+    SELECT 
+  DATE(order_date) as date,
+  COUNT(*) as count
+FROM sms.orders
+GROUP BY DATE(order_date)
+ORDER BY date DESC
+LIMIT 7;
     `;
 
     const recentOrdersQuery = `

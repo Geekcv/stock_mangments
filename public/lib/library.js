@@ -3817,7 +3817,7 @@ async function getAllChalans(req, res) {
     const result = await db_query.customQuery(`
       SELECT
         ch.row_id AS chalan_id,
-        ch.dispatch_date AT TIME ZONE 'Asia/Kolkata' AS dispatch_date,     
+        ch.dispatch_date::date::text AS dispatch_date,     
         ch.transport_details,
         ch.is_verified,
         ch.verification_code,
@@ -7491,12 +7491,14 @@ LIMIT 10;
     `;
 
     const trendQuery = `
-      SELECT DATE(order_date) as date, COUNT(*) as count
-      FROM sms.orders
-      WHERE shop_id = '${shopId}'
-      GROUP BY DATE(order_date)
-      ORDER BY date DESC
-      LIMIT 7
+     SELECT 
+  order_date::date::text AS date,
+  COUNT(*) AS count
+FROM sms.orders
+WHERE shop_id = '${shopId}'
+GROUP BY order_date::date
+ORDER BY date DESC
+LIMIT 7;
     `;
 
     const financialQuery = `

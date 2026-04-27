@@ -2290,7 +2290,7 @@ async function getStockHistory(req, res) {
         st.quantity,
         st.reference_id,
         st.notes,
-        st.cr_on,
+        TO_CHAR(st.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
 
         s.sweet_name,
         s.unit,
@@ -3817,7 +3817,7 @@ async function getAllChalans(req, res) {
     const result = await db_query.customQuery(`
       SELECT
         ch.row_id AS chalan_id,
-        ch.dispatch_date,
+        ch.dispatch_date AT TIME ZONE 'Asia/Kolkata' AS dispatch_date,     
         ch.transport_details,
         ch.is_verified,
         ch.verification_code,
@@ -5927,7 +5927,7 @@ async function getAllCounterRequestsByShop(req, res) {
         r.row_id,
         r.quantity,
         r.status,
-        r.cr_on,
+        TO_CHAR(r.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
 
         s.row_id AS sweet_id,
         s.sweet_name,
@@ -7380,9 +7380,9 @@ async function getAdminDashboard() {
     `;
 
     const ordersTrendQuery = `
-      SELECT DATE(order_date) as date, COUNT(*) as count
+        DATE(order_date AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*) as count
       FROM sms.orders
-      GROUP BY DATE(order_date)
+      GROUP BY DATE(order_date AT TIME ZONE 'Asia/Kolkata')
       ORDER BY date DESC
       LIMIT 7
     `;
@@ -7631,7 +7631,7 @@ async function getSupplierDashboard(user) {
 SELECT 
   o.row_id,
   o.order_status,
-  o.order_date,
+   (o.order_date AT TIME ZONE 'Asia/Kolkata') AS order_date,
 
   s.shop_name,
 

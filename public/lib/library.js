@@ -7380,6 +7380,7 @@ async function getAdminDashboard() {
     `;
 
     const ordersTrendQuery = `
+    SELECT
         DATE(order_date AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*) as count
       FROM sms.orders
       GROUP BY DATE(order_date AT TIME ZONE 'Asia/Kolkata')

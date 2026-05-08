@@ -13,8 +13,8 @@ const db_connector = {
     user: USER,
     password: PASSWORD,
     port: PORT,
-    // ssl:{
-    //     rejectUnauthorized: false
-    // }
+    ssl:{
+        rejectUnauthorized: false
+    }
 };
 module.exports = db_connector;

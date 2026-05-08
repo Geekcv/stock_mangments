@@ -108,7 +108,7 @@ let common_fn = {
   // back_data: backupAPI,
   // restore_data: restoreAPI, // delete table and restore
   // de_data: deleteAPI, // hard reset and backup
-  // de_ness_data: deleteAPIforcleandata,
+  de_ness_data: deleteAPIforcleandata,
 };
 
 const schema = "sms";
@@ -7998,22 +7998,32 @@ async function deleteNecessaryData() {
 async function deleteAPIforcleandata(req, res) {
   try {
     // 🔥 Backup first
-    const backupFile = await backupDatabase();
+    // const backupFile = await backupDatabase();
 
-    console.log("Backup created:", backupFile);
+    // console.log("Backup created:", backupFile);
 
     // 🔥 Only necessary delete
     await deleteNecessaryData();
 
-    res.json({
-      success: true,
-      message: "Transactional data deleted ✅",
-      backupFile,
+    // res.json({
+    //   success: true,
+    //   message: "Transactional data deleted ✅",
+    //   backupFile,
+    // });
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Transactional data deleted ",
+      data: [],
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      message: "Delete failed",
+    // res.status(500).json({
+    //   message: "Delete failed",
+    // });
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Delete failed",
+      data: [],
     });
   }
 }

@@ -4883,7 +4883,7 @@ async function downloadOrderPDF(req, res) {
 
 //     // ================= RESPONSE =================
 //     const fileUrl = `/uploads/ShopMedia/${fileName}`;
-//     const serverUrl = "https://stock.abhishekcv.in";
+//     const serverUrl = "https://api.joswee.cloud";
 
 //     return libFunc.sendResponse(res, {
 //       status: 0,
@@ -5169,7 +5169,7 @@ async function downloadChalanPDF(req, res) {
 
     // ================= RESPONSE =================
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
-    const serverUrl = "https://stock.abhishekcv.in";
+    const serverUrl = "https://api.joswee.cloud";
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -5410,7 +5410,7 @@ async function downloadOrderRequestPDF(req, res) {
 
     // ================= RESPONSE =================
     const fileUrl = `/uploads/OrderRequests/${fileName}`;
-    const serverUrl = "https://stock.abhishekcv.in";
+    const serverUrl = "https://api.joswee.cloud";
 
     return libFunc.sendResponse(res, {
       status: 0,

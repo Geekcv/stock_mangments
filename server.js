@@ -40,7 +40,10 @@ app.use(cors({
     }
 
     // allow your production frontend
-    if (origin === "https://jodhpursweetsshop.netlify.app") {
+    // if (origin === "https://jodhpursweetsshop.netlify.app") {
+    //   return callback(null, true);
+    // }
+    if (origin === "https://joswee.cloud") {
       return callback(null, true);
     }
     // https://jodhpur.stock.abhishekcv.in/

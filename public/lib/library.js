@@ -2963,15 +2963,31 @@ async function getShopOrders(req, res) {
   try {
     const user = req.data;
 
-    // 🔒 Only SHOP_ADMIN
-    if (user.user_role !== "SHOP_ADMIN") {
+    // 🔒 Only SHOP_ADMIN & ADMIN
+    if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
       });
     }
 
-    const shopId = user.shopId;
+    let whereCondition = "";
+
+    // 🔹 SHOP_ADMIN → only own shop data
+    if (user.user_role === "SHOP_ADMIN") {
+      whereCondition = `WHERE o.shop_id = '${user.shopId}'`;
+    }
+
+    // 🔹 ADMIN
+    // if shop_id passed then filter shop wise
+    // otherwise show all orders
+    if (user.user_role === "ADMIN") {
+      const { shop_id } = req.data;
+
+      if (shop_id) {
+        whereCondition = `WHERE o.shop_id = '${shop_id}'`;
+      }
+    }
 
     const result = await db_query.customQuery(`
       SELECT 
@@ -2982,6 +2998,7 @@ async function getShopOrders(req, res) {
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
+        sh.row_id AS shop_id,
         sh.shop_name,
 
         oi.sweet_id,
@@ -3003,7 +3020,8 @@ async function getShopOrders(req, res) {
       LEFT JOIN ${schema}.sweets s 
         ON s.row_id = oi.sweet_id
 
-      WHERE o.shop_id = '${shopId}'
+      ${whereCondition}
+
       ORDER BY o.order_date DESC
     `);
 
@@ -3016,9 +3034,13 @@ async function getShopOrders(req, res) {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
+
+          shop_id: row.shop_id,
           shop_name: row.shop_name,
+
           supplier_id: row.supplier_id,
           supplier_name: row.supplier_name,
+
           items: [],
         };
       }
@@ -5895,30 +5917,55 @@ async function getAllCounterRequestsByShop(req, res) {
     const sweetTable = schema + ".sweets";
 
     const user = req.data;
-    const { status } = req.data || {};
+
+    // ✅ filters
+    const { status, shop_id } = req.data || {};
 
     // 🔒 Role validation
-    if (user.user_role !== "SHOP_ADMIN") {
+    if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Only shop admin allowed",
-      });
-    }
-
-    const shopId = user.shopId;
-
-    if (!shopId) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Invalid shop",
+        msg: "Access denied",
       });
     }
 
     // 🔹 Dynamic WHERE
-    let where = `WHERE c.shop_id = '${shopId}'`;
+    let where = "";
 
+    // ✅ SHOP_ADMIN → only own shop data
+    if (user.user_role === "SHOP_ADMIN") {
+      const shopId = user.shop_id || user.shopId;
+
+      if (!shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid shop",
+        });
+      }
+
+      where = `WHERE c.shop_id = '${shopId}'`;
+    }
+
+    // ✅ ADMIN → shop wise data only
+    if (user.user_role === "ADMIN") {
+      if (!shop_id) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "shop_id is required",
+        });
+      }
+      if (shop_id) {
+        where = `WHERE c.shop_id = '${shop_id}'`;
+      }
+    }
+
+    // ✅ status filter
     if (status) {
-      where += ` AND r.status = '${status}'`;
+      if (where) {
+        where += ` AND r.status = '${status}'`;
+      } else {
+        where = `WHERE r.status = '${status}'`;
+      }
     }
 
     // 🔹 Query
@@ -5935,15 +5982,19 @@ async function getAllCounterRequestsByShop(req, res) {
 
         c.row_id AS counter_id,
         c.counter_name,
-        c.location
+        c.location,
+        c.shop_id
 
       FROM ${requestTable} r
+
       LEFT JOIN ${counterTable} c 
         ON c.row_id = r.counter_id
+
       LEFT JOIN ${sweetTable} s 
         ON s.row_id = r.sweet_id
 
       ${where}
+
       ORDER BY r.cr_on DESC
     `);
 
@@ -8376,6 +8427,4 @@ async function deleteAPIforcleandata(req, res) {
 //   }
 // }
 
-
-
-// test 
+// test

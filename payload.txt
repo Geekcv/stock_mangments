@@ -1,3 +1,36 @@
+"now admin can view all order shop wise "
+{
+"fn": "common_fn",
+        "se": "fe_or_details",
+        "data": { 
+            "shop_id":"1774882974450_fvRK"
+          }
+
+}
+
+
+{
+"fn": "common_fn",
+        "se": "fe_all_req_counter",
+        "data": {  
+                        "shop_id":"1774882974450_fvRK"
+
+         }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 fn: "common_fn",
     se: "cr_shop",
     data: {       

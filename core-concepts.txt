@@ -372,7 +372,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3NzcxOTQwNzksImV4cCI6MTc3NzQ1MzI3OX0.OgU2CQQaYAZfDQRteyA_fPYnp6mMpaltjhVRkMDZnwM',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzczNTc2MjQ4MTQxX2N6RUsiLCJyb2xlIjoiQURNSU4iLCJjb3VudGVySWQiOiIwIiwic2hvcElkIjpudWxsLCJzdXBwbGllcklkIjpudWxsLCJpYXQiOjE3Nzk2MTM1NjksImV4cCI6MTc3OTg3Mjc2OX0.uvsZ12rG2KA2ISjOKAdnYKJswIPSteslmUSWVDuceJw',
     user_id: '1773576248141_czEK',
     role: 'ADMIN',
     counter_id: '0',
@@ -387,7 +387,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgyOTc0NDUyX1lPa1ciLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc3MTk1MTcxLCJleHAiOjE3Nzc0NTQzNzF9.G7G6uASJrwN0S1NROQ95z7bFEbHYNLKwfDeGRtaA0uQ',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgyOTc0NDUyX1lPa1ciLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc5NjEzNjg4LCJleHAiOjE3Nzk4NzI4ODh9.MHFrXL6bxYbskiLNUrV0Gqy2mGHkv0o19Bd5RjbIGr4',
     user_id: '1774452722085_cIwY',
     role: 'SHOP_ADMIN',
     counter_id: null,
@@ -403,7 +403,7 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgzMTMxNDc3X3N0aGMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDg4MzEzMTQ3NV9CM0pKIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc3MTk0NzMzLCJleHAiOjE3Nzc0NTM5MzN9.CvNrUIMy0o1rNcK7ZvReCjskXQe8E2l75uLp32XHJq8',       
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgzMTMxNDc3X3N0aGMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDg4MzEzMTQ3NV9CM0pKIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc5NjE0MDQ2LCJleHAiOjE3Nzk4NzMyNDZ9.IWwqLp3VlC2AB7vszly_sw8hWr-O0ndj7IFkAUx_D9s',       
     user_id: '1774453178933_uBaC',
     role: 'COUNTER_USER',
     counter_id: '1774453178927_Rm6G',
@@ -412,8 +412,7 @@ res {
   }
 }
 
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc1OTc1NDA1NTM4X2NmRzgiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NTk3NTQwNTUyM19CcGlnIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc1OTc1NDUyLCJleHAiOjE3NzYyMzQ2NTJ9.U4fDDuGBKZDy4Jx9-7WJ3tkKoDOZ04oO_JBtdPkZNCI
-
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc1OTc1NDA1NTM4X2NmRzgiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NTk3NTQwNTUyM19CcGlnIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzc5NjE0MTE0LCJleHAiOjE3Nzk4NzMzMTR9.ZCVevsk0lR5bRYRRJuIhCPmFhDbd9OJlsXxLHCyexEY
 res {
   status: 0,
   msg: 'Login Successful',

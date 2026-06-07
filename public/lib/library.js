@@ -5233,7 +5233,8 @@ async function downloadOrderRequestPDF(req, res) {
         COALESCE(sw.unit, '-') AS unit,
 
         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
-        COALESCE(cat.category_name, 'Others') AS category_name
+        COALESCE(cat.category_name, 'Others') AS category_name,
+        COALESCE(d.department_name, 'Others') AS department_name
 
       FROM ${orderTable} o
       LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
@@ -5241,6 +5242,8 @@ async function downloadOrderRequestPDF(req, res) {
       LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
       LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
       LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
+      LEFT JOIN ${schema}.departments d
+  ON d.row_id = cat.department_id
 
       WHERE o.row_id = '${order_id}'
     `);
@@ -5262,6 +5265,18 @@ async function downloadOrderRequestPDF(req, res) {
       if (!groupedData[counter][category]) groupedData[counter][category] = [];
 
       groupedData[counter][category].push(item);
+    });
+
+    const departmentGrouped = {};
+
+    data.forEach((item) => {
+      const department = item.department_name || "Others";
+
+      if (!departmentGrouped[department]) {
+        departmentGrouped[department] = [];
+      }
+
+      departmentGrouped[department].push(item);
     });
 
     // ================= FILE SETUP =================
@@ -5428,11 +5443,239 @@ async function downloadOrderRequestPDF(req, res) {
       }
     }
 
+    // doc.end();
+
+    // =====================================================
+    // DEPARTMENT WISE SLIPS
+    // =====================================================
+
+    // for (const department in departmentGrouped) {
+    //   doc.addPage();
+
+    //   doc.fontSize(16).font("Helvetica-Bold").text("DEPARTMENT REQUEST", {
+    //     align: "center",
+    //   });
+
+    //   doc.moveDown();
+
+    //   doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
+    //   doc.moveDown();
+
+    //   doc.fontSize(10).font("Helvetica");
+
+    //   doc.text(`Order ID: ${data[0].order_id}`);
+    //   doc.text(`Status: ${data[0].order_status}`);
+
+    //   doc.text(
+    //     `Order Date: ${
+    //       data[0].order_date
+    //         ? new Date(data[0].order_date).toLocaleDateString()
+    //         : "-"
+    //     }`,
+    //   );
+
+    //   doc.moveDown();
+
+    //   doc.fontSize(14).font("Helvetica-Bold").text(`Department: ${department}`);
+
+    //   doc.moveDown();
+
+    //   let y = doc.y;
+
+    //   const startX = 40;
+    //   const rowHeight = 20;
+
+    //   const colWidths = {
+    //     name: 300,
+    //     qty: 80,
+    //     unit: 80,
+    //   };
+
+    //   // Header
+
+    //   doc.rect(startX, y, 460, rowHeight).fill("#f2f2f2");
+
+    //   doc.fillColor("#000");
+
+    //   doc.fontSize(9).font("Helvetica-Bold");
+
+    //   doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
+
+    //   doc.text("Qty", startX + colWidths.name, y + 5, {
+    //     width: colWidths.qty,
+    //     align: "center",
+    //   });
+
+    //   doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
+    //     width: colWidths.unit,
+    //     align: "center",
+    //   });
+
+    //   y += rowHeight;
+
+    //   let total = 0;
+
+    //   departmentGrouped[department].forEach((item, index) => {
+    //     const qty = Number(item.quantity || 0);
+
+    //     total += qty;
+
+    //     if (index % 2 === 0) {
+    //       doc.rect(startX, y, 460, rowHeight).fill("#fafafa");
+
+    //       doc.fillColor("#000");
+    //     }
+
+    //     doc.fontSize(9).font("Helvetica");
+
+    //     doc.text(item.sweet_name, startX + 5, y + 5, {
+    //       width: colWidths.name,
+    //     });
+
+    //     doc.text(qty.toString(), startX + colWidths.name, y + 5, {
+    //       width: colWidths.qty,
+    //       align: "center",
+    //     });
+
+    //     doc.text(item.unit, startX + colWidths.name + colWidths.qty, y + 5, {
+    //       width: colWidths.unit,
+    //       align: "center",
+    //     });
+
+    //     y += rowHeight;
+    //   });
+
+    //   doc.rect(startX, y, 460, rowHeight).fill("#e8f8f5");
+
+    //   doc.fillColor("#000");
+
+    //   doc.fontSize(10).font("Helvetica-Bold");
+
+    //   doc.text("Total", startX + 5, y + 5, {
+    //     width: colWidths.name,
+    //   });
+
+    //   doc.text(total.toString(), startX + colWidths.name, y + 5, {
+    //     width: colWidths.qty,
+    //     align: "center",
+    //   });
+
+    //   doc.moveDown(2);
+
+    //   doc.fontSize(9).fillColor("gray").text("Department wise slip", {
+    //     align: "center",
+    //   });
+    // }
+
+
+    // =====================================================
+// DEPARTMENT SLIPS (SMALL FORMAT)
+// =====================================================
+
+for (const department in departmentGrouped) {
+
+  doc.addPage();
+
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .text("DEPARTMENT SLIP", {
+      align: "center",
+    });
+
+  doc.moveDown(0.5);
+
+  doc
+    .fontSize(14)
+    .font("Helvetica-Bold")
+    .text(department, {
+      align: "center",
+    });
+
+  doc.moveDown();
+
+  doc.fontSize(10).font("Helvetica");
+
+  doc.text(`Order : ${data[0].order_id}`);
+  doc.text(
+    `Date : ${
+      data[0].order_date
+        ? new Date(data[0].order_date).toLocaleDateString()
+        : "-"
+    }`
+  );
+
+  doc.moveDown();
+
+  doc.moveTo(40, doc.y)
+     .lineTo(550, doc.y)
+     .stroke();
+
+  doc.moveDown();
+
+  let total = 0;
+
+  departmentGrouped[department].forEach((item) => {
+
+    const qty = Number(item.quantity || 0);
+
+    total += qty;
+
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .text(
+        `${item.sweet_name}`,
+        40,
+        doc.y,
+        {
+          continued: true,
+        }
+      )
+      .text(
+        `${qty} ${item.unit}`,
+        {
+          align: "right",
+        }
+      );
+
+    doc.moveDown(0.3);
+  });
+
+  doc.moveDown();
+
+  doc.moveTo(40, doc.y)
+     .lineTo(550, doc.y)
+     .stroke();
+
+  doc.moveDown();
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .text(`TOTAL QTY : ${total}`, {
+      align: "right",
+    });
+
+  doc.moveDown(2);
+
+  doc
+    .fontSize(9)
+    .fillColor("gray")
+    .text("Department Production Slip", {
+      align: "center",
+    });
+
+  doc.fillColor("black");
+}
+
     doc.end();
 
     // ================= RESPONSE =================
     const fileUrl = `/uploads/OrderRequests/${fileName}`;
     const serverUrl = "https://api.joswee.cloud";
+    // const serverUrl = "http://localhost:8000";
 
     return libFunc.sendResponse(res, {
       status: 0,

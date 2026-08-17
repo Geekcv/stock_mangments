@@ -4932,10 +4932,13 @@ async function downloadChalanPDF(req, res) {
     // ================= QUERY =================
     const result = await db_query.customQuery(`
       SELECT
+         ch.id AS chalan_serial_id,
         ch.row_id AS chalan_id,
         ch.dispatch_date,
         ch.transport_details,
+        ch.verification_code,
 
+          o.id AS order_serial_id,
         o.row_id AS order_id,
 
         s.supplier_name,
@@ -4977,6 +4980,9 @@ async function downloadChalanPDF(req, res) {
     }
 
     const data = result.data;
+
+    const chalanDisplayId = `CHL-${String(data[0].chalan_serial_id).padStart(6, "0")}`;
+    const orderDisplayId = `ORD-${String(data[0].order_serial_id).padStart(6, "0")}`;
 
     // ================= GROUPING =================
     const groupedData = {};
@@ -5034,8 +5040,14 @@ async function downloadChalanPDF(req, res) {
       // ================= BASIC INFO =================
       doc.fontSize(10).fillColor("#000").font("Helvetica");
 
-      doc.text(`Chalan ID: ${data[0].chalan_id}`);
-      doc.text(`Order ID: ${data[0].order_id}`);
+      doc.text(`Chalan ID: ${chalanDisplayId}`);
+      doc.text(`Order ID: ${orderDisplayId}`);
+
+      doc
+        .font("Helvetica-Bold")
+        .text(`Verification Code: ${data[0].verification_code || "-"}`)
+        .font("Helvetica");
+
       doc.text(
         `Dispatch Date: ${
           data[0].dispatch_date
@@ -5568,107 +5580,80 @@ async function downloadOrderRequestPDF(req, res) {
     //   });
     // }
 
-
     // =====================================================
-// DEPARTMENT SLIPS (SMALL FORMAT)
-// =====================================================
+    // DEPARTMENT SLIPS (SMALL FORMAT)
+    // =====================================================
 
-for (const department in departmentGrouped) {
+    for (const department in departmentGrouped) {
+      doc.addPage();
 
-  doc.addPage();
+      doc.fontSize(18).font("Helvetica-Bold").text("DEPARTMENT SLIP", {
+        align: "center",
+      });
 
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .text("DEPARTMENT SLIP", {
-      align: "center",
-    });
+      doc.moveDown(0.5);
 
-  doc.moveDown(0.5);
+      doc.fontSize(14).font("Helvetica-Bold").text(department, {
+        align: "center",
+      });
 
-  doc
-    .fontSize(14)
-    .font("Helvetica-Bold")
-    .text(department, {
-      align: "center",
-    });
+      doc.moveDown();
 
-  doc.moveDown();
+      doc.fontSize(10).font("Helvetica");
 
-  doc.fontSize(10).font("Helvetica");
-
-  doc.text(`Order : ${data[0].order_id}`);
-  doc.text(
-    `Date : ${
-      data[0].order_date
-        ? new Date(data[0].order_date).toLocaleDateString()
-        : "-"
-    }`
-  );
-
-  doc.moveDown();
-
-  doc.moveTo(40, doc.y)
-     .lineTo(550, doc.y)
-     .stroke();
-
-  doc.moveDown();
-
-  let total = 0;
-
-  departmentGrouped[department].forEach((item) => {
-
-    const qty = Number(item.quantity || 0);
-
-    total += qty;
-
-    doc
-      .fontSize(12)
-      .font("Helvetica")
-      .text(
-        `${item.sweet_name}`,
-        40,
-        doc.y,
-        {
-          continued: true,
-        }
-      )
-      .text(
-        `${qty} ${item.unit}`,
-        {
-          align: "right",
-        }
+      doc.text(`Order : ${data[0].order_id}`);
+      doc.text(
+        `Date : ${
+          data[0].order_date
+            ? new Date(data[0].order_date).toLocaleDateString()
+            : "-"
+        }`,
       );
 
-    doc.moveDown(0.3);
-  });
+      doc.moveDown();
 
-  doc.moveDown();
+      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
 
-  doc.moveTo(40, doc.y)
-     .lineTo(550, doc.y)
-     .stroke();
+      doc.moveDown();
 
-  doc.moveDown();
+      let total = 0;
 
-  doc
-    .fontSize(13)
-    .font("Helvetica-Bold")
-    .text(`TOTAL QTY : ${total}`, {
-      align: "right",
-    });
+      departmentGrouped[department].forEach((item) => {
+        const qty = Number(item.quantity || 0);
 
-  doc.moveDown(2);
+        total += qty;
 
-  doc
-    .fontSize(9)
-    .fillColor("gray")
-    .text("Department Production Slip", {
-      align: "center",
-    });
+        doc
+          .fontSize(12)
+          .font("Helvetica")
+          .text(`${item.sweet_name}`, 40, doc.y, {
+            continued: true,
+          })
+          .text(`${qty} ${item.unit}`, {
+            align: "right",
+          });
 
-  doc.fillColor("black");
-}
+        doc.moveDown(0.3);
+      });
+
+      doc.moveDown();
+
+      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
+      doc.moveDown();
+
+      doc.fontSize(13).font("Helvetica-Bold").text(`TOTAL QTY : ${total}`, {
+        align: "right",
+      });
+
+      doc.moveDown(2);
+
+      doc.fontSize(9).fillColor("gray").text("Department Production Slip", {
+        align: "center",
+      });
+
+      doc.fillColor("black");
+    }
 
     doc.end();
 

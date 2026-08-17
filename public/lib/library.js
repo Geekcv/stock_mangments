@@ -3858,7 +3858,7 @@ async function getAllChalans(req, res) {
         oi.sweet_id,
         s.sweet_name,
         s.unit,
-        oi.quantity
+        oi.supplied_quantity as quantity
 
       FROM ${chalanTable} ch
 
@@ -5228,6 +5228,7 @@ async function downloadOrderRequestPDF(req, res) {
     // ================= QUERY =================
     const result = await db_query.customQuery(`
       SELECT
+          o.id AS order_serial_id,
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
@@ -5265,6 +5266,8 @@ async function downloadOrderRequestPDF(req, res) {
     if (!data || data.length === 0) {
       return res.status(404).send("No order found");
     }
+
+    const orderDisplayId = `ORD-${String(data[0].order_serial_id).padStart(6, "0")}`;
 
     // ================= GROUPING =================
     const groupedData = {};
@@ -5327,7 +5330,7 @@ async function downloadOrderRequestPDF(req, res) {
         // ================= ORDER INFO =================
         doc.fontSize(10).font("Helvetica");
 
-        doc.text(`Order ID: ${data[0].order_id}`);
+        doc.text(`Order ID: ${orderDisplayId}`);
         doc.text(`Status: ${data[0].order_status}`);
         doc.text(
           `Order Date: ${

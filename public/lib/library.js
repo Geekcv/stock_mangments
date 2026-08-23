@@ -2484,6 +2484,8 @@ async function getInventoryAlerts(req, res) {
 
 async function createCounterRequest(req, res) {
   try {
+    console.log("========== createCounterRequest START ==========");
+
     const table = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
@@ -2493,18 +2495,31 @@ async function createCounterRequest(req, res) {
     const { items } = req.data || {};
     const user = req.data;
 
+    console.log("User:", user);
+    console.log("Items:", items);
+
     //  Role validation
+    console.log("User role:", user.user_role);
+
     if (user.user_role !== "COUNTER_USER") {
+      console.log("Role validation failed");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Only counter user can create request",
       });
     }
 
+    console.log("Role validation passed");
+
     //  Always take counter_id from token
     const finalCounterId = user.counterId;
 
+    console.log("Counter ID:", finalCounterId);
+
     if (!finalCounterId) {
+      console.log("Counter ID not found");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid user counter",
@@ -2512,20 +2527,32 @@ async function createCounterRequest(req, res) {
     }
 
     //  Basic validation
+    console.log("Items length:", items?.length);
+
     if (!items || items.length === 0) {
+      console.log("Items validation failed");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Items are required",
       });
     }
 
+    console.log("Items validation passed");
+
     //  Get Counter → Shop
+    console.log("Checking counter:", finalCounterId);
+
     const counterCheck = await db_query.customQuery(`
       SELECT shop_id FROM ${counterTable}
       WHERE row_id = '${finalCounterId}'
     `);
 
+    console.log("Counter check:", counterCheck);
+
     if (!counterCheck.data || counterCheck.data.length === 0) {
+      console.log("Invalid counter");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid counter",
@@ -2534,22 +2561,41 @@ async function createCounterRequest(req, res) {
 
     const counterShopId = counterCheck.data[0].shop_id;
 
+    console.log("Counter Shop ID:", counterShopId);
+
     await connect_db.query("BEGIN");
 
-    let isRequestCreated = false; // 🔥 important flag
+    console.log("Transaction BEGIN");
+
+    let isRequestCreated = false;
 
     for (let item of items) {
+      console.log("--------------------------------");
+      console.log("Processing item:", item);
+
       const { sweet_id, quantity } = item;
 
+      console.log("Sweet ID:", sweet_id);
+      console.log("Quantity:", quantity);
+
       if (!sweet_id || !quantity || Number(quantity) <= 0) {
+        console.log("Invalid item data:", item);
+
         await connect_db.query("ROLLBACK");
+
+        console.log("Transaction ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Invalid item data",
         });
       }
 
+      console.log("Item validation passed");
+
       //  Get Sweet → Shop
+      console.log("Checking sweet:", sweet_id);
+
       const sweetCheck = await db_query.customQuery(`
         SELECT d.shop_id
         FROM ${sweetTable} s
@@ -2558,8 +2604,15 @@ async function createCounterRequest(req, res) {
         WHERE s.row_id = '${sweet_id}'
       `);
 
+      console.log("Sweet check:", sweetCheck);
+
       if (!sweetCheck.data || sweetCheck.data.length === 0) {
+        console.log("Invalid sweet:", sweet_id);
+
         await connect_db.query("ROLLBACK");
+
+        console.log("Transaction ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Invalid sweet",
@@ -2568,16 +2621,28 @@ async function createCounterRequest(req, res) {
 
       const sweetShopId = sweetCheck.data[0].shop_id;
 
+      console.log("Sweet Shop ID:", sweetShopId);
+      console.log("Counter Shop ID:", counterShopId);
+
       //  Shop match validation
       if (sweetShopId !== counterShopId) {
+        console.log("Shop mismatch");
+
         await connect_db.query("ROLLBACK");
+
+        console.log("Transaction ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Sweet does not belong to your shop",
         });
       }
 
+      console.log("Shop match validation passed");
+
       //  Duplicate pending request check
+      console.log("Checking duplicate pending request");
+
       const existing = await db_query.customQuery(`
         SELECT 1 FROM ${table}
         WHERE counter_id = '${finalCounterId}'
@@ -2585,11 +2650,24 @@ async function createCounterRequest(req, res) {
         AND status = 'PENDING'
       `);
 
+      console.log("Existing request:", existing);
+
       if (existing.data && existing.data.length > 0) {
-        continue; // skip duplicate
+        console.log("Duplicate pending request found. Skipping:", sweet_id);
+
+        continue;
       }
 
+      console.log("No duplicate pending request");
+
       //  Insert request
+      console.log("Inserting request:", {
+        counter_id: finalCounterId,
+        sweet_id,
+        quantity: Number(quantity),
+        status: "PENDING",
+      });
+
       await db_query.addData(
         table,
         {
@@ -2603,13 +2681,22 @@ async function createCounterRequest(req, res) {
         "Counter Request",
       );
 
-      isRequestCreated = true; // 🔥 mark success
+      console.log("Request inserted successfully");
+
+      isRequestCreated = true;
+
+      console.log("isRequestCreated:", isRequestCreated);
     }
 
     await connect_db.query("COMMIT");
 
+    console.log("Transaction COMMIT");
+    console.log("Final isRequestCreated:", isRequestCreated);
+
     // 🔔 Notification (AFTER COMMIT ONLY)
     if (isRequestCreated) {
+      console.log("Creating notification");
+
       const shopAdmin = await db_query.customQuery(`
         SELECT row_id FROM ${schema}.users
         WHERE role = 'SHOP_ADMIN'
@@ -2619,7 +2706,11 @@ async function createCounterRequest(req, res) {
         )
       `);
 
+      console.log("Shop Admin:", shopAdmin);
+
       if (shopAdmin.data && shopAdmin.data.length > 0) {
+        console.log("Shop Admin found:", shopAdmin.data[0].row_id);
+
         await createNotification({
           user_id: shopAdmin.data[0].row_id,
           title: "New Counter Request",
@@ -2627,8 +2718,16 @@ async function createCounterRequest(req, res) {
           type: "REQUEST",
           reference_id: finalCounterId,
         });
+
+        console.log("Notification created successfully");
+      } else {
+        console.log("Shop Admin not found");
       }
+    } else {
+      console.log("No request created, notification skipped");
     }
+
+    console.log("========== createCounterRequest END ==========");
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -2638,10 +2737,15 @@ async function createCounterRequest(req, res) {
     });
   } catch (error) {
     console.log("createCounterRequest error:", error);
+    console.log("Error message:", error.message);
+    console.log("Error stack:", error.stack);
 
     try {
       await connect_db.query("ROLLBACK");
-    } catch (e) {}
+      console.log("Transaction ROLLBACK");
+    } catch (e) {
+      console.log("Rollback error:", e);
+    }
 
     return libFunc.sendResponse(res, {
       status: 1,

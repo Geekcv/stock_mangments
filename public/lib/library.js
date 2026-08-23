@@ -3203,6 +3203,8 @@ async function getCounterRequests(req, res) {
       SELECT
         r.row_id,
 
+        CONCAT('REQ-', r.id) AS requested_order,
+
         -- Counter requested quantity
         r.quantity AS requested_quantity,
 
@@ -6551,6 +6553,8 @@ async function getAllCounterRequestsByShop(req, res) {
       SELECT
         r.row_id,
 
+        CONCAT('REQ-', r.id) AS requested_order,
+        
         -- Counter requested quantity
         r.quantity AS requested_quantity,
 

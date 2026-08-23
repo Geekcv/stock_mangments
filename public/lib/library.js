@@ -92,6 +92,7 @@ let common_fn = {
   // dhasboard
   fe_dash: getDashboardData,
   fe_dash_role: getDashboardDatarole,
+  fe_counter_dash: getCounterDashboardRequests,
 
   // profile
   fe_pro: getProfile,
@@ -3071,6 +3072,107 @@ async function getShopOrders(req, res) {
   }
 }
 
+// test 3
+// async function getCounterRequests(req, res) {
+//   try {
+//     const user = req.data;
+
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+//     const orderTable = schema + ".orders";
+
+//     let conditions = ["1=1"];
+
+//     // 🟡 COUNTER USER → own requests
+//     if (user.user_role === "COUNTER_USER") {
+//       conditions.push(`r.counter_id = '${user.counterId}'`);
+//     }
+
+//     // 🟠 SHOP ADMIN → all counters of shop
+//     if (user.user_role === "SHOP_ADMIN") {
+//       conditions.push(`c.shop_id = '${user.shopId}'`);
+//     }
+
+//     // 🔴 ADMIN → all requests
+
+//     const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+//         r.row_id,
+//         r.quantity AS requested_quantity,
+//         r.status,
+//         oi.item_status as supplier_status,
+
+//         COALESCE(
+//           SUM(oi.supplied_quantity),
+//           0
+//         ) AS supplied_quantity,
+
+//         GREATEST(
+//           r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+//           0
+//         ) AS pending_quantity,
+
+//         TO_CHAR(r.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
+
+//         c.row_id AS counter_id,
+//         c.counter_name,
+
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.counter_id = r.counter_id
+//         AND oi.sweet_id = r.sweet_id
+
+//       LEFT JOIN ${orderTable} o
+//         ON o.row_id = oi.order_id
+
+//       ${whereClause}
+
+//       GROUP BY
+//         r.row_id,
+//         r.quantity,
+//         r.status,
+//         oi.item_status,
+//         r.cr_on,
+//         c.row_id,
+//         c.counter_name,
+//         s.row_id,
+//         s.sweet_name,
+//         s.unit
+
+//       ORDER BY r.cr_on DESC
+//     `);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Counter requests fetched successfully",
+//       data: result.data || [],
+//     });
+//   } catch (error) {
+//     console.log("getCounterRequests error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
 async function getCounterRequests(req, res) {
   try {
     const user = req.data;
@@ -3078,6 +3180,8 @@ async function getCounterRequests(req, res) {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
+    const orderItemTable = schema + ".order_items";
+    const orderTable = schema + ".orders";
 
     let conditions = ["1=1"];
 
@@ -3091,16 +3195,45 @@ async function getCounterRequests(req, res) {
       conditions.push(`c.shop_id = '${user.shopId}'`);
     }
 
-    // 🔴 ADMIN → all (no filter)
+    // 🔴 ADMIN → all requests
 
     const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
     const result = await db_query.customQuery(`
       SELECT
         r.row_id,
-        r.quantity,
-        r.status,
-        TO_CHAR(r.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
+
+        -- Counter requested quantity
+        r.quantity AS requested_quantity,
+
+        r.status as shop_status,
+
+        -- Supplier item status
+        oi.item_status AS supplier_status,
+
+        -- Supplier supplied quantity
+        COALESCE(
+          SUM(oi.supplied_quantity),
+          0
+        ) AS supplied_quantity,
+
+        -- Remaining pending quantity
+        GREATEST(
+          r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+          0
+        ) AS pending_quantity,
+
+        -- Full creation date/time
+        TO_CHAR(
+          r.cr_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS cr_on,
+
+        -- 🔹 Group key
+        TO_CHAR(
+          r.cr_on,
+          'YYYY-MM-DD HH24:MI'
+        ) AS request_group,
 
         c.row_id AS counter_id,
         c.counter_name,
@@ -3110,19 +3243,90 @@ async function getCounterRequests(req, res) {
         s.unit
 
       FROM ${requestTable} r
-      LEFT JOIN ${counterTable} c 
+
+      LEFT JOIN ${counterTable} c
         ON c.row_id = r.counter_id
-      LEFT JOIN ${sweetTable} s 
+
+      LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
+      LEFT JOIN ${orderItemTable} oi
+        ON oi.counter_id = r.counter_id
+        AND oi.sweet_id = r.sweet_id
+
+      LEFT JOIN ${orderTable} o
+        ON o.row_id = oi.order_id
+
       ${whereClause}
+
+      GROUP BY
+        r.row_id,
+        r.quantity,
+        r.status,
+        oi.item_status,
+        r.cr_on,
+
+        c.row_id,
+        c.counter_name,
+
+        s.row_id,
+        s.sweet_name,
+        s.unit
+
       ORDER BY r.cr_on DESC
     `);
+
+    const requests = result.data || [];
+
+    // 🔹 Group requests according to cr_on
+    const groupedRequests = {};
+
+    requests.forEach((item) => {
+      const groupKey = item.request_group;
+
+      if (!groupedRequests[groupKey]) {
+        groupedRequests[groupKey] = {
+          request_group: groupKey,
+          cr_on: groupKey,
+
+          total_requests: 0,
+          total_requested_quantity: 0,
+          total_supplied_quantity: 0,
+          total_pending_quantity: 0,
+
+          requests: [],
+        };
+      }
+
+      // Total request count
+      groupedRequests[groupKey].total_requests += 1;
+
+      // Total requested
+      groupedRequests[groupKey].total_requested_quantity += Number(
+        item.requested_quantity || 0,
+      );
+
+      // Total supplied
+      groupedRequests[groupKey].total_supplied_quantity += Number(
+        item.supplied_quantity || 0,
+      );
+
+      // Total pending
+      groupedRequests[groupKey].total_pending_quantity += Number(
+        item.pending_quantity || 0,
+      );
+
+      // Individual request
+      groupedRequests[groupKey].requests.push(item);
+    });
+
+    // 🔹 Convert object to array
+    const data = Object.values(groupedRequests);
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Counter requests fetched successfully",
-      data: result.data || [],
+      data,
     });
   } catch (error) {
     console.log("getCounterRequests error:", error);
@@ -6141,15 +6345,159 @@ async function createNotification(user_id, title, message) {
 //   }
 // }
 
+// test 1
+// async function getAllCounterRequestsByShop(req, res) {
+//   try {
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+
+//     const user = req.data;
+
+//     // ✅ Filters
+//     const { status, shop_id } = req.data || {};
+
+//     // 🔒 Role validation
+//     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     // 🔹 Dynamic WHERE
+//     let where = "";
+
+//     // ✅ SHOP_ADMIN → only own shop data
+//     if (user.user_role === "SHOP_ADMIN") {
+//       const shopId = user.shop_id || user.shopId;
+
+//       if (!shopId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Invalid shop",
+//         });
+//       }
+
+//       where = `WHERE c.shop_id = '${shopId}'`;
+//     }
+
+//     // ✅ ADMIN → shop wise data only
+//     if (user.user_role === "ADMIN") {
+//       if (!shop_id) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "shop_id is required",
+//         });
+//       }
+
+//       where = `WHERE c.shop_id = '${shop_id}'`;
+//     }
+
+//     // ✅ Status filter
+//     if (status) {
+//       if (where) {
+//         where += ` AND r.status = '${status}'`;
+//       } else {
+//         where = `WHERE r.status = '${status}'`;
+//       }
+//     }
+
+//     // 🔹 Query
+//     const result = await db_query.customQuery(`
+//       SELECT
+//         r.row_id,
+
+//         -- Counter requested quantity
+//         r.quantity AS requested_quantity,
+
+//         -- Supplier supplied quantity
+//         COALESCE(
+//           SUM(oi.supplied_quantity),
+//           0
+//         ) AS supplied_quantity,
+
+//         -- Remaining pending quantity
+//         GREATEST(
+//           r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+//           0
+//         ) AS pending_quantity,
+
+//         r.status,
+
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit,
+
+//         c.row_id AS counter_id,
+//         c.counter_name,
+//         c.location,
+//         c.shop_id
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.counter_id = r.counter_id
+//         AND oi.sweet_id = r.sweet_id
+
+//       ${where}
+
+//       GROUP BY
+//         r.row_id,
+//         r.quantity,
+//         r.status,
+//         r.cr_on,
+
+//         s.row_id,
+//         s.sweet_name,
+//         s.unit,
+
+//         c.row_id,
+//         c.counter_name,
+//         c.location,
+//         c.shop_id
+
+//       ORDER BY r.cr_on DESC
+//     `);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Shop counter requests fetched successfully",
+//       data: result.data || [],
+//     });
+//   } catch (error) {
+//     console.log("getAllCounterRequestsByShop error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
+    const orderItemTable = schema + ".order_items";
 
     const user = req.data;
 
-    // ✅ filters
+    // ✅ Filters
     const { status, shop_id } = req.data || {};
 
     // 🔒 Role validation
@@ -6185,12 +6533,11 @@ async function getAllCounterRequestsByShop(req, res) {
           msg: "shop_id is required",
         });
       }
-      if (shop_id) {
-        where = `WHERE c.shop_id = '${shop_id}'`;
-      }
+
+      where = `WHERE c.shop_id = '${shop_id}'`;
     }
 
-    // ✅ status filter
+    // ✅ Status filter
     if (status) {
       if (where) {
         where += ` AND r.status = '${status}'`;
@@ -6203,9 +6550,34 @@ async function getAllCounterRequestsByShop(req, res) {
     const result = await db_query.customQuery(`
       SELECT
         r.row_id,
-        r.quantity,
-        r.status,
-        TO_CHAR(r.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
+
+        -- Counter requested quantity
+        r.quantity AS requested_quantity,
+
+        -- Supplier supplied quantity
+        COALESCE(
+          SUM(oi.supplied_quantity),
+          0
+        ) AS supplied_quantity,
+
+        -- Remaining pending quantity
+        GREATEST(
+          r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+          0
+        ) AS pending_quantity,
+
+        oi.item_status as status,
+
+        -- 🔹 Request group based on cr_on
+        TO_CHAR(
+          r.cr_on,
+          'YYYY-MM-DD HH24:MI'
+        ) AS request_group,
+
+        TO_CHAR(
+          r.cr_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS cr_on,
 
         s.row_id AS sweet_id,
         s.sweet_name,
@@ -6218,21 +6590,80 @@ async function getAllCounterRequestsByShop(req, res) {
 
       FROM ${requestTable} r
 
-      LEFT JOIN ${counterTable} c 
+      LEFT JOIN ${counterTable} c
         ON c.row_id = r.counter_id
 
-      LEFT JOIN ${sweetTable} s 
+      LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
+      LEFT JOIN ${orderItemTable} oi
+        ON oi.counter_id = r.counter_id
+        AND oi.sweet_id = r.sweet_id
+
       ${where}
+
+      GROUP BY
+        r.row_id,
+        r.quantity,
+        oi.item_status,
+        r.cr_on,
+
+        s.row_id,
+        s.sweet_name,
+        s.unit,
+
+        c.row_id,
+        c.counter_name,
+        c.location,
+        c.shop_id
 
       ORDER BY r.cr_on DESC
     `);
 
+    const requests = result.data || [];
+
+    // 🔹 Group requests according to cr_on (YYYY-MM-DD HH:MI)
+    const groupedRequests = {};
+
+    requests.forEach((item) => {
+      const groupKey = item.request_group;
+
+      if (!groupedRequests[groupKey]) {
+        groupedRequests[groupKey] = {
+          request_group: groupKey,
+          cr_on: groupKey,
+          total_requests: 0,
+          total_requested_quantity: 0,
+          total_supplied_quantity: 0,
+          total_pending_quantity: 0,
+          requests: [],
+        };
+      }
+
+      groupedRequests[groupKey].total_requests += 1;
+
+      groupedRequests[groupKey].total_requested_quantity += Number(
+        item.requested_quantity || 0,
+      );
+
+      groupedRequests[groupKey].total_supplied_quantity += Number(
+        item.supplied_quantity || 0,
+      );
+
+      groupedRequests[groupKey].total_pending_quantity += Number(
+        item.pending_quantity || 0,
+      );
+
+      groupedRequests[groupKey].requests.push(item);
+    });
+
+    // 🔹 Convert object → array
+    const data = Object.values(groupedRequests);
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Shop counter requests fetched successfully",
-      data: result.data || [],
+      data,
     });
   } catch (error) {
     console.log("getAllCounterRequestsByShop error:", error);
@@ -8658,4 +9089,102 @@ async function deleteAPIforcleandata(req, res) {
 //   }
 // }
 
-// test
+async function getCounterDashboardRequests(req, res) {
+  try {
+    const user = req.data;
+
+    const requestTable = schema + ".counter_requests";
+    const counterTable = schema + ".counters";
+    const sweetTable = schema + ".sweets";
+    const orderItemTable = schema + ".order_items";
+
+    // 🔒 Only Counter User
+    if (user.user_role !== "COUNTER_USER") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    const counterId = user.counterId || user.counter_id;
+
+    if (!counterId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid counter",
+      });
+    }
+
+    const result = await db_query.customQuery(`
+      SELECT
+        r.row_id,
+
+        -- Requested quantity
+        r.quantity AS requested_quantity,
+
+        -- Supplied quantity
+        COALESCE(
+          SUM(oi.supplied_quantity),
+          0
+        ) AS supplied_quantity,
+
+        -- Pending quantity
+        GREATEST(
+          r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+          0
+        ) AS pending_quantity,
+
+        oi.item_status,
+
+        TO_CHAR(
+          r.cr_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS cr_on,
+
+        s.row_id AS sweet_id,
+        s.sweet_name,
+        s.unit
+
+      FROM ${requestTable} r
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = r.counter_id
+
+      LEFT JOIN ${sweetTable} s
+        ON s.row_id = r.sweet_id
+
+      LEFT JOIN ${orderItemTable} oi
+        ON oi.counter_id = r.counter_id
+        AND oi.sweet_id = r.sweet_id
+
+      WHERE r.counter_id = '${counterId}'
+
+      GROUP BY
+        r.row_id,
+        r.quantity,
+        oi.item_status,
+        r.cr_on,
+        s.row_id,
+        s.sweet_name,
+        s.unit
+
+      ORDER BY r.cr_on DESC
+
+      LIMIT 10
+    `);
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+      msg: "Last 10 counter requests fetched successfully",
+      data: result.data || [],
+    });
+  } catch (error) {
+    console.log("getCounterDashboardRequests error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}

@@ -387,12 +387,12 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgyOTc0NDUyX1lPa1ciLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzgwODEzMzMzLCJleHAiOjE3ODEwNzI1MzN9.KyhleyRTzP5La2pW-PoF7SNWWATvPsMfS6My3IlBIMk',
-    user_id: '1774452722085_cIwY',
-    role: 'SHOP_ADMIN',
-    counter_id: null,
-    shop_id: '1774452722080_yFUN',
-    supplier_id: null
+   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgyOTc0NDUyX1lPa1ciLCJyb2xlIjoiU0hPUF9BRE1JTiIsImNvdW50ZXJJZCI6bnVsbCwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzg3NDY0NTY0LCJleHAiOjE3ODc3MjM3NjR9.2sydSc7XUQuELUTbnydio-RxWkm0PyxwsLo8fRjeGWY"
+user_id: "1774882974452_YOkW"
+role: "SHOP_ADMIN"
+counter_id: null
+shop_id: "1774882974450_fvRK"
+supplier_id: null
   }
 }
 
@@ -403,13 +403,21 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgzMTMxNDc3X3N0aGMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDg4MzEzMTQ3NV9CM0pKIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzgwODEzNDI2LCJleHAiOjE3ODEwNzI2MjZ9.cKIdy4Hl1xMGER31QZOZ8ziL77ofJMnulzqQIM7_220',       
-    user_id: '1774453178933_uBaC',
-    role: 'COUNTER_USER',
-    counter_id: '1774453178927_Rm6G',
-    shop_id: '1774452722080_yFUN',
-    supplier_id: null
-  }
+   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODgzMTMxNDc3X3N0aGMiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NDg4MzEzMTQ3NV9CM0pKIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzg3NDY0Mzg3LCJleHAiOjE3ODc3MjM1ODd9.y57RQfIcCtNgJXbHWnUkyFHJl-5bDKBzECDfroWKWog"
+user_id: "1774883131477_sthc"
+role: "COUNTER_USER"
+counter_id: "1774883131475_B3JJ"
+shop_id: "1774882974450_fvRK"
+supplier_id: null
+  },
+
+
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc1OTc1NDA1NTM4X2NmRzgiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NTk3NTQwNTUyM19CcGlnIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzg3NDY0NTA4LCJleHAiOjE3ODc3MjM3MDh9.on2gLZ9lsiI71zC9Sr04GNNyzLh_yAPLmNWkSNk8__0"
+user_id: "1775975405538_cfG8"
+role: "COUNTER_USER"
+counter_id: "1775975405523_Bpig"
+shop_id: "1774882974450_fvRK"
+supplier_id: null
 }
 
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc1OTc1NDA1NTM4X2NmRzgiLCJyb2xlIjoiQ09VTlRFUl9VU0VSIiwiY291bnRlcklkIjoiMTc3NTk3NTQwNTUyM19CcGlnIiwic2hvcElkIjoiMTc3NDg4Mjk3NDQ1MF9mdlJLIiwic3VwcGxpZXJJZCI6bnVsbCwiaWF0IjoxNzgwODEzNDY3LCJleHAiOjE3ODEwNzI2Njd9.WvJhlNZpWnykrODwhUk1HIno7uaSGhDlD68ofPgcaLE
@@ -417,12 +425,12 @@ res {
   status: 0,
   msg: 'Login Successful',
   data: {
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODg0NjUwNDcxX0JjejAiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwic3VwcGxpZXJJZCI6IjE3NzQ4ODQ2NTA0NjlfbGMxaiIsImlhdCI6MTc4MDgxMzUyNiwiZXhwIjoxNzgxMDcyNzI2fQ.D5IAgkDKVQWohMnK_9kCwVgW-_HjToamB450kGAdTYY',
-    user_id: '1774457787825_gKrL',
-    role: 'SUPPLIER',
-    counter_id: null,
-    shop_id: null,
-    supplier_id: '1774457787816_Wri8'
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzc0ODg0NjUwNDcxX0JjejAiLCJyb2xlIjoiU1VQUExJRVIiLCJjb3VudGVySWQiOm51bGwsInNob3BJZCI6bnVsbCwic3VwcGxpZXJJZCI6IjE3NzQ4ODQ2NTA0NjlfbGMxaiIsImlhdCI6MTc4NzQ2NDY1NCwiZXhwIjoxNzg3NzIzODU0fQ.VADJJ0YJxDSJEFxKuB7FeaOA1FB0DqtsjY58eLfMCT8"
+user_id: "1774884650471_Bcz0"
+role: "SUPPLIER"
+counter_id: null
+shop_id: null
+supplier_id: "1774884650469_lc1j"
   }
 }
 

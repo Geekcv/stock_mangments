@@ -6768,6 +6768,8 @@ async function getAllCounterRequestsByShop(req, res) {
     // 🔹 Convert object → array
     const data = Object.values(groupedRequests);
 
+    console.log("data",data)
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Shop counter requests fetched successfully",

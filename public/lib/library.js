@@ -3319,7 +3319,7 @@ async function getCounterRequests(req, res) {
 
         -- Supplier supplied quantity
         COALESCE(
-          SUM(oi.supplied_quantity),
+          oi.supplied_quantity,
           0
         ) AS supplied_quantity,
 

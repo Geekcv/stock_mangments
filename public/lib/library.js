@@ -6788,13 +6788,13 @@ async function createNotification(user_id, title, message) {
 //   }
 // }
 
+
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
     const orderItemTable = schema + ".order_items";
-    const orderTable = schema + ".orders";
 
     const user = req.data;
 
@@ -6858,30 +6858,11 @@ async function getAllCounterRequestsByShop(req, res) {
         r.quantity AS requested_quantity,
 
         -- Supplied quantity
-        COALESCE((
-          SELECT SUM(oi.supplied_quantity)
-          FROM ${orderItemTable} oi
-          INNER JOIN ${orderTable} o
-            ON o.row_id = oi.order_id
-          WHERE oi.counter_id = r.counter_id
-            AND oi.sweet_id = r.sweet_id
-            AND o.shop_id = c.shop_id
-            AND o.order_date >= r.cr_on
-        ), 0) AS supplied_quantity,
+        COALESCE(oi.supplied_quantity, 0) AS supplied_quantity,
 
         -- Pending quantity
         GREATEST(
-          r.quantity -
-          COALESCE((
-            SELECT SUM(oi.supplied_quantity)
-            FROM ${orderItemTable} oi
-            INNER JOIN ${orderTable} o
-              ON o.row_id = oi.order_id
-            WHERE oi.counter_id = r.counter_id
-              AND oi.sweet_id = r.sweet_id
-              AND o.shop_id = c.shop_id
-              AND o.order_date >= r.cr_on
-          ), 0),
+          r.quantity - COALESCE(oi.supplied_quantity, 0),
           0
         ) AS pending_quantity,
 
@@ -6915,7 +6896,27 @@ async function getAllCounterRequestsByShop(req, res) {
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
+      LEFT JOIN ${orderItemTable} oi
+        ON oi.counter_id = r.counter_id
+        AND oi.sweet_id = r.sweet_id
+
       ${where}
+
+      GROUP BY
+        r.row_id,
+        r.quantity,
+        oi.supplied_quantity,
+        r.status,
+        r.cr_on,
+
+        s.row_id,
+        s.sweet_name,
+        s.unit,
+
+        c.row_id,
+        c.counter_name,
+        c.location,
+        c.shop_id
 
       ORDER BY r.cr_on DESC
     `);
@@ -6924,7 +6925,7 @@ async function getAllCounterRequestsByShop(req, res) {
 
     const requests = result.data || [];
 
-    // Group requests
+    // Group requests according to request time
     const groupedRequests = {};
 
     requests.forEach((item) => {
@@ -6959,6 +6960,7 @@ async function getAllCounterRequestsByShop(req, res) {
       groupedRequests[groupKey].requests.push(item);
     });
 
+    // Convert object → array
     const data = Object.values(groupedRequests);
 
     console.log("data", data);

@@ -6674,7 +6674,7 @@ async function getAllCounterRequestsByShop(req, res) {
           0
         ) AS pending_quantity,
 
-        oi.item_status as status,
+        r.status,
 
         -- 🔹 Request group based on cr_on
         TO_CHAR(
@@ -6713,7 +6713,7 @@ async function getAllCounterRequestsByShop(req, res) {
       GROUP BY
         r.row_id,
         r.quantity,
-        oi.item_status,
+        r.status,
         r.cr_on,
 
         s.row_id,

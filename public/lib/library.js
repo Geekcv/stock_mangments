@@ -6789,6 +6789,200 @@ async function createNotification(user_id, title, message) {
 // }
 
 
+// async function getAllCounterRequestsByShop(req, res) {
+//   try {
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+
+//     const user = req.data;
+
+//     // Filters
+//     const { status, shop_id } = req.data || {};
+
+//     // Role validation
+//     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     // Dynamic WHERE
+//     let where = "";
+
+//     // SHOP_ADMIN → only own shop data
+//     if (user.user_role === "SHOP_ADMIN") {
+//       const shopId = user.shop_id || user.shopId;
+
+//       if (!shopId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Invalid shop",
+//         });
+//       }
+
+//       where = `WHERE c.shop_id = '${shopId}'`;
+//     }
+
+//     // ADMIN → shop wise data
+//     if (user.user_role === "ADMIN") {
+//       if (!shop_id) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "shop_id is required",
+//         });
+//       }
+
+//       where = `WHERE c.shop_id = '${shop_id}'`;
+//     }
+
+//     // Status filter
+//     if (status) {
+//       if (where) {
+//         where += ` AND r.status = '${status}'`;
+//       } else {
+//         where = `WHERE r.status = '${status}'`;
+//       }
+//     }
+
+//     // Query
+//     const result = await db_query.customQuery(`
+//       SELECT
+//         r.row_id,
+
+//         CONCAT('REQ-', r.id) AS requested_order,
+
+//         -- Requested quantity
+//         r.quantity AS requested_quantity,
+
+//         -- Supplied quantity
+//         COALESCE(oi.supplied_quantity, 0) AS supplied_quantity,
+
+//         -- Pending quantity
+//         GREATEST(
+//           r.quantity - COALESCE(oi.supplied_quantity, 0),
+//           0
+//         ) AS pending_quantity,
+
+//         r.status,
+
+//         -- Request group
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI'
+//         ) AS request_group,
+
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit,
+
+//         c.row_id AS counter_id,
+//         c.counter_name,
+//         c.location,
+//         c.shop_id
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.counter_id = r.counter_id
+//         AND oi.sweet_id = r.sweet_id
+
+//       ${where}
+
+//       GROUP BY
+//         r.row_id,
+//         r.quantity,
+//         oi.supplied_quantity,
+//         r.status,
+//         r.cr_on,
+
+//         s.row_id,
+//         s.sweet_name,
+//         s.unit,
+
+//         c.row_id,
+//         c.counter_name,
+//         c.location,
+//         c.shop_id
+
+//       ORDER BY r.cr_on DESC
+//     `);
+
+//     console.log("result", result);
+
+//     const requests = result.data || [];
+
+//     // Group requests according to request time
+//     const groupedRequests = {};
+
+//     requests.forEach((item) => {
+//       const groupKey = item.request_group;
+
+//       if (!groupedRequests[groupKey]) {
+//         groupedRequests[groupKey] = {
+//           request_group: groupKey,
+//           cr_on: groupKey,
+//           total_requests: 0,
+//           total_requested_quantity: 0,
+//           total_supplied_quantity: 0,
+//           total_pending_quantity: 0,
+//           requests: [],
+//         };
+//       }
+
+//       groupedRequests[groupKey].total_requests += 1;
+
+//       groupedRequests[groupKey].total_requested_quantity += Number(
+//         item.requested_quantity || 0
+//       );
+
+//       groupedRequests[groupKey].total_supplied_quantity += Number(
+//         item.supplied_quantity || 0
+//       );
+
+//       groupedRequests[groupKey].total_pending_quantity += Number(
+//         item.pending_quantity || 0
+//       );
+
+//       groupedRequests[groupKey].requests.push(item);
+//     });
+
+//     // Convert object → array
+//     const data = Object.values(groupedRequests);
+
+//     console.log("data", data);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Shop counter requests fetched successfully",
+//       data,
+//     });
+
+//   } catch (error) {
+//     console.log("getAllCounterRequestsByShop error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
+
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
@@ -6801,7 +6995,7 @@ async function getAllCounterRequestsByShop(req, res) {
     // Filters
     const { status, shop_id } = req.data || {};
 
-    // Role validation
+    // 🔒 Role validation
     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -6809,7 +7003,7 @@ async function getAllCounterRequestsByShop(req, res) {
       });
     }
 
-    // Dynamic WHERE
+    // 🔹 Dynamic WHERE
     let where = "";
 
     // SHOP_ADMIN → only own shop data
@@ -6847,7 +7041,7 @@ async function getAllCounterRequestsByShop(req, res) {
       }
     }
 
-    // Query
+    // 🔹 Query
     const result = await db_query.customQuery(`
       SELECT
         r.row_id,
@@ -6896,27 +7090,22 @@ async function getAllCounterRequestsByShop(req, res) {
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
-      LEFT JOIN ${orderItemTable} oi
+      -- 🔹 Only ONE order_item per counter + sweet
+      LEFT JOIN (
+        SELECT DISTINCT ON (counter_id, sweet_id)
+          counter_id,
+          sweet_id,
+          supplied_quantity
+        FROM ${orderItemTable}
+        ORDER BY
+          counter_id,
+          sweet_id,
+          cr_on DESC
+      ) oi
         ON oi.counter_id = r.counter_id
         AND oi.sweet_id = r.sweet_id
 
       ${where}
-
-      GROUP BY
-        r.row_id,
-        r.quantity,
-        oi.supplied_quantity,
-        r.status,
-        r.cr_on,
-
-        s.row_id,
-        s.sweet_name,
-        s.unit,
-
-        c.row_id,
-        c.counter_name,
-        c.location,
-        c.shop_id
 
       ORDER BY r.cr_on DESC
     `);
@@ -6925,7 +7114,7 @@ async function getAllCounterRequestsByShop(req, res) {
 
     const requests = result.data || [];
 
-    // Group requests according to request time
+    // 🔹 Group requests according to request time
     const groupedRequests = {};
 
     requests.forEach((item) => {
@@ -6960,7 +7149,7 @@ async function getAllCounterRequestsByShop(req, res) {
       groupedRequests[groupKey].requests.push(item);
     });
 
-    // Convert object → array
+    // 🔹 Convert object → array
     const data = Object.values(groupedRequests);
 
     console.log("data", data);

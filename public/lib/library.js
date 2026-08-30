@@ -3370,6 +3370,7 @@ async function getCounterRequests(req, res) {
         r.quantity,
         r.status,
         oi.item_status,
+        oi.supplied_quantity,
         r.cr_on,
 
         c.row_id,

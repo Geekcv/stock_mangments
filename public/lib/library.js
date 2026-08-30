@@ -6728,6 +6728,8 @@ async function getAllCounterRequestsByShop(req, res) {
       ORDER BY r.cr_on DESC
     `);
 
+    console.log("result", result);
+
     const requests = result.data || [];
 
     // 🔹 Group requests according to cr_on (YYYY-MM-DD HH:MI)
@@ -6768,7 +6770,7 @@ async function getAllCounterRequestsByShop(req, res) {
     // 🔹 Convert object → array
     const data = Object.values(groupedRequests);
 
-    console.log("data",data)
+    console.log("data", data.requests);
 
     return libFunc.sendResponse(res, {
       status: 0,

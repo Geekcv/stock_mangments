@@ -3277,6 +3277,175 @@ async function getShopOrders(req, res) {
 //   }
 // }
 
+// async function getCounterRequests(req, res) {
+//   try {
+//     const user = req.data;
+
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+//     const orderTable = schema + ".orders";
+
+//     let conditions = ["1=1"];
+
+//     // 🟡 COUNTER USER → own requests
+//     if (user.user_role === "COUNTER_USER") {
+//       conditions.push(`r.counter_id = '${user.counterId}'`);
+//     }
+
+//     // 🟠 SHOP ADMIN → all counters of shop
+//     if (user.user_role === "SHOP_ADMIN") {
+//       conditions.push(`c.shop_id = '${user.shopId}'`);
+//     }
+
+//     // 🔴 ADMIN → all requests
+
+//     const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+//         r.row_id,
+
+//         CONCAT('REQ-', r.id) AS requested_order,
+
+//         -- Counter requested quantity
+//         r.quantity AS requested_quantity,
+
+//         r.status as shop_status,
+
+//         -- Supplier item status
+//         oi.item_status AS supplier_status,
+
+//         -- Supplier supplied quantity
+//         COALESCE(
+//           SUM(oi.supplied_quantity),
+//           0
+//         ) AS supplied_quantity,
+
+//         -- Remaining pending quantity
+//         GREATEST(
+//           r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+//           0
+//         ) AS pending_quantity,
+
+//         -- Full creation date/time
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         -- 🔹 Group key
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI'
+//         ) AS request_group,
+
+//         c.row_id AS counter_id,
+//         c.counter_name,
+
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.counter_id = r.counter_id
+//         AND oi.sweet_id = r.sweet_id
+
+//       LEFT JOIN ${orderTable} o
+//         ON o.row_id = oi.order_id
+
+//       ${whereClause}
+
+//       GROUP BY
+//         r.row_id,
+//         r.quantity,
+//         r.status,
+//         oi.item_status,
+//         r.cr_on,
+
+//         c.row_id,
+//         c.counter_name,
+
+//         s.row_id,
+//         s.sweet_name,
+//         s.unit
+
+//       ORDER BY r.cr_on DESC
+//     `);
+
+//     const requests = result.data || [];
+
+//     // 🔹 Group requests according to cr_on
+//     const groupedRequests = {};
+
+//     requests.forEach((item) => {
+//       const groupKey = item.request_group;
+
+//       if (!groupedRequests[groupKey]) {
+//         groupedRequests[groupKey] = {
+//           request_group: groupKey,
+//           cr_on: groupKey,
+
+//           total_requests: 0,
+//           total_requested_quantity: 0,
+//           total_supplied_quantity: 0,
+//           total_pending_quantity: 0,
+
+//           requests: [],
+//         };
+//       }
+
+//       // Total request count
+//       groupedRequests[groupKey].total_requests += 1;
+
+//       // Total requested
+//       groupedRequests[groupKey].total_requested_quantity += Number(
+//         item.requested_quantity || 0,
+//       );
+
+//       // Total supplied
+//       groupedRequests[groupKey].total_supplied_quantity += Number(
+//         item.supplied_quantity || 0,
+//       );
+
+//       // Total pending
+//       groupedRequests[groupKey].total_pending_quantity += Number(
+//         item.pending_quantity || 0,
+//       );
+
+//       // Individual request
+//       groupedRequests[groupKey].requests.push(item);
+//     });
+
+//     // 🔹 Convert object to array
+//     const data = Object.values(groupedRequests);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Counter requests fetched successfully",
+//       data,
+//     });
+//   } catch (error) {
+//     console.log("getCounterRequests error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
+
 async function getCounterRequests(req, res) {
   try {
     const user = req.data;
@@ -3285,7 +3454,6 @@ async function getCounterRequests(req, res) {
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
     const orderItemTable = schema + ".order_items";
-    const orderTable = schema + ".orders";
 
     let conditions = ["1=1"];
 
@@ -3312,20 +3480,18 @@ async function getCounterRequests(req, res) {
         -- Counter requested quantity
         r.quantity AS requested_quantity,
 
-        r.status as shop_status,
+        -- Shop request status
+        r.status AS shop_status,
 
         -- Supplier item status
-        oi.item_status AS supplier_status,
+        COALESCE(oi.item_status, 'PENDING') AS supplier_status,
 
         -- Supplier supplied quantity
-        COALESCE(
-          SUM(oi.supplied_quantity),
-          0
-        ) AS supplied_quantity,
+        COALESCE(oi.supplied_quantity, 0) AS supplied_quantity,
 
         -- Remaining pending quantity
         GREATEST(
-          r.quantity - COALESCE(SUM(oi.supplied_quantity), 0),
+          r.quantity - COALESCE(oi.supplied_quantity, 0),
           0
         ) AS pending_quantity,
 
@@ -3335,7 +3501,7 @@ async function getCounterRequests(req, res) {
           'YYYY-MM-DD HH24:MI:SS'
         ) AS cr_on,
 
-        -- 🔹 Group key
+        -- Group key
         TO_CHAR(
           r.cr_on,
           'YYYY-MM-DD HH24:MI'
@@ -3356,35 +3522,29 @@ async function getCounterRequests(req, res) {
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
-      LEFT JOIN ${orderItemTable} oi
-        ON oi.counter_id = r.counter_id
-        AND oi.sweet_id = r.sweet_id
-
-      LEFT JOIN ${orderTable} o
-        ON o.row_id = oi.order_id
+      -- 🔹 Select only ONE latest order item
+      LEFT JOIN LATERAL (
+        SELECT
+          oi.item_status,
+          oi.supplied_quantity,
+          oi.cr_on
+        FROM ${orderItemTable} oi
+        WHERE oi.counter_id = r.counter_id
+          AND oi.sweet_id = r.sweet_id
+        ORDER BY oi.cr_on DESC
+        LIMIT 1
+      ) oi ON TRUE
 
       ${whereClause}
-
-      GROUP BY
-        r.row_id,
-        r.quantity,
-        r.status,
-        oi.item_status,
-        r.cr_on,
-
-        c.row_id,
-        c.counter_name,
-
-        s.row_id,
-        s.sweet_name,
-        s.unit
 
       ORDER BY r.cr_on DESC
     `);
 
+    console.log("result", result);
+
     const requests = result.data || [];
 
-    // 🔹 Group requests according to cr_on
+    // 🔹 Group requests according to request time
     const groupedRequests = {};
 
     requests.forEach((item) => {
@@ -3409,17 +3569,17 @@ async function getCounterRequests(req, res) {
 
       // Total requested
       groupedRequests[groupKey].total_requested_quantity += Number(
-        item.requested_quantity || 0,
+        item.requested_quantity || 0
       );
 
       // Total supplied
       groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.supplied_quantity || 0,
+        item.supplied_quantity || 0
       );
 
       // Total pending
       groupedRequests[groupKey].total_pending_quantity += Number(
-        item.pending_quantity || 0,
+        item.pending_quantity || 0
       );
 
       // Individual request
@@ -3429,11 +3589,14 @@ async function getCounterRequests(req, res) {
     // 🔹 Convert object to array
     const data = Object.values(groupedRequests);
 
+    console.log("data", data);
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Counter requests fetched successfully",
       data,
     });
+
   } catch (error) {
     console.log("getCounterRequests error:", error);
 

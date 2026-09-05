@@ -989,14 +989,104 @@ async function createSupplier(req, res) {
   }
 }
 
+// async function fetchShops(req, res) {
+//   try {
+//     const tablename = schema + ".shops";
+
+//     const { city, state, search, shop_id } = req.data || {};
+//     const user = req.data;
+
+//     //  Role validation
+//     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     let conditions = ["is_active = true"];
+
+//     //  ADMIN
+//     if (user.user_role === "ADMIN") {
+//       if (shop_id) {
+//         conditions.push(`row_id = '${shop_id}'`);
+//       }
+//     }
+
+//     //  SHOP_ADMIN /  COUNTER_USER
+//     if (["SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+//       conditions.push(`row_id = '${user.shop_id}'`);
+//     }
+
+//     //  Filters
+//     if (city) {
+//       conditions.push(`LOWER(city) = LOWER('${city.replaceAll("'", "`")}')`);
+//     }
+
+//     if (state) {
+//       conditions.push(`LOWER(state) = LOWER('${state.replaceAll("'", "`")}')`);
+//     }
+
+//     if (search) {
+//       const safeSearch = search.replaceAll("'", "`");
+//       conditions.push(`
+//         (
+//           LOWER(shop_name) LIKE LOWER('%${safeSearch}%')
+//           OR LOWER(address) LIKE LOWER('%${safeSearch}%')
+//           OR LOWER(city) LIKE LOWER('%${safeSearch}%')
+//         )
+//       `);
+//     }
+
+//     const whereClause =
+//       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+//     const query = `
+//       SELECT
+//         row_id,
+//         shop_name,
+//         address,
+//         city,
+//         state,
+//         pincode,
+//         phone,
+//         email,
+//         gst_number,
+//         owner_name,
+//         logo_url,
+//         is_active,
+//         cr_on,
+//         up_on
+//       FROM ${tablename}
+//       ${whereClause}
+//       ORDER BY shop_name ASC
+//     `;
+
+//     console.log("Final Query:", query);
+
+//     const result = await db_query.customQuery(query, "fetch");
+
+//     return libFunc.sendResponse(res, result);
+//   } catch (error) {
+//     console.log("fetchShops error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
 async function fetchShops(req, res) {
   try {
     const tablename = schema + ".shops";
+    const userTable = schema + ".users";
 
     const { city, state, search, shop_id } = req.data || {};
     const user = req.data;
 
-    //  Role validation
+    // Role validation
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1004,36 +1094,39 @@ async function fetchShops(req, res) {
       });
     }
 
-    let conditions = ["is_active = true"];
+    let conditions = ["s.is_active = true"];
 
-    //  ADMIN
+    // ADMIN
     if (user.user_role === "ADMIN") {
       if (shop_id) {
-        conditions.push(`row_id = '${shop_id}'`);
+        conditions.push(`s.row_id = '${shop_id}'`);
       }
     }
 
-    //  SHOP_ADMIN /  COUNTER_USER
+    // SHOP_ADMIN / COUNTER_USER
     if (["SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
-      conditions.push(`row_id = '${user.shop_id}'`);
+      conditions.push(`s.row_id = '${user.shop_id}'`);
     }
 
-    //  Filters
+    // Filters
     if (city) {
-      conditions.push(`LOWER(city) = LOWER('${city.replaceAll("'", "`")}')`);
+      conditions.push(`LOWER(s.city) = LOWER('${city.replaceAll("'", "`")}')`);
     }
 
     if (state) {
-      conditions.push(`LOWER(state) = LOWER('${state.replaceAll("'", "`")}')`);
+      conditions.push(
+        `LOWER(s.state) = LOWER('${state.replaceAll("'", "`")}')`,
+      );
     }
 
     if (search) {
       const safeSearch = search.replaceAll("'", "`");
+
       conditions.push(`
         (
-          LOWER(shop_name) LIKE LOWER('%${safeSearch}%')
-          OR LOWER(address) LIKE LOWER('%${safeSearch}%')
-          OR LOWER(city) LIKE LOWER('%${safeSearch}%')
+          LOWER(s.shop_name) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(s.address) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(s.city) LIKE LOWER('%${safeSearch}%')
         )
       `);
     }
@@ -1043,28 +1136,39 @@ async function fetchShops(req, res) {
 
     const query = `
       SELECT 
-        row_id,
-        shop_name,
-        address,
-        city,
-        state,
-        pincode,
-        phone,
-        email,
-        gst_number,
-        owner_name,
-        logo_url,
-        is_active,
-        cr_on,
-        up_on
-      FROM ${tablename}
+        s.row_id,
+        s.shop_name,
+        s.address,
+        s.city,
+        s.state,
+        s.pincode,
+        s.phone,
+        s.email,
+        s.gst_number,
+        s.owner_name,
+        s.logo_url,
+        s.is_active,
+        s.cr_on,
+        s.up_on,
+
+        u.password AS password
+        
+      FROM ${tablename} s
+
+      LEFT JOIN ${userTable} u
+        ON u.shop_id = s.row_id
+        AND u.role = 'SHOP_ADMIN'
+
       ${whereClause}
-      ORDER BY shop_name ASC
+
+      ORDER BY s.shop_name ASC
     `;
 
     console.log("Final Query:", query);
 
     const result = await db_query.customQuery(query, "fetch");
+
+    console.log("result :", result);
 
     return libFunc.sendResponse(res, result);
   } catch (error) {
@@ -3445,7 +3549,6 @@ async function getShopOrders(req, res) {
 //   }
 // }
 
-
 async function getCounterRequests(req, res) {
   try {
     const user = req.data;
@@ -3569,17 +3672,17 @@ async function getCounterRequests(req, res) {
 
       // Total requested
       groupedRequests[groupKey].total_requested_quantity += Number(
-        item.requested_quantity || 0
+        item.requested_quantity || 0,
       );
 
       // Total supplied
       groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.supplied_quantity || 0
+        item.supplied_quantity || 0,
       );
 
       // Total pending
       groupedRequests[groupKey].total_pending_quantity += Number(
-        item.pending_quantity || 0
+        item.pending_quantity || 0,
       );
 
       // Individual request
@@ -3596,7 +3699,6 @@ async function getCounterRequests(req, res) {
       msg: "Counter requests fetched successfully",
       data,
     });
-
   } catch (error) {
     console.log("getCounterRequests error:", error);
 
@@ -6821,7 +6923,7 @@ async function createNotification(user_id, title, message) {
 //         r.row_id,
 
 //         CONCAT('REQ-', r.id) AS requested_order,
-        
+
 //         -- Counter requested quantity
 //         r.quantity AS requested_quantity,
 
@@ -6950,7 +7052,6 @@ async function createNotification(user_id, title, message) {
 //     });
 //   }
 // }
-
 
 // async function getAllCounterRequestsByShop(req, res) {
 //   try {
@@ -7145,7 +7246,6 @@ async function createNotification(user_id, title, message) {
 //   }
 // }
 
-
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
@@ -7298,15 +7398,15 @@ async function getAllCounterRequestsByShop(req, res) {
       groupedRequests[groupKey].total_requests += 1;
 
       groupedRequests[groupKey].total_requested_quantity += Number(
-        item.requested_quantity || 0
+        item.requested_quantity || 0,
       );
 
       groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.supplied_quantity || 0
+        item.supplied_quantity || 0,
       );
 
       groupedRequests[groupKey].total_pending_quantity += Number(
-        item.pending_quantity || 0
+        item.pending_quantity || 0,
       );
 
       groupedRequests[groupKey].requests.push(item);
@@ -7322,7 +7422,6 @@ async function getAllCounterRequestsByShop(req, res) {
       msg: "Shop counter requests fetched successfully",
       data,
     });
-
   } catch (error) {
     console.log("getAllCounterRequestsByShop error:", error);
 

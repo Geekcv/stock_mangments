@@ -1182,16 +1182,92 @@ async function fetchShops(req, res) {
   }
 }
 
+// async function fetchCounters(req, res) {
+//   console.log("request", req);
+//   try {
+//     const { shopId } = req.data || {};
+//     const user = req.data; //  FIX (req.data nahi)
+
+//     const counterTable = schema + ".counters";
+//     const shopTable = schema + ".shops";
+
+//     //  Role validation
+//     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     let whereConditions = [];
+
+//     //  ADMIN
+//     if (user.user_role === "ADMIN") {
+//       if (shopId) {
+//         whereConditions.push(`c.shop_id = '${shopId}'`);
+//       }
+//     }
+
+//     //  SHOP_ADMIN
+//     if (user.user_role === "SHOP_ADMIN") {
+//       //  Always use own shop_id (not request)
+//       whereConditions.push(`c.shop_id = '${user.shopId}'`);
+//     }
+
+//     //  COUNTER_USER
+//     if (user.user_role === "COUNTER_USER") {
+//       whereConditions.push(`c.row_id = '${user.counterId}'`);
+//     }
+
+//     //  WHERE clause
+//     const whereClause =
+//       whereConditions.length > 0
+//         ? `WHERE ${whereConditions.join(" AND ")}`
+//         : "";
+
+//     //  Final Query
+//     const query = `
+//       SELECT
+//         c.row_id,
+//         c.counter_name,
+//         c.location,
+//         c.shop_id,
+//         s.shop_name
+//       FROM ${counterTable} c
+//       LEFT JOIN ${shopTable} s
+//         ON s.row_id = c.shop_id
+//       ${whereClause}
+//       ORDER BY c.counter_name ASC
+//     `;
+
+//     console.log("Final Query:", query);
+
+//     const result = await db_query.customQuery(query, "fetch all counter");
+
+//     return libFunc.sendResponse(res, result);
+//   } catch (error) {
+//     console.log("fetchCounters error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
 async function fetchCounters(req, res) {
   console.log("request", req);
+
   try {
     const { shopId } = req.data || {};
-    const user = req.data; //  FIX (req.data nahi)
+    const user = req.data;
 
     const counterTable = schema + ".counters";
     const shopTable = schema + ".shops";
+    const userTable = schema + ".users";
 
-    //  Role validation
+    // Role validation
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1201,48 +1277,58 @@ async function fetchCounters(req, res) {
 
     let whereConditions = [];
 
-    //  ADMIN
+    // ADMIN
     if (user.user_role === "ADMIN") {
       if (shopId) {
         whereConditions.push(`c.shop_id = '${shopId}'`);
       }
     }
 
-    //  SHOP_ADMIN
+    // SHOP_ADMIN
     if (user.user_role === "SHOP_ADMIN") {
-      //  Always use own shop_id (not request)
       whereConditions.push(`c.shop_id = '${user.shopId}'`);
     }
 
-    //  COUNTER_USER
+    // COUNTER_USER
     if (user.user_role === "COUNTER_USER") {
       whereConditions.push(`c.row_id = '${user.counterId}'`);
     }
 
-    //  WHERE clause
+    // WHERE clause
     const whereClause =
       whereConditions.length > 0
         ? `WHERE ${whereConditions.join(" AND ")}`
         : "";
 
-    //  Final Query
+    // Final Query
     const query = `
       SELECT
         c.row_id,
         c.counter_name,
         c.location,
         c.shop_id,
-        s.shop_name
+        s.shop_name,
+
+        u.phone AS user_phone,
+        u.password AS password
+
       FROM ${counterTable} c
+
       LEFT JOIN ${shopTable} s
         ON s.row_id = c.shop_id
+
+      LEFT JOIN ${userTable} u
+        ON u.counter_id = c.row_id
+        AND u.role = 'COUNTER_USER'
+
       ${whereClause}
+
       ORDER BY c.counter_name ASC
     `;
 
-    console.log("Final Query:", query);
-
     const result = await db_query.customQuery(query, "fetch all counter");
+
+    console.log("result Query:", result);
 
     return libFunc.sendResponse(res, result);
   } catch (error) {
@@ -1255,23 +1341,56 @@ async function fetchCounters(req, res) {
     });
   }
 }
+
+// async function fetchSuppliers(req, res) {
+//   console.log("request", req);
+
+//   const tablename = schema + ".suppliers";
+
+//   const query = `
+//     SELECT
+//       row_id,
+//       supplier_name,
+//       phone,
+//       email,
+//       address
+//     FROM ${tablename}
+//     ORDER BY supplier_name ASC
+//   `;
+
+//   const result = await db_query.customQuery(query, "Supplier fetch");
+//   console.log("results->", result);
+
+//   return libFunc.sendResponse(res, result);
+// }
+
 async function fetchSuppliers(req, res) {
   console.log("request", req);
 
-  const tablename = schema + ".suppliers";
+  const supplierTable = schema + ".suppliers";
+  const userTable = schema + ".users";
 
   const query = `
-    SELECT
-      row_id,
-      supplier_name,
-      phone,
-      email,
-      address
-    FROM ${tablename}
-    ORDER BY supplier_name ASC
+    SELECT 
+      s.row_id,
+      s.supplier_name,
+      s.phone,
+      s.email,
+      s.address,
+
+      u.password AS password
+
+    FROM ${supplierTable} s
+
+    LEFT JOIN ${userTable} u
+      ON u.supplier_id = s.row_id
+      AND u.role = 'SUPPLIER'
+
+    ORDER BY s.supplier_name ASC
   `;
 
   const result = await db_query.customQuery(query, "Supplier fetch");
+
   console.log("results->", result);
 
   return libFunc.sendResponse(res, result);

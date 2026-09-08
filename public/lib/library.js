@@ -50,12 +50,14 @@ let common_fn = {
   fe_cat_con_by_admin: fetchCountersAndCategoriesByShop,
   verfiy_challan: verifyChalan,
   fetch_order_challan: getShopChalanFullDetails,
+  ass_sweets_con: assignSweetToCounter,
 
   // counter
   cr_counter: createCounter,
   fe_counter: fetchCounters,
   fe_order_req: getCounterRequests,
   cr_counter_req: createCounterRequest,
+  // fe_all_my_sweets:fetchCounterSweets,
 
   // supplier
   cr_supplier: createSupplier,
@@ -1398,19 +1400,17 @@ async function fetchSuppliers(req, res) {
 
 async function createDepartment(req, res) {
   console.log("req", req);
+
   try {
     const tablename = schema + ".departments";
 
-    const {
-      row_id, // ✅ NEW
-      department_name,
-      description = "",
-      shop_id,
-    } = req.data || {};
+    const { row_id, department_name, description = "" } = req.data || {};
 
     const user = req.data;
 
+    // =====================================
     // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1418,46 +1418,32 @@ async function createDepartment(req, res) {
       });
     }
 
+    // =====================================
     // Validation
-    if (!department_name) {
+    // =====================================
+    if (!department_name || !department_name.trim()) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Department name is required",
       });
     }
 
-    // Resolve shop_id
-    let finalShopId;
+    const departmentName = department_name.trim().replaceAll("'", "`");
 
-    if (user.user_role === "ADMIN") {
-      if (!shop_id) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "shop_id is required",
-        });
-      }
-      finalShopId = shop_id.trim();
-    }
-
-    if (user.user_role === "SHOP_ADMIN") {
-      if (shop_id && shop_id !== user.shopId) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "You can only create department in your shop",
-        });
-      }
-      finalShopId = user.shopId;
-    }
+    const departmentDescription = description
+      ? description.trim().replaceAll("'", "`")
+      : "";
 
     // =====================================
-    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // UPDATE FLOW
     // =====================================
     if (row_id) {
-      // check exist
+      // Check department exists
       const existingDept = await db_query.customQuery(`
-    SELECT row_id FROM ${tablename}
-    WHERE row_id = '${row_id}'
-  `);
+        SELECT row_id
+        FROM ${tablename}
+        WHERE row_id = '${row_id}'
+      `);
 
       if (!existingDept.data?.length) {
         return libFunc.sendResponse(res, {
@@ -1466,31 +1452,30 @@ async function createDepartment(req, res) {
         });
       }
 
-      // duplicate check (exclude same row)
+      // Global duplicate check
       const duplicate = await db_query.customQuery(`
-    SELECT row_id FROM ${tablename}
-    WHERE department_name = '${department_name.trim()}'
-    AND shop_id = '${finalShopId}'
-    AND row_id != '${row_id}'
-  `);
+        SELECT row_id
+        FROM ${tablename}
+        WHERE LOWER(department_name) = LOWER('${departmentName}')
+        AND row_id != '${row_id}'
+      `);
 
       if (duplicate.data?.length > 0) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Department already exists in this shop",
+          msg: "Department already exists",
         });
       }
 
-      // ✅ CUSTOM UPDATE QUERY (no addData)
+      // Update department
       await db_query.customQuery(`
-    UPDATE ${tablename}
-    SET 
-      department_name = '${department_name.trim().replaceAll("'", "`")}',
-      description = '${description.trim()}',
-      shop_id = '${finalShopId}',
-      up_on = now()
-    WHERE row_id = '${row_id}'
-  `);
+        UPDATE ${tablename}
+        SET
+          department_name = '${departmentName}',
+          description = '${departmentDescription}',
+          up_on = now()
+        WHERE row_id = '${row_id}'
+      `);
 
       return libFunc.sendResponse(res, {
         status: 0,
@@ -1499,27 +1484,28 @@ async function createDepartment(req, res) {
     }
 
     // =====================================
-    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // CREATE FLOW
     // =====================================
 
+    // Global duplicate check
     const existing = await db_query.customQuery(`
-      SELECT row_id FROM ${tablename}
-      WHERE department_name = '${department_name.trim()}'
-      AND shop_id = '${finalShopId}'
+      SELECT row_id
+      FROM ${tablename}
+      WHERE LOWER(department_name) = LOWER('${departmentName}')
     `);
 
-    if (existing.data && existing.data.length > 0) {
+    if (existing.data?.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Department already exists in this shop",
+        msg: "Department already exists",
       });
     }
 
+    // Insert common department
     const columns = {
       row_id: libFunc.randomid(),
-      department_name: department_name.trim().replaceAll("'", "`"),
-      description: description.trim(),
-      shop_id: finalShopId,
+      department_name: departmentName,
+      description: departmentDescription,
     };
 
     const resp = await db_query.addData(tablename, columns, null, "Department");
@@ -1539,12 +1525,13 @@ async function createDepartment(req, res) {
 async function fetchDepartments(req, res) {
   try {
     const deptTable = `${schema}.departments`;
-    const shopTable = `${schema}.shops`;
 
-    const user = req.data; //  FIX
-    const { shop_id } = req.data || {}; // optional filter
+    const user = req.data;
+    console.log("re1", req);
 
-    //  Role validation
+    // =====================================
+    // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1552,41 +1539,18 @@ async function fetchDepartments(req, res) {
       });
     }
 
-    let whereConditions = [];
-
-    //  ADMIN
-    if (user.user_role === "ADMIN") {
-      if (shop_id) {
-        whereConditions.push(`d.shop_id = '${shop_id}'`);
-      }
-    }
-
-    //  SHOP_ADMIN
-    if (user.user_role === "SHOP_ADMIN") {
-      // ❗ always force own shop
-      whereConditions.push(`d.shop_id = '${user.shopId}'`);
-    }
-
-    //  Build WHERE clause
-    const whereClause =
-      whereConditions.length > 0
-        ? `WHERE ${whereConditions.join(" AND ")}`
-        : "";
-
-    //  Final Query
+    // =====================================
+    // Fetch COMMON departments
+    // =====================================
     const sql = `
       SELECT
         d.row_id,
         d.department_name,
         d.description,
-        d.shop_id,
-        s.shop_name,
-        d.cr_on
+        d.cr_on,
+        d.up_on
       FROM ${deptTable} d
-      LEFT JOIN ${shopTable} s
-        ON s.row_id = d.shop_id
-      ${whereClause}
-      ORDER BY d.department_name
+      ORDER BY d.department_name ASC
     `;
 
     console.log("Final Query:", sql);
@@ -1607,20 +1571,18 @@ async function fetchDepartments(req, res) {
 
 async function createCategory(req, res) {
   console.log("req", req);
+
   try {
     const tablename = schema + ".categories";
     const deptTable = schema + ".departments";
 
-    const {
-      row_id, // ✅ NEW
-      department_id,
-      category_name,
-      shop_id,
-    } = req.data || {};
+    const { row_id, department_id, category_name } = req.data || {};
 
     const user = req.data;
 
+    // =====================================
     // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1628,61 +1590,45 @@ async function createCategory(req, res) {
       });
     }
 
+    // =====================================
     // Basic validation
-    if (!department_id || !category_name) {
+    // =====================================
+    if (!department_id || !category_name || !category_name.trim()) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Department and Category name required",
       });
     }
 
-    // Check department exists + get shop_id
+    const departmentId = department_id.trim();
+    const categoryName = category_name.trim().replaceAll("'", "`");
+
+    // =====================================
+    // Check department exists
+    // =====================================
     const deptCheck = await db_query.customQuery(`
-      SELECT row_id, shop_id 
+      SELECT row_id
       FROM ${deptTable}
-      WHERE row_id = '${department_id}'
+      WHERE row_id = '${departmentId}'
     `);
 
-    if (!deptCheck.data || deptCheck.data.length === 0) {
+    if (!deptCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid department",
       });
     }
 
-    const department = deptCheck.data[0];
-    let finalShopId;
-
-    if (user.user_role === "ADMIN") {
-      if (!shop_id) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "shop_id is required",
-        });
-      }
-      finalShopId = shop_id.trim();
-    }
-
-    // SHOP_ADMIN access control
-    if (user.user_role === "SHOP_ADMIN") {
-      if (department.shop_id !== user.shopId) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "You cannot add category to another shop's department",
-        });
-      }
-      finalShopId = user.shopId;
-    }
-
     // =====================================
-    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // UPDATE FLOW
     // =====================================
     if (row_id) {
-      // check category exists
+      // Check category exists
       const catCheck = await db_query.customQuery(`
-    SELECT row_id FROM ${tablename}
-    WHERE row_id = '${row_id}'
-  `);
+        SELECT row_id
+        FROM ${tablename}
+        WHERE row_id = '${row_id}'
+      `);
 
       if (!catCheck.data?.length) {
         return libFunc.sendResponse(res, {
@@ -1691,13 +1637,16 @@ async function createCategory(req, res) {
         });
       }
 
-      // duplicate check (exclude same row)
+      // Duplicate check
+      // Same category name cannot exist
+      // under the same department
       const duplicate = await db_query.customQuery(`
-    SELECT row_id FROM ${tablename}
-    WHERE category_name = '${category_name.trim()}'
-    AND department_id = '${department_id}'
-    AND row_id != '${row_id}'
-  `);
+        SELECT row_id
+        FROM ${tablename}
+        WHERE LOWER(category_name) = LOWER('${categoryName}')
+        AND department_id = '${departmentId}'
+        AND row_id != '${row_id}'
+      `);
 
       if (duplicate.data?.length > 0) {
         return libFunc.sendResponse(res, {
@@ -1706,16 +1655,15 @@ async function createCategory(req, res) {
         });
       }
 
-      // ✅ CUSTOM UPDATE QUERY (no addData)
+      // Update category
       await db_query.customQuery(`
-    UPDATE ${tablename}
-    SET 
-      department_id = '${department_id.trim()}',
-      category_name = '${category_name.trim().replaceAll("'", "`")}',
-      shop_id = '${finalShopId}',
-      up_on = now()
-    WHERE row_id = '${row_id}'
-  `);
+        UPDATE ${tablename}
+        SET
+          department_id = '${departmentId}',
+          category_name = '${categoryName}',
+          up_on = now()
+        WHERE row_id = '${row_id}'
+      `);
 
       return libFunc.sendResponse(res, {
         status: 0,
@@ -1724,27 +1672,31 @@ async function createCategory(req, res) {
     }
 
     // =====================================
-    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // CREATE FLOW
     // =====================================
 
+    // Duplicate check
     const existing = await db_query.customQuery(`
-      SELECT row_id FROM ${tablename}
-      WHERE category_name = '${category_name.trim()}'
-      AND department_id = '${department_id}'
+      SELECT row_id
+      FROM ${tablename}
+      WHERE LOWER(category_name) = LOWER('${categoryName}')
+      AND department_id = '${departmentId}'
     `);
 
-    if (existing.data && existing.data.length > 0) {
+    if (existing.data?.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Category already exists in this department",
       });
     }
 
+    // =====================================
+    // Create common category
+    // =====================================
     const columns = {
       row_id: libFunc.randomid(),
-      department_id: department_id.trim(),
-      category_name: category_name.trim().replaceAll("'", "`"),
-      shop_id: finalShopId,
+      department_id: departmentId,
+      category_name: categoryName,
     };
 
     const resp = await db_query.addData(tablename, columns, null, "Category");
@@ -1764,13 +1716,14 @@ async function createCategory(req, res) {
 async function fetchAllCategories(req, res) {
   try {
     const user = req.data;
-    const { shop_id, department_id } = req.data || {};
+    const { department_id } = req.data || {};
 
     const categoryTable = `${schema}.categories`;
     const deptTable = `${schema}.departments`;
-    const shopTable = `${schema}.shops`;
 
-    //  Role validation
+    // =====================================
+    // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1778,26 +1731,13 @@ async function fetchAllCategories(req, res) {
       });
     }
 
+    // =====================================
+    // Build WHERE condition
+    // =====================================
     let whereConditions = [];
 
-    //  ADMIN
-    if (user.user_role === "ADMIN") {
-      if (shop_id) {
-        whereConditions.push(`d.shop_id = '${shop_id}'`);
-      }
-
-      if (department_id) {
-        whereConditions.push(`c.department_id = '${department_id}'`);
-      }
-    }
-
-    //  SHOP_ADMIN
-    if (user.user_role === "SHOP_ADMIN") {
-      whereConditions.push(`d.shop_id = '${user.shopId}'`);
-
-      if (department_id) {
-        whereConditions.push(`c.department_id = '${department_id}'`);
-      }
+    if (department_id) {
+      whereConditions.push(`c.department_id = '${department_id.trim()}'`);
     }
 
     const whereClause =
@@ -1805,21 +1745,20 @@ async function fetchAllCategories(req, res) {
         ? `WHERE ${whereConditions.join(" AND ")}`
         : "";
 
-    //  FINAL QUERY (JOIN shop added)
+    // =====================================
+    // Fetch COMMON categories
+    // =====================================
     const sql = `
       SELECT
         c.row_id,
         c.category_name,
         c.department_id,
         d.department_name,
-        d.shop_id,
-        s.shop_name,   --  NEW
-        c.cr_on
+        c.cr_on,
+        c.up_on
       FROM ${categoryTable} c
       LEFT JOIN ${deptTable} d
         ON d.row_id = c.department_id
-      LEFT JOIN ${shopTable} s
-        ON s.row_id = d.shop_id
       ${whereClause}
       ORDER BY c.category_name ASC
     `;
@@ -1839,17 +1778,19 @@ async function fetchAllCategories(req, res) {
     });
   }
 }
+
 async function createSweet(req, res) {
   try {
     const tablename = schema + ".sweets";
     const categoryTable = schema + ".categories";
     const deptTable = schema + ".departments";
-    const counterTable = schema + ".counters";
+    const supplierTable = schema + ".suppliers";
 
     const {
-      shop_id,
+      row_id,
+      department_id,
       category_id,
-      counter_id,
+      supplier_id,
       sweet_name,
       unit = "KG",
       price = 0,
@@ -1861,7 +1802,9 @@ async function createSweet(req, res) {
 
     const user = req.data;
 
-    //  Role validation
+    // =====================================
+    // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -1869,98 +1812,172 @@ async function createSweet(req, res) {
       });
     }
 
-    //  Basic validation
-    if (!category_id || !counter_id || !sweet_name) {
+    // =====================================
+    // Basic validation
+    // =====================================
+    if (
+      !department_id ||
+      !category_id ||
+      !supplier_id ||
+      !sweet_name ||
+      !sweet_name.trim()
+    ) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Category, Counter and Sweet name required",
+        msg: "Department, Category, Supplier and Sweet name required",
       });
     }
 
-    //  Get Category + Shop
+    const departmentId = department_id.trim();
+    const categoryId = category_id.trim();
+    const supplierId = supplier_id.trim();
+
+    const sweetName = sweet_name.trim().replaceAll("'", "`");
+
+    // =====================================
+    // Check Department exists
+    // =====================================
+    const deptCheck = await db_query.customQuery(`
+      SELECT row_id
+      FROM ${deptTable}
+      WHERE row_id = '${departmentId}'
+    `);
+
+    if (!deptCheck.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid department",
+      });
+    }
+
+    // =====================================
+    // Check Category exists
+    // AND belongs to selected Department
+    // =====================================
     const categoryCheck = await db_query.customQuery(`
-      SELECT c.row_id, d.shop_id
-      FROM ${categoryTable} c
-      LEFT JOIN ${deptTable} d
-        ON d.row_id = c.department_id
-      WHERE c.row_id = '${category_id.trim()}'
+      SELECT
+        row_id,
+        department_id,
+        category_name
+      FROM ${categoryTable}
+      WHERE row_id = '${categoryId}'
+      AND department_id = '${departmentId}'
     `);
 
-    if (!categoryCheck.data || categoryCheck.data.length === 0) {
+    if (!categoryCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid category",
+        msg: "Invalid category for selected department",
       });
     }
 
-    const category = categoryCheck.data[0];
-
-    //  Get Counter + Shop
-    const counterCheck = await db_query.customQuery(`
-      SELECT row_id, shop_id
-      FROM ${counterTable}
-      WHERE row_id = '${counter_id.trim()}'
+    // =====================================
+    // Check Supplier exists
+    // =====================================
+    const supplierCheck = await db_query.customQuery(`
+      SELECT row_id
+      FROM ${supplierTable}
+      WHERE row_id = '${supplierId}'
     `);
 
-    if (!counterCheck.data || counterCheck.data.length === 0) {
+    if (!supplierCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid counter",
+        msg: "Invalid supplier",
       });
     }
 
-    const counter = counterCheck.data[0];
-    let finalShopId;
+    // =====================================
+    // UPDATE FLOW
+    // =====================================
+    if (row_id) {
+      // Check sweet exists
+      const sweetCheck = await db_query.customQuery(`
+        SELECT row_id
+        FROM ${tablename}
+        WHERE row_id = '${row_id}'
+      `);
 
-    if (user.user_role === "ADMIN") {
-      if (!shop_id) {
+      if (!sweetCheck.data?.length) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "shop_id is required",
+          msg: "Sweet not found",
         });
       }
-      finalShopId = shop_id.trim();
-    }
 
-    //  CORE VALIDATION (Hierarchy match)
-    if (category.shop_id !== counter.shop_id) {
+      // =====================================
+      // Duplicate check
+      // Same sweet cannot exist under
+      // same department + category + supplier
+      // =====================================
+      const duplicate = await db_query.customQuery(`
+        SELECT row_id
+        FROM ${tablename}
+        WHERE LOWER(sweet_name) = LOWER('${sweetName}')
+        AND category_id = '${categoryId}'
+        AND supplier_id = '${supplierId}'
+        AND row_id != '${row_id}'
+      `);
+
+      if (duplicate.data?.length > 0) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Sweet already exists for this category and supplier",
+        });
+      }
+
+      // =====================================
+      // Update sweet
+      // =====================================
+      await db_query.customQuery(`
+        UPDATE ${tablename}
+        SET
+          category_id = '${categoryId}',
+          supplier_id = '${supplierId}',
+          sweet_name = '${sweetName}',
+          unit = '${unit}',
+          price = ${Number(price) || 0},
+          shelf_life_days = '${shelf_life_days}',
+          description = '${description.trim().replaceAll("'", "`")}',
+          image_url = '${image_url.trim().replaceAll("'", "`")}',
+          return_type = '${return_type}',
+          up_on = now()
+        WHERE row_id = '${row_id}'
+      `);
+
       return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Category and Counter must belong to same shop",
+        status: 0,
+        msg: "Sweet updated successfully",
       });
     }
 
-    //  Role-based shop restriction
-    if (user.user_role === "SHOP_ADMIN") {
-      if (counter.shop_id !== user.shopId) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "You cannot create sweet for another shop",
-        });
-      }
-      finalShopId = user.shopId;
-    }
+    // =====================================
+    // CREATE FLOW
+    // =====================================
 
-    //  Duplicate check
     const existingSweet = await db_query.customQuery(`
-      SELECT 1 FROM ${tablename}
-      WHERE counter_id = '${counter_id.trim()}'
-      AND LOWER(sweet_name) = LOWER('${sweet_name.trim().replaceAll("'", "`")}')
+      SELECT row_id
+      FROM ${tablename}
+      WHERE LOWER(sweet_name) = LOWER('${sweetName}')
+      AND category_id = '${categoryId}'
+      AND supplier_id = '${supplierId}'
     `);
 
-    if (existingSweet.data && existingSweet.data.length > 0) {
+    if (existingSweet.data?.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Sweet already exists for this counter",
+        msg: "Sweet already exists for this category and supplier",
       });
     }
 
-    // Insert
+    // =====================================
+    // Create Common Sweet
+    // =====================================
     const columns = {
       row_id: libFunc.randomid(),
-      category_id: category_id.trim(),
-      counter_id: counter_id.trim(),
-      sweet_name: sweet_name.trim().replaceAll("'", "`"),
+      category_id: categoryId,
+      supplier_id: supplierId,
+      sweet_name: sweetName,
       unit,
       price,
       shelf_life_days,
@@ -1968,10 +1985,9 @@ async function createSweet(req, res) {
       image_url: image_url.trim(),
       return_type,
       is_active: true,
-      shop_id: finalShopId,
     };
 
-    const resp = await db_query.addData(tablename, columns);
+    const resp = await db_query.addData(tablename, columns, null, "Sweet");
 
     return libFunc.sendResponse(res, resp);
   } catch (error) {
@@ -1987,13 +2003,15 @@ async function createSweet(req, res) {
 
 async function fetchAllSweets(req, res) {
   console.log(req);
+
   try {
     const user = req.data;
 
-    const { category_id, department_id, shop_id, counter_id, search } =
-      req.data || {};
+    const { category_id, department_id, supplier_id, search } = req.data || {};
 
-    //  Role validation
+    // =====================================
+    // Role validation
+    // =====================================
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2003,44 +2021,64 @@ async function fetchAllSweets(req, res) {
 
     let conditions = ["s.is_active = true"];
 
-    //  ADMIN
-    if (user.user_role === "ADMIN") {
-      if (shop_id) {
-        conditions.push(`d.shop_id = '${shop_id}'`);
-      }
-    }
+    // =====================================
+    // Filters
+    // =====================================
 
-    //  SHOP_ADMIN
-    if (user.user_role === "SHOP_ADMIN") {
-      conditions.push(`d.shop_id = '${user.shopId}'`);
-    }
-
-    //  COUNTER_USER
-    if (user.user_role === "COUNTER_USER") {
-      conditions.push(`ct.row_id = '${user.counterId}'`);
-    }
-
-    //  Filters
+    // Category filter
     if (category_id) {
-      conditions.push(`s.category_id = '${category_id.replaceAll("'", "`")}'`);
+      conditions.push(
+        `s.category_id = '${category_id.trim().replaceAll("'", "`")}'`,
+      );
     }
 
+    // Department filter
     if (department_id) {
-      conditions.push(`d.row_id = '${department_id.replaceAll("'", "`")}'`);
+      conditions.push(
+        `d.row_id = '${department_id.trim().replaceAll("'", "`")}'`,
+      );
     }
 
-    if (counter_id) {
-      conditions.push(`ct.row_id = '${counter_id.replaceAll("'", "`")}'`);
+    // Supplier filter
+    if (supplier_id) {
+      conditions.push(
+        `s.supplier_id = '${supplier_id.trim().replaceAll("'", "`")}'`,
+      );
     }
 
+    // =====================================
+    // COUNTER_USER
+    // =====================================
+    // Counter user should only see sweets
+    // assigned to his counter.
+    //
+    // counter_sweets is the mapping table:
+    // counter_id <-> sweet_id
+    // =====================================
+
+    let counterSweetJoin = "";
+
+    if (user.user_role === "COUNTER_USER") {
+      counterSweetJoin = `
+        INNER JOIN ${schema}.counter_sweets cs
+          ON cs.sweet_id = s.row_id
+          AND cs.counter_id = '${user.counterId}'
+          AND cs.is_active = true
+      `;
+    }
+
+    // =====================================
+    // Search
+    // =====================================
     if (search) {
-      const safeSearch = search.replaceAll("'", "`");
+      const safeSearch = search.trim().replaceAll("'", "`");
 
       conditions.push(`
         (
           LOWER(s.sweet_name) LIKE LOWER('%${safeSearch}%')
           OR LOWER(c.category_name) LIKE LOWER('%${safeSearch}%')
           OR LOWER(d.department_name) LIKE LOWER('%${safeSearch}%')
+          OR LOWER(sup.supplier_name) LIKE LOWER('%${safeSearch}%')
         )
       `);
     }
@@ -2049,7 +2087,9 @@ async function fetchAllSweets(req, res) {
       ? `WHERE ${conditions.join(" AND ")}`
       : "";
 
-    //  FINAL QUERY (FULL JOIN)
+    // =====================================
+    // FINAL QUERY
+    // =====================================
     const sql = `
       SELECT
         s.row_id,
@@ -2065,14 +2105,13 @@ async function fetchAllSweets(req, res) {
 
         d.row_id AS department_id,
         d.department_name,
-        d.shop_id,
 
-        sh.shop_name,        --  added
+        s.supplier_id,
+        sup.supplier_name,
 
-        ct.row_id AS counter_id,
-        ct.counter_name,     --  added
-
+        s.return_type,
         s.is_active,
+
         s.cr_on,
         s.up_on
 
@@ -2084,11 +2123,10 @@ async function fetchAllSweets(req, res) {
       LEFT JOIN ${schema}.departments d
         ON d.row_id = c.department_id
 
-      LEFT JOIN ${schema}.shops sh
-        ON sh.row_id = d.shop_id
+      LEFT JOIN ${schema}.suppliers sup
+        ON sup.row_id = s.supplier_id
 
-      LEFT JOIN ${schema}.counters ct
-        ON ct.row_id = s.counter_id
+      ${counterSweetJoin}
 
       ${whereClause}
 
@@ -3811,7 +3849,7 @@ async function getCounterRequests(req, res) {
     // 🔹 Convert object to array
     const data = Object.values(groupedRequests);
 
-    console.log("data", data);
+    // console.log("data", data);
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -10056,6 +10094,261 @@ async function getCounterDashboardRequests(req, res) {
     });
   } catch (error) {
     console.log("getCounterDashboardRequests error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+async function assignSweetToCounter(req, res) {
+  try {
+    const mappingTable = schema + ".counter_sweets";
+    const counterTable = schema + ".counters";
+    const sweetTable = schema + ".sweets";
+
+    const { counter_id, sweet_id } = req.data || {};
+
+    const user = req.data;
+
+    // =====================================
+    // Role validation
+    // =====================================
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    // =====================================
+    // Basic validation
+    // =====================================
+    if (!counter_id || !sweet_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Counter and Sweet are required",
+      });
+    }
+
+    const counterId = counter_id.trim();
+    const sweetId = sweet_id.trim();
+
+    // =====================================
+    // Check Sweet exists
+    // =====================================
+    const sweetCheck = await db_query.customQuery(`
+      SELECT row_id, sweet_name
+      FROM ${sweetTable}
+      WHERE row_id = '${sweetId}'
+      AND is_active = true
+    `);
+
+    if (!sweetCheck.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid sweet",
+      });
+    }
+
+    // =====================================
+    // Check Counter exists
+    // =====================================
+    const counterCheck = await db_query.customQuery(`
+      SELECT row_id, shop_id, counter_name
+      FROM ${counterTable}
+      WHERE row_id = '${counterId}'
+    `);
+
+    if (!counterCheck.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid counter",
+      });
+    }
+
+    const counter = counterCheck.data[0];
+
+    // =====================================
+    // SHOP_ADMIN can only access
+    // counters of his own shop
+    // =====================================
+    if (user.user_role === "SHOP_ADMIN") {
+      if (counter.shop_id !== user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "You cannot assign sweet to another shop counter",
+        });
+      }
+    }
+
+    // =====================================
+    // Check existing mapping
+    // =====================================
+    const existingMapping = await db_query.customQuery(`
+      SELECT row_id, is_active
+      FROM ${mappingTable}
+      WHERE counter_id = '${counterId}'
+      AND sweet_id = '${sweetId}'
+    `);
+
+    if (existingMapping.data?.length > 0) {
+      const existing = existingMapping.data[0];
+
+      // Already active
+      if (existing.is_active === true) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Sweet is already assigned to this counter",
+        });
+      }
+
+      // Re-activate old mapping
+      await db_query.customQuery(`
+        UPDATE ${mappingTable}
+        SET
+          is_active = true,
+          up_on = now()
+        WHERE row_id = '${existing.row_id}'
+      `);
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Sweet assigned to counter successfully",
+      });
+    }
+
+    // =====================================
+    // Create mapping
+    // =====================================
+    const columns = {
+      row_id: libFunc.randomid(),
+      counter_id: counterId,
+      sweet_id: sweetId,
+      is_active: true,
+    };
+
+    const resp = await db_query.addData(
+      mappingTable,
+      columns,
+      null,
+      "Counter Sweet Mapping",
+    );
+
+    return libFunc.sendResponse(res, resp);
+  } catch (error) {
+    console.log("assignSweetToCounter error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
+  }
+}
+
+
+async function fetchCounterSweets(req, res) {
+  try {
+    const user = req.data;
+
+    const {
+      counter_id,
+      search,
+    } = req.data || {};
+
+    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    if (!counter_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Counter is required",
+      });
+    }
+
+    const counterId = counter_id.trim();
+
+    let conditions = [
+      `c.row_id = '${counterId}'`
+    ];
+
+    // SHOP_ADMIN -> only own shop counter
+    if (user.user_role === "SHOP_ADMIN") {
+      conditions.push(
+        `c.shop_id = '${user.shopId}'`
+      );
+    }
+
+    if (search) {
+      const safeSearch = search
+        .trim()
+        .replaceAll("'", "`");
+
+      conditions.push(`
+        LOWER(s.sweet_name)
+        LIKE LOWER('%${safeSearch}%')
+      `);
+    }
+
+    const sql = `
+      SELECT
+        s.row_id AS sweet_id,
+        s.sweet_name,
+        s.unit,
+        s.price,
+
+        c.row_id AS category_id,
+        c.category_name,
+
+        d.row_id AS department_id,
+        d.department_name,
+
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
+
+        CASE
+          WHEN cs.row_id IS NOT NULL
+               AND cs.is_active = true
+          THEN true
+          ELSE false
+        END AS is_assigned
+
+      FROM ${schema}.sweets s
+
+      LEFT JOIN ${schema}.categories c
+        ON c.row_id = s.category_id
+
+      LEFT JOIN ${schema}.departments d
+        ON d.row_id = c.department_id
+
+      LEFT JOIN ${schema}.suppliers sup
+        ON sup.row_id = s.supplier_id
+
+      LEFT JOIN ${schema}.counter_sweets cs
+        ON cs.sweet_id = s.row_id
+        AND cs.counter_id = '${counterId}'
+
+      WHERE s.is_active = true
+      AND ${conditions.join(" AND ")}
+
+      ORDER BY s.sweet_name ASC
+    `;
+
+    console.log("Final Query:", sql);
+
+    const result = await db_query.customQuery(sql);
+
+    return libFunc.sendResponse(res, result);
+
+  } catch (error) {
+    console.log("fetchCounterSweets error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,

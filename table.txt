@@ -312,3 +312,45 @@ ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE sms.order_items
 ADD COLUMN counter_id TEXT REFERENCES sms.counters(row_id);
+
+
+
+/////////////////////////////////////////
+
+ALTER TABLE sms.departments
+DROP COLUMN shop_id;
+
+ALTER TABLE sms.categories
+DROP COLUMN shop_id;
+
+ALTER TABLE sms.sweets
+DROP COLUMN counter_id;
+
+ALTER TABLE sms.sweets
+DROP COLUMN shop_id;
+
+
+ALTER TABLE sms.sweets
+ADD COLUMN supplier_id TEXT REFERENCES sms.suppliers(row_id);
+
+
+
+CREATE TABLE sms.counter_sweets (
+    id SERIAL NOT NULL,
+    row_id TEXT NOT NULL PRIMARY KEY,
+
+    counter_id TEXT NOT NULL
+        REFERENCES sms.counters(row_id)
+        ON DELETE CASCADE,
+
+    sweet_id TEXT NOT NULL
+        REFERENCES sms.sweets(row_id)
+        ON DELETE CASCADE,
+
+    is_active BOOLEAN DEFAULT TRUE,
+
+    cr_on TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL,
+    up_on TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL,
+
+    UNIQUE(counter_id, sweet_id)
+);

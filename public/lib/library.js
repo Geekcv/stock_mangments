@@ -57,7 +57,7 @@ let common_fn = {
   fe_counter: fetchCounters,
   fe_order_req: getCounterRequests,
   cr_counter_req: createCounterRequest,
-  // fe_all_my_sweets:fetchCounterSweets,
+  fe_all_my_sweets:fetchCounterSweets,
 
   // supplier
   cr_supplier: createSupplier,
@@ -2743,15 +2743,15 @@ async function getInventoryAlerts(req, res) {
   }
 }
 
+
 async function createCounterRequest(req, res) {
   try {
     console.log("========== createCounterRequest START ==========");
 
     const table = schema + ".counter_requests";
     const counterTable = schema + ".counters";
+    const mappingTable = schema + ".counter_sweets";
     const sweetTable = schema + ".sweets";
-    const categoryTable = schema + ".categories";
-    const deptTable = schema + ".departments";
 
     const { items } = req.data || {};
     const user = req.data;
@@ -2759,61 +2759,53 @@ async function createCounterRequest(req, res) {
     console.log("User:", user);
     console.log("Items:", items);
 
-    //  Role validation
-    console.log("User role:", user.user_role);
-
+    // =====================================
+    // Role validation
+    // =====================================
     if (user.user_role !== "COUNTER_USER") {
-      console.log("Role validation failed");
-
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Only counter user can create request",
       });
     }
 
-    console.log("Role validation passed");
-
-    //  Always take counter_id from token
+    // =====================================
+    // Counter ID from token
+    // =====================================
     const finalCounterId = user.counterId;
 
-    console.log("Counter ID:", finalCounterId);
-
     if (!finalCounterId) {
-      console.log("Counter ID not found");
-
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid user counter",
+        msg: "Counter ID not found in token",
       });
     }
 
-    //  Basic validation
-    console.log("Items length:", items?.length);
+    console.log("Counter ID:", finalCounterId);
 
-    if (!items || items.length === 0) {
-      console.log("Items validation failed");
-
+    // =====================================
+    // Basic validation
+    // =====================================
+    if (!Array.isArray(items) || items.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Items are required",
       });
     }
 
-    console.log("Items validation passed");
-
-    //  Get Counter → Shop
-    console.log("Checking counter:", finalCounterId);
-
+    // =====================================
+    // Check Counter
+    // =====================================
     const counterCheck = await db_query.customQuery(`
-      SELECT shop_id FROM ${counterTable}
+      SELECT
+        row_id,
+        shop_id,
+        counter_name
+      FROM ${counterTable}
       WHERE row_id = '${finalCounterId}'
     `);
 
-    console.log("Counter check:", counterCheck);
-
-    if (!counterCheck.data || counterCheck.data.length === 0) {
-      console.log("Invalid counter");
-
+    if (!counterCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid counter",
@@ -2824,27 +2816,34 @@ async function createCounterRequest(req, res) {
 
     console.log("Counter Shop ID:", counterShopId);
 
+    // =====================================
+    // BEGIN TRANSACTION
+    // =====================================
     await connect_db.query("BEGIN");
 
-    console.log("Transaction BEGIN");
-
     let isRequestCreated = false;
+    let createdItems = [];
+    let skippedItems = [];
 
-    for (let item of items) {
+    // =====================================
+    // Process Items
+    // =====================================
+    for (const item of items) {
       console.log("--------------------------------");
       console.log("Processing item:", item);
 
       const { sweet_id, quantity } = item;
 
-      console.log("Sweet ID:", sweet_id);
-      console.log("Quantity:", quantity);
-
-      if (!sweet_id || !quantity || Number(quantity) <= 0) {
-        console.log("Invalid item data:", item);
-
+      // =====================================
+      // Item validation
+      // =====================================
+      if (
+        !sweet_id ||
+        quantity === undefined ||
+        quantity === null ||
+        Number(quantity) <= 0
+      ) {
         await connect_db.query("ROLLBACK");
-
-        console.log("Transaction ROLLBACK");
 
         return libFunc.sendResponse(res, {
           status: 1,
@@ -2852,160 +2851,240 @@ async function createCounterRequest(req, res) {
         });
       }
 
-      console.log("Item validation passed");
+      const sweetId = sweet_id.trim();
+      const requestQuantity = Number(quantity);
 
-      //  Get Sweet → Shop
-      console.log("Checking sweet:", sweet_id);
-
+      // =====================================
+      // Check Sweet
+      // =====================================
       const sweetCheck = await db_query.customQuery(`
-        SELECT d.shop_id
-        FROM ${sweetTable} s
-        LEFT JOIN ${categoryTable} c ON c.row_id = s.category_id
-        LEFT JOIN ${deptTable} d ON d.row_id = c.department_id
-        WHERE s.row_id = '${sweet_id}'
+        SELECT
+          row_id,
+          sweet_name,
+          is_active
+        FROM ${sweetTable}
+        WHERE row_id = '${sweetId}'
+        AND is_active = true
       `);
 
-      console.log("Sweet check:", sweetCheck);
-
-      if (!sweetCheck.data || sweetCheck.data.length === 0) {
-        console.log("Invalid sweet:", sweet_id);
-
+      if (!sweetCheck.data?.length) {
         await connect_db.query("ROLLBACK");
-
-        console.log("Transaction ROLLBACK");
 
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Invalid sweet",
+          msg: `Invalid or inactive sweet: ${sweetId}`,
         });
       }
 
-      const sweetShopId = sweetCheck.data[0].shop_id;
-
-      console.log("Sweet Shop ID:", sweetShopId);
-      console.log("Counter Shop ID:", counterShopId);
-
-      //  Shop match validation
-      if (sweetShopId !== counterShopId) {
-        console.log("Shop mismatch");
-
-        await connect_db.query("ROLLBACK");
-
-        console.log("Transaction ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Sweet does not belong to your shop",
-        });
-      }
-
-      console.log("Shop match validation passed");
-
-      //  Duplicate pending request check
-      console.log("Checking duplicate pending request");
-
-      const existing = await db_query.customQuery(`
-        SELECT 1 FROM ${table}
+      // =====================================
+      // IMPORTANT:
+      // Check Sweet assigned to this Counter
+      // =====================================
+      const mappingCheck = await db_query.customQuery(`
+        SELECT
+          row_id,
+          shop_id,
+          counter_id,
+          sweet_id,
+          is_active
+        FROM ${mappingTable}
         WHERE counter_id = '${finalCounterId}'
-        AND sweet_id = '${sweet_id}'
+        AND sweet_id = '${sweetId}'
+        AND is_active = true
+      `);
+
+      if (!mappingCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Sweet "${sweetCheck.data[0].sweet_name}" is not assigned to this counter`,
+        });
+      }
+
+      // =====================================
+      // Optional safety:
+      // Mapping shop must match counter shop
+      // =====================================
+      const mappingShopId = mappingCheck.data[0].shop_id;
+
+      if (
+        mappingShopId &&
+        counterShopId &&
+        mappingShopId !== counterShopId
+      ) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Sweet assignment does not belong to this shop",
+        });
+      }
+
+      // =====================================
+      // Duplicate Pending Request Check
+      // =====================================
+      const existing = await db_query.customQuery(`
+        SELECT
+          row_id,
+          quantity
+        FROM ${table}
+        WHERE counter_id = '${finalCounterId}'
+        AND sweet_id = '${sweetId}'
         AND status = 'PENDING'
       `);
 
-      console.log("Existing request:", existing);
+      if (existing.data?.length > 0) {
+        console.log(
+          "Pending request already exists:",
+          sweetId
+        );
 
-      if (existing.data && existing.data.length > 0) {
-        console.log("Duplicate pending request found. Skipping:", sweet_id);
+        skippedItems.push({
+          sweet_id: sweetId,
+          reason: "Already requested",
+        });
 
         continue;
       }
 
-      console.log("No duplicate pending request");
-
-      //  Insert request
-      console.log("Inserting request:", {
-        counter_id: finalCounterId,
-        sweet_id,
-        quantity: Number(quantity),
-        status: "PENDING",
-      });
-
+      // =====================================
+      // Insert Counter Request
+      // =====================================
       await db_query.addData(
         table,
         {
           row_id: libFunc.randomid(),
           counter_id: finalCounterId,
-          sweet_id,
-          quantity: Number(quantity),
+          sweet_id: sweetId,
+          quantity: requestQuantity,
           status: "PENDING",
         },
         null,
-        "Counter Request",
+        "Counter Request"
       );
 
-      console.log("Request inserted successfully");
+      createdItems.push({
+        sweet_id: sweetId,
+        quantity: requestQuantity,
+      });
 
       isRequestCreated = true;
 
-      console.log("isRequestCreated:", isRequestCreated);
+      console.log(
+        "Counter request created:",
+        sweetId
+      );
     }
 
+    // =====================================
+    // COMMIT
+    // =====================================
     await connect_db.query("COMMIT");
 
     console.log("Transaction COMMIT");
-    console.log("Final isRequestCreated:", isRequestCreated);
 
-    // 🔔 Notification (AFTER COMMIT ONLY)
+    // =====================================
+    // Notification
+    // =====================================
     if (isRequestCreated) {
-      console.log("Creating notification");
-
       const shopAdmin = await db_query.customQuery(`
-        SELECT row_id FROM ${schema}.users
+        SELECT
+          row_id
+        FROM ${schema}.users
         WHERE role = 'SHOP_ADMIN'
-        AND shop_id = (
-          SELECT shop_id FROM ${schema}.counters
-          WHERE row_id = '${finalCounterId}'
-        )
+        AND shop_id = '${counterShopId}'
       `);
 
-      console.log("Shop Admin:", shopAdmin);
-
-      if (shopAdmin.data && shopAdmin.data.length > 0) {
-        console.log("Shop Admin found:", shopAdmin.data[0].row_id);
-
+      if (shopAdmin.data?.length > 0) {
         await createNotification({
           user_id: shopAdmin.data[0].row_id,
           title: "New Counter Request",
-          message: `${items.length} item(s) requested from counter`,
+          message: `${createdItems.length} item(s) requested from counter`,
           type: "REQUEST",
           reference_id: finalCounterId,
         });
 
-        console.log("Notification created successfully");
+        console.log("Notification created");
       } else {
         console.log("Shop Admin not found");
       }
-    } else {
-      console.log("No request created, notification skipped");
     }
 
-    console.log("========== createCounterRequest END ==========");
+    // =====================================
+    // Final Response
+    // =====================================
+    console.log(
+      "Created Items:",
+      createdItems
+    );
 
+    console.log(
+      "Skipped Items:",
+      skippedItems
+    );
+
+    // Some items created + some already pending
+    if (
+      createdItems.length > 0 &&
+      skippedItems.length > 0
+    ) {
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: `${createdItems.length} request(s) created successfully, ${skippedItems.length} already pending`,
+        data: {
+          counter_id: finalCounterId,
+          created_items: createdItems,
+          skipped_items: skippedItems,
+        },
+      });
+    }
+
+    // All items already pending
+    if (
+      createdItems.length === 0 &&
+      skippedItems.length > 0
+    ) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "All selected sweets already have pending requests",
+        data: {
+          counter_id: finalCounterId,
+          created_items: [],
+          skipped_items: skippedItems,
+        },
+      });
+    }
+
+    // All items created
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: isRequestCreated
-        ? "Request sent to shop admin"
-        : "All items already requested",
+      msg: "Request sent to shop admin",
+      data: {
+        counter_id: finalCounterId,
+        created_items: createdItems,
+        skipped_items: [],
+      },
     });
+
   } catch (error) {
-    console.log("createCounterRequest error:", error);
-    console.log("Error message:", error.message);
-    console.log("Error stack:", error.stack);
+    console.log(
+      "createCounterRequest error:",
+      error
+    );
+
+    console.log(
+      "Error message:",
+      error.message
+    );
 
     try {
       await connect_db.query("ROLLBACK");
-      console.log("Transaction ROLLBACK");
-    } catch (e) {
-      console.log("Rollback error:", e);
+    } catch (rollbackError) {
+      console.log(
+        "Rollback error:",
+        rollbackError
+      );
     }
 
     return libFunc.sendResponse(res, {
@@ -10109,7 +10188,7 @@ async function assignSweetToCounter(req, res) {
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
 
-    const { counter_id, sweet_id } = req.data || {};
+    const { counter_ids, sweet_id } = req.data || {};
 
     const user = req.data;
 
@@ -10126,21 +10205,48 @@ async function assignSweetToCounter(req, res) {
     // =====================================
     // Basic validation
     // =====================================
-    if (!counter_id || !sweet_id) {
+    if (!sweet_id || !Array.isArray(counter_ids) || counter_ids.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Counter and Sweet are required",
+        msg: "Sweet and at least one counter are required",
       });
     }
 
-    const counterId = counter_id.trim();
     const sweetId = sweet_id.trim();
+
+    // =====================================
+    // Shop ID from token
+    // =====================================
+    const shopId = user.shopId;
+
+    if (user.user_role === "SHOP_ADMIN" && !shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID not found in token",
+      });
+    }
+
+    // =====================================
+    // Remove duplicate counter IDs
+    // =====================================
+    const uniqueCounterIds = [
+      ...new Set(counter_ids.filter((id) => id).map((id) => id.trim())),
+    ];
+
+    if (uniqueCounterIds.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Valid counter IDs are required",
+      });
+    }
 
     // =====================================
     // Check Sweet exists
     // =====================================
     const sweetCheck = await db_query.customQuery(`
-      SELECT row_id, sweet_name
+      SELECT
+        row_id,
+        sweet_name
       FROM ${sweetTable}
       WHERE row_id = '${sweetId}'
       AND is_active = true
@@ -10154,29 +10260,44 @@ async function assignSweetToCounter(req, res) {
     }
 
     // =====================================
-    // Check Counter exists
+    // Counter IDs for SQL
+    // =====================================
+    const counterIdsSql = uniqueCounterIds
+      .map((id) => `'${id.replaceAll("'", "`")}'`)
+      .join(",");
+
+    // =====================================
+    // Check all counters
     // =====================================
     const counterCheck = await db_query.customQuery(`
-      SELECT row_id, shop_id, counter_name
+      SELECT
+        row_id,
+        shop_id,
+        counter_name
       FROM ${counterTable}
-      WHERE row_id = '${counterId}'
+      WHERE row_id IN (${counterIdsSql})
     `);
 
-    if (!counterCheck.data?.length) {
+    if (
+      !counterCheck.data ||
+      counterCheck.data.length !== uniqueCounterIds.length
+    ) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid counter",
+        msg: "One or more invalid counters",
       });
     }
 
-    const counter = counterCheck.data[0];
-
     // =====================================
-    // SHOP_ADMIN can only access
-    // counters of his own shop
+    // SHOP_ADMIN
+    // Counter must belong to token shop
     // =====================================
     if (user.user_role === "SHOP_ADMIN") {
-      if (counter.shop_id !== user.shopId) {
+      const invalidCounter = counterCheck.data.find(
+        (counter) => counter.shop_id !== shopId,
+      );
+
+      if (invalidCounter) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "You cannot assign sweet to another shop counter",
@@ -10185,59 +10306,159 @@ async function assignSweetToCounter(req, res) {
     }
 
     // =====================================
-    // Check existing mapping
+    // Check existing mappings
     // =====================================
     const existingMapping = await db_query.customQuery(`
-      SELECT row_id, is_active
+      SELECT
+        row_id,
+        shop_id,
+        counter_id,
+        sweet_id,
+        is_active
       FROM ${mappingTable}
-      WHERE counter_id = '${counterId}'
-      AND sweet_id = '${sweetId}'
+      WHERE sweet_id = '${sweetId}'
+      AND counter_id IN (${counterIdsSql})
     `);
 
-    if (existingMapping.data?.length > 0) {
-      const existing = existingMapping.data[0];
+    const existingMap = new Map();
 
-      // Already active
-      if (existing.is_active === true) {
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Sweet is already assigned to this counter",
-        });
-      }
-
-      // Re-activate old mapping
-      await db_query.customQuery(`
-        UPDATE ${mappingTable}
-        SET
-          is_active = true,
-          up_on = now()
-        WHERE row_id = '${existing.row_id}'
-      `);
-
-      return libFunc.sendResponse(res, {
-        status: 0,
-        msg: "Sweet assigned to counter successfully",
+    if (existingMapping.data?.length) {
+      existingMapping.data.forEach((item) => {
+        existingMap.set(item.counter_id, item);
       });
     }
 
     // =====================================
-    // Create mapping
+    // Separate counters
     // =====================================
-    const columns = {
-      row_id: libFunc.randomid(),
-      counter_id: counterId,
-      sweet_id: sweetId,
-      is_active: true,
-    };
+    const alreadyAssigned = [];
+    const inactiveMappings = [];
+    const newCounterIds = [];
 
-    const resp = await db_query.addData(
-      mappingTable,
-      columns,
-      null,
-      "Counter Sweet Mapping",
-    );
+    uniqueCounterIds.forEach((counterId) => {
+      const existing = existingMap.get(counterId);
 
-    return libFunc.sendResponse(res, resp);
+      // No mapping exists
+      if (!existing) {
+        newCounterIds.push(counterId);
+      }
+
+      // Mapping exists and active
+      else if (existing.is_active === true) {
+        alreadyAssigned.push(counterId);
+      }
+
+      // Mapping exists but inactive
+      else {
+        inactiveMappings.push(existing);
+      }
+    });
+
+    // =====================================
+    // Reactivate inactive mappings
+    // =====================================
+    for (const mapping of inactiveMappings) {
+      await db_query.customQuery(`
+        UPDATE ${mappingTable}
+        SET
+          is_active = true,
+          shop_id = '${shopId}',
+          up_on = now()
+        WHERE row_id = '${mapping.row_id}'
+      `);
+    }
+
+    // =====================================
+    // Create new mappings
+    // =====================================
+    const createdCounters = [];
+
+    for (const counterId of newCounterIds) {
+      const columns = {
+        row_id: libFunc.randomid(),
+
+        // Shop ID from token
+        shop_id: shopId,
+
+        // Counter selected by user
+        counter_id: counterId,
+
+        // Sweet selected by user
+        sweet_id: sweetId,
+
+        is_active: true,
+      };
+
+      await db_query.addData(
+        mappingTable,
+        columns,
+        null,
+        "Counter Sweet Mapping",
+      );
+
+      createdCounters.push(counterId);
+    }
+
+    // =====================================
+    // Final counts
+    // =====================================
+    const assignedCount = createdCounters.length + inactiveMappings.length;
+
+    const alreadyAssignedCount = alreadyAssigned.length;
+
+    // =====================================
+    // Partial success
+    // Some already assigned
+    // =====================================
+    if (alreadyAssignedCount > 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+
+        msg:
+          `${assignedCount} counter(s) assigned successfully, ` +
+          `${alreadyAssignedCount} counter(s) already had this sweet assigned`,
+
+        data: {
+          shop_id: shopId,
+          sweet_id: sweetId,
+
+          assigned_count: assignedCount,
+
+          assigned_counter_ids: [
+            ...createdCounters,
+            ...inactiveMappings.map((item) => item.counter_id),
+          ],
+
+          already_assigned_count: alreadyAssignedCount,
+
+          already_assigned_counter_ids: alreadyAssigned,
+        },
+      });
+    }
+
+    // =====================================
+    // Full success
+    // =====================================
+    return libFunc.sendResponse(res, {
+      status: 0,
+
+      msg: `Sweet assigned successfully to ` + `${assignedCount} counter(s)`,
+
+      data: {
+        shop_id: shopId,
+        sweet_id: sweetId,
+
+        assigned_count: assignedCount,
+
+        assigned_counter_ids: [
+          ...createdCounters,
+          ...inactiveMappings.map((item) => item.counter_id),
+        ],
+
+        already_assigned_count: 0,
+        already_assigned_counter_ids: [],
+      },
+    });
   } catch (error) {
     console.log("assignSweetToCounter error:", error);
 
@@ -10249,63 +10470,108 @@ async function assignSweetToCounter(req, res) {
   }
 }
 
-
 async function fetchCounterSweets(req, res) {
   try {
     const user = req.data;
 
-    const {
-      counter_id,
-      search,
-    } = req.data || {};
+    const { search } = req.data || {};
 
-    if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+    // =====================================
+    // Role validation
+    // =====================================
+    if (
+      !["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(
+        user.user_role
+      )
+    ) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
       });
     }
 
-    if (!counter_id) {
+    // =====================================
+    // Counter ID from token
+    // =====================================
+    const counterId = user.counterId;
+
+    if (!counterId) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Counter is required",
+        msg: "Counter ID not found in token",
       });
     }
 
-    const counterId = counter_id.trim();
+    // =====================================
+    // Shop ID from token
+    // =====================================
+    const shopId = user.shopId;
 
+    // =====================================
+    // Conditions
+    // =====================================
     let conditions = [
-      `c.row_id = '${counterId}'`
+      `s.is_active = true`,
+      `cs.counter_id = '${counterId}'`,
+      `cs.is_active = true`,
     ];
 
-    // SHOP_ADMIN -> only own shop counter
+    // =====================================
+    // SHOP_ADMIN
+    // Counter must belong to user's shop
+    // =====================================
     if (user.user_role === "SHOP_ADMIN") {
-      conditions.push(
-        `c.shop_id = '${user.shopId}'`
-      );
+      if (!shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      conditions.push(`counter.shop_id = '${shopId}'`);
     }
 
+    // =====================================
+    // Search
+    // =====================================
     if (search) {
       const safeSearch = search
         .trim()
         .replaceAll("'", "`");
 
       conditions.push(`
-        LOWER(s.sweet_name)
-        LIKE LOWER('%${safeSearch}%')
+        (
+          LOWER(s.sweet_name)
+            LIKE LOWER('%${safeSearch}%')
+
+          OR LOWER(cat.category_name)
+            LIKE LOWER('%${safeSearch}%')
+
+          OR LOWER(d.department_name)
+            LIKE LOWER('%${safeSearch}%')
+
+          OR LOWER(sup.supplier_name)
+            LIKE LOWER('%${safeSearch}%')
+        )
       `);
     }
 
+    // =====================================
+    // Final Query
+    // =====================================
     const sql = `
       SELECT
         s.row_id AS sweet_id,
         s.sweet_name,
         s.unit,
         s.price,
+        s.shelf_life_days,
+        s.description,
+        s.image_url,
+        s.return_type,
 
-        c.row_id AS category_id,
-        c.category_name,
+        cat.row_id AS category_id,
+        cat.category_name,
 
         d.row_id AS department_id,
         d.department_name,
@@ -10313,30 +10579,33 @@ async function fetchCounterSweets(req, res) {
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
-        CASE
-          WHEN cs.row_id IS NOT NULL
-               AND cs.is_active = true
-          THEN true
-          ELSE false
-        END AS is_assigned
+        counter.row_id AS counter_id,
+        counter.counter_name,
 
-      FROM ${schema}.sweets s
+        cs.shop_id,
+        cs.is_active AS is_assigned,
 
-      LEFT JOIN ${schema}.categories c
-        ON c.row_id = s.category_id
+        cs.cr_on AS assigned_on,
+        cs.up_on AS assignment_updated_on
+
+      FROM ${schema}.counter_sweets cs
+
+      INNER JOIN ${schema}.sweets s
+        ON s.row_id = cs.sweet_id
+
+      INNER JOIN ${schema}.counters counter
+        ON counter.row_id = cs.counter_id
+
+      LEFT JOIN ${schema}.categories cat
+        ON cat.row_id = s.category_id
 
       LEFT JOIN ${schema}.departments d
-        ON d.row_id = c.department_id
+        ON d.row_id = cat.department_id
 
       LEFT JOIN ${schema}.suppliers sup
         ON sup.row_id = s.supplier_id
 
-      LEFT JOIN ${schema}.counter_sweets cs
-        ON cs.sweet_id = s.row_id
-        AND cs.counter_id = '${counterId}'
-
-      WHERE s.is_active = true
-      AND ${conditions.join(" AND ")}
+      WHERE ${conditions.join(" AND ")}
 
       ORDER BY s.sweet_name ASC
     `;
@@ -10348,7 +10617,10 @@ async function fetchCounterSweets(req, res) {
     return libFunc.sendResponse(res, result);
 
   } catch (error) {
-    console.log("fetchCounterSweets error:", error);
+    console.log(
+      "fetchCounterSweets error:",
+      error
+    );
 
     return libFunc.sendResponse(res, {
       status: 1,

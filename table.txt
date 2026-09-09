@@ -354,3 +354,7 @@ CREATE TABLE sms.counter_sweets (
 
     UNIQUE(counter_id, sweet_id)
 );
+
+
+ALTER TABLE sms.counter_sweets
+ADD COLUMN shop_id TEXT NOT NULL;

@@ -90,6 +90,7 @@ let common_fn = {
   dow_pdf: downloadOrderPDF,
   dow_ch_pdf: downloadChalanPDF,
   dow_ord_req: downloadOrderRequestPDF,
+  de_department_slip: downloadDepartmentSlipPDF,
 
   // dhasboard
   fe_dash: getDashboardData,
@@ -7033,6 +7034,898 @@ async function downloadChalanPDF(req, res) {
   }
 }
 
+// async function downloadChalanPDF(req, res) {
+//   try {
+//     const { chalan_id } = req.data || {};
+
+//     if (!chalan_id) {
+//       return res.status(400).send("Chalan ID required");
+//     }
+
+//     const chalanTable = schema + ".chalans";
+//     const orderTable = schema + ".orders";
+//     const supplierTable = schema + ".suppliers";
+//     const shopTable = schema + ".shops";
+//     const itemTable = schema + ".order_items";
+//     const sweetTable = schema + ".sweets";
+//     const categoryTable = schema + ".categories";
+//     const counterTable = schema + ".counters";
+
+//     // Safe SQL string
+//     const safeChalanId = chalan_id.trim().replaceAll("'", "''");
+
+//     // ============================================================
+//     // QUERY
+//     // ============================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Chalan
+//         ch.id AS chalan_serial_id,
+//         ch.row_id AS chalan_id,
+//         ch.dispatch_date,
+//         ch.transport_details,
+//         ch.verification_code,
+//         ch.is_verified,
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+
+//         -- Supplier
+//         sup.row_id AS supplier_id,
+//         sup.supplier_name,
+//         sup.phone AS supplier_phone,
+//         sup.address AS supplier_address,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.city,
+//         sh.state,
+//         sh.address AS shop_address,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.sweet_id,
+//         oi.counter_id,
+//         oi.quantity AS ordered_quantity,
+//         oi.supplied_quantity,
+//         oi.item_status,
+
+//         -- Sweet
+//         sw.sweet_name,
+//         sw.unit,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         cat.category_name,
+
+//         -- Counter
+//         c.counter_name,
+//         c.location AS counter_location
+
+//       FROM ${chalanTable} ch
+
+//       INNER JOIN ${orderTable} o
+//         ON o.row_id = ch.order_id
+
+//       LEFT JOIN ${supplierTable} sup
+//         ON sup.row_id = ch.supplier_id
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       INNER JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+//         AND oi.item_status = 'ACCEPTED'
+//         AND oi.supplied_quantity > 0
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       WHERE ch.row_id = '${safeChalanId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     if (!result.data?.length) {
+//       return res
+//         .status(404)
+//         .send("Chalan not found or no accepted supplied items found");
+//     }
+
+//     const data = result.data;
+//     const firstRow = data[0];
+
+//     // ============================================================
+//     // DISPLAY IDS
+//     // ============================================================
+
+//     const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(6, "0")}`;
+
+//     const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(6, "0")}`;
+
+//     // ============================================================
+//     // GROUPING
+//     // ============================================================
+
+//     const groupedData = {};
+
+//     data.forEach((item) => {
+//       const counter = item.counter_name || "Default Counter";
+//       const category = item.category_name || "Others";
+
+//       if (!groupedData[counter]) {
+//         groupedData[counter] = {};
+//       }
+
+//       if (!groupedData[counter][category]) {
+//         groupedData[counter][category] = [];
+//       }
+
+//       groupedData[counter][category].push(item);
+//     });
+
+//     // ============================================================
+//     // FILE SETUP
+//     // ============================================================
+
+//     const BASE_UPLOAD_PATH = ".public/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `Chalan_${Date.now()}.pdf`;
+//     const filePath = path.join(folder, fileName);
+
+//     // ============================================================
+//     // A5 PDF
+//     // ============================================================
+
+//     const doc = new PDFDocument({
+//       size: "A5",
+//       margin: 25,
+//       autoFirstPage: true,
+//     });
+
+//     const writeStream = fs.createWriteStream(filePath);
+
+//     doc.pipe(writeStream);
+
+//     // A5 dimensions in points
+//     const PAGE_WIDTH = 419.53;
+//     const PAGE_HEIGHT = 595.28;
+
+//     const CONTENT_WIDTH = PAGE_WIDTH - 50;
+
+//     // ============================================================
+//     // LOGO
+//     // ============================================================
+
+//     function drawRoundLogo() {
+//       const logoPath = path.join(
+//         process.cwd(),
+//         "public",
+//         "uploads",
+//         "logo.jpg",
+//       );
+
+//       if (!fs.existsSync(logoPath)) {
+//         console.log("Logo not found:", logoPath);
+//         return;
+//       }
+
+//       const logoSize = 48;
+
+//       const x = (PAGE_WIDTH - logoSize) / 2;
+//       const y = 18;
+
+//       doc.save();
+
+//       doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2);
+
+//       doc.clip();
+
+//       doc.image(logoPath, x, y, {
+//         width: logoSize,
+//         height: logoSize,
+//       });
+
+//       doc.restore();
+
+//       // Border around logo
+//       doc
+//         .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
+//         .lineWidth(1)
+//         .strokeColor("#34495e")
+//         .stroke();
+
+//       doc.y = y + logoSize + 7;
+//     }
+
+//     // ============================================================
+//     // PAGE HEADER
+//     // ============================================================
+
+//     function drawPageHeader() {
+//       drawRoundLogo();
+
+//       doc
+//         .fontSize(15)
+//         .font("Helvetica-Bold")
+//         .fillColor("#1f2937")
+//         .text("DISPATCH CHALAN", {
+//           align: "center",
+//           width: CONTENT_WIDTH,
+//         });
+
+//       doc.moveDown(0.2);
+
+//       doc
+//         .fontSize(7)
+//         .font("Helvetica")
+//         .fillColor("#6b7280")
+//         .text("GOODS DISPATCH DOCUMENT", {
+//           align: "center",
+//           width: CONTENT_WIDTH,
+//         });
+
+//       doc.moveDown(0.5);
+
+//       doc
+//         .moveTo(25, doc.y)
+//         .lineTo(PAGE_WIDTH - 25, doc.y)
+//         .lineWidth(1)
+//         .strokeColor("#34495e")
+//         .stroke();
+
+//       doc.moveDown(0.6);
+//     }
+
+//     // ============================================================
+//     // INFO BOX
+//     // ============================================================
+
+//     function drawInfoBox() {
+//       const boxX = 25;
+//       const boxY = doc.y;
+
+//       const boxWidth = CONTENT_WIDTH;
+//       const boxHeight = 70;
+
+//       doc.roundedRect(boxX, boxY, boxWidth, boxHeight, 5).fill("#f8fafc");
+
+//       doc
+//         .roundedRect(boxX, boxY, boxWidth, boxHeight, 5)
+//         .lineWidth(0.6)
+//         .strokeColor("#d1d5db")
+//         .stroke();
+
+//       const leftX = boxX + 10;
+//       const rightX = boxX + 205;
+
+//       let y = boxY + 9;
+
+//       doc
+//         .fontSize(8)
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("CHALAN ID", leftX, y);
+
+//       doc
+//         .fontSize(8)
+//         .font("Helvetica")
+//         .fillColor("#111827")
+//         .text(chalanDisplayId, leftX + 65, y);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("ORDER ID", rightX, y);
+
+//       doc
+//         .font("Helvetica")
+//         .fillColor("#111827")
+//         .text(orderDisplayId, rightX + 55, y);
+
+//       y += 15;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("DISPATCH DATE", leftX, y);
+
+//       doc
+//         .font("Helvetica")
+//         .fillColor("#111827")
+//         .text(
+//           firstRow.dispatch_date
+//             ? new Date(firstRow.dispatch_date).toLocaleDateString()
+//             : "-",
+//           leftX + 65,
+//           y,
+//         );
+
+//       doc.font("Helvetica-Bold").fillColor("#374151").text("STATUS", rightX, y);
+
+//       const statusText = firstRow.is_verified ? "VERIFIED" : "PENDING";
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor(firstRow.is_verified ? "#15803d" : "#b45309")
+//         .text(statusText, rightX + 55, y);
+
+//       y += 15;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("VERIFICATION", leftX, y);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor("#111827")
+//         .text(firstRow.verification_code || "-", leftX + 65, y);
+
+//       y += 15;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("ORDER STATUS", leftX, y);
+
+//       doc
+//         .font("Helvetica")
+//         .fillColor("#111827")
+//         .text(firstRow.order_status || "-", leftX + 65, y);
+
+//       doc.y = boxY + boxHeight + 10;
+//     }
+
+//     // ============================================================
+//     // SECTION TITLE
+//     // ============================================================
+
+//     function drawSectionTitle(title) {
+//       doc.fontSize(9).font("Helvetica-Bold").fillColor("#1f2937").text(title);
+
+//       doc.moveDown(0.25);
+//     }
+
+//     // ============================================================
+//     // SUPPLIER + SHOP
+//     // ============================================================
+
+//     function drawPartyDetails() {
+//       const startY = doc.y;
+
+//       const gap = 8;
+//       const boxWidth = (CONTENT_WIDTH - gap) / 2;
+//       const boxHeight = 80;
+
+//       // Supplier box
+//       doc.roundedRect(25, startY, boxWidth, boxHeight, 5).fill("#fafafa");
+
+//       doc
+//         .roundedRect(25, startY, boxWidth, boxHeight, 5)
+//         .lineWidth(0.5)
+//         .strokeColor("#d1d5db")
+//         .stroke();
+
+//       doc
+//         .fontSize(9)
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("SUPPLIER", 33, startY + 8);
+
+//       doc.fontSize(7.5).font("Helvetica").fillColor("#111827");
+
+//       doc.text(`Name: ${firstRow.supplier_name || "-"}`, 33, startY + 25, {
+//         width: boxWidth - 16,
+//         ellipsis: true,
+//       });
+
+//       doc.text(`Phone: ${firstRow.supplier_phone || "-"}`, 33, startY + 39, {
+//         width: boxWidth - 16,
+//         ellipsis: true,
+//       });
+
+//       doc.text(
+//         `Address: ${firstRow.supplier_address || "-"}`,
+//         33,
+//         startY + 53,
+//         {
+//           width: boxWidth - 16,
+//           height: 18,
+//           ellipsis: true,
+//         },
+//       );
+
+//       // Shop box
+//       const shopX = 25 + boxWidth + gap;
+
+//       doc.roundedRect(shopX, startY, boxWidth, boxHeight, 5).fill("#fafafa");
+
+//       doc
+//         .roundedRect(shopX, startY, boxWidth, boxHeight, 5)
+//         .lineWidth(0.5)
+//         .strokeColor("#d1d5db")
+//         .stroke();
+
+//       doc
+//         .fontSize(9)
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("SHOP", shopX + 8, startY + 8);
+
+//       doc.fontSize(7.5).font("Helvetica").fillColor("#111827");
+
+//       doc.text(`Name: ${firstRow.shop_name || "-"}`, shopX + 8, startY + 25, {
+//         width: boxWidth - 16,
+//         ellipsis: true,
+//       });
+
+//       doc.text(`Phone: ${firstRow.shop_phone || "-"}`, shopX + 8, startY + 39, {
+//         width: boxWidth - 16,
+//         ellipsis: true,
+//       });
+
+//       doc.text(
+//         `City: ${firstRow.city || "-"}, ${firstRow.state || "-"}`,
+//         shopX + 8,
+//         startY + 53,
+//         {
+//           width: boxWidth - 16,
+//           ellipsis: true,
+//         },
+//       );
+
+//       doc.y = startY + boxHeight + 10;
+//     }
+
+//     // ============================================================
+//     // TRANSPORT
+//     // ============================================================
+
+//     function drawTransport() {
+//       const boxY = doc.y;
+//       const boxHeight = 42;
+
+//       doc.roundedRect(25, boxY, CONTENT_WIDTH, boxHeight, 5).fill("#f8fafc");
+
+//       doc
+//         .roundedRect(25, boxY, CONTENT_WIDTH, boxHeight, 5)
+//         .lineWidth(0.5)
+//         .strokeColor("#d1d5db")
+//         .stroke();
+
+//       doc
+//         .fontSize(8)
+//         .font("Helvetica-Bold")
+//         .fillColor("#374151")
+//         .text("TRANSPORT DETAILS", 33, boxY + 7);
+
+//       doc
+//         .fontSize(7.5)
+//         .font("Helvetica")
+//         .fillColor("#111827")
+//         .text(firstRow.transport_details || "-", 33, boxY + 21, {
+//           width: CONTENT_WIDTH - 16,
+//           height: 15,
+//           ellipsis: true,
+//         });
+
+//       doc.y = boxY + boxHeight + 10;
+//     }
+
+//     // ============================================================
+//     // TABLE HEADER
+//     // ============================================================
+
+//     function drawTableHeader() {
+//       const y = doc.y;
+
+//       const colWidths = {
+//         name: 185,
+//         qty: 50,
+//         unit: 55,
+//         status: 79,
+//       };
+
+//       const rowHeight = 19;
+
+//       doc.roundedRect(25, y, CONTENT_WIDTH, rowHeight, 3).fill("#e5e7eb");
+
+//       doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#111827");
+
+//       doc.text("Sweet Name", 30, y + 5, {
+//         width: colWidths.name - 8,
+//       });
+
+//       doc.text("Qty", 25 + colWidths.name, y + 5, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       doc.text("Unit", 25 + colWidths.name + colWidths.qty, y + 5, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       doc.text(
+//         "Status",
+//         25 + colWidths.name + colWidths.qty + colWidths.unit,
+//         y + 5,
+//         {
+//           width: colWidths.status,
+//           align: "center",
+//         },
+//       );
+
+//       doc.y = y + rowHeight;
+
+//       return {
+//         colWidths,
+//         rowHeight,
+//       };
+//     }
+
+//     // ============================================================
+//     // DRAW ITEM
+//     // ============================================================
+
+//     function drawItem(item, index, tableConfig) {
+//       const { colWidths, rowHeight } = tableConfig;
+
+//       const y = doc.y;
+
+//       if (y + rowHeight + 20 > PAGE_HEIGHT - 25) {
+//         doc.addPage();
+
+//         drawPageHeader();
+
+//         doc
+//           .fontSize(8)
+//           .font("Helvetica-Bold")
+//           .fillColor("#2563eb")
+//           .text(`Counter: ${item.counter_name || "Default Counter"}`);
+
+//         doc.moveDown(0.4);
+
+//         const newTableConfig = drawTableHeader();
+
+//         return drawItem(item, index, newTableConfig);
+//       }
+
+//       if (index % 2 === 0) {
+//         doc.rect(25, y, CONTENT_WIDTH, rowHeight).fill("#fafafa");
+//       }
+
+//       doc.fontSize(7.2).font("Helvetica").fillColor("#111827");
+
+//       doc.text(item.sweet_name || "-", 30, y + 5, {
+//         width: colWidths.name - 10,
+//         ellipsis: true,
+//       });
+
+//       doc.text(
+//         String(Number(item.supplied_quantity || 0)),
+//         25 + colWidths.name,
+//         y + 5,
+//         {
+//           width: colWidths.qty,
+//           align: "center",
+//         },
+//       );
+
+//       doc.text(item.unit || "-", 25 + colWidths.name + colWidths.qty, y + 5, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       doc.text(
+//         item.item_status || "ACCEPTED",
+//         25 + colWidths.name + colWidths.qty + colWidths.unit,
+//         y + 5,
+//         {
+//           width: colWidths.status,
+//           align: "center",
+//         },
+//       );
+
+//       doc
+//         .moveTo(25, y + rowHeight)
+//         .lineTo(25 + CONTENT_WIDTH, y + rowHeight)
+//         .lineWidth(0.3)
+//         .strokeColor("#e5e7eb")
+//         .stroke();
+
+//       doc.y = y + rowHeight;
+//     }
+
+//     // ============================================================
+//     // TOTAL
+//     // ============================================================
+
+//     function drawTotal(total) {
+//       const y = doc.y;
+
+//       if (y + 24 > PAGE_HEIGHT - 25) {
+//         doc.addPage();
+//         drawPageHeader();
+//       }
+
+//       const totalY = doc.y;
+
+//       doc.roundedRect(25, totalY, CONTENT_WIDTH, 22, 4).fill("#ecfdf5");
+
+//       doc
+//         .fontSize(8)
+//         .font("Helvetica-Bold")
+//         .fillColor("#111827")
+//         .text("TOTAL SUPPLIED", 32, totalY + 6);
+
+//       doc
+//         .fontSize(9)
+//         .font("Helvetica-Bold")
+//         .fillColor("#047857")
+//         .text(total.toString(), 25, totalY + 6, {
+//           width: CONTENT_WIDTH - 10,
+//           align: "right",
+//         });
+
+//       doc.y = totalY + 22;
+//     }
+
+//     // ============================================================
+//     // PAGE FOOTER
+//     // ============================================================
+
+//     function drawFooter() {
+//       const footerY = PAGE_HEIGHT - 18;
+
+//       doc
+//         .fontSize(6.5)
+//         .font("Helvetica")
+//         .fillColor("#9ca3af")
+//         .text("System generated dispatch chalan", 25, footerY, {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc.fillColor("#000");
+//     }
+
+//     // ============================================================
+//     // FIRST PAGE
+//     // ============================================================
+
+//     drawPageHeader();
+
+//     drawInfoBox();
+
+//     drawPartyDetails();
+
+//     drawTransport();
+
+//     // ============================================================
+//     // COUNTER LOOP
+//     // ============================================================
+
+//     const counters = Object.keys(groupedData);
+
+//     for (let counterIndex = 0; counterIndex < counters.length; counterIndex++) {
+//       const counter = counters[counterIndex];
+
+//       // If not enough space for counter heading
+//       if (doc.y + 45 > PAGE_HEIGHT - 25) {
+//         doc.addPage();
+
+//         drawPageHeader();
+//       }
+
+//       const counterItems = Object.values(groupedData[counter]).flat();
+
+//       const counterLocation = counterItems[0]?.counter_location;
+
+//       // ==========================================================
+//       // COUNTER HEADER
+//       // ==========================================================
+
+//       const counterBoxY = doc.y;
+
+//       doc.roundedRect(25, counterBoxY, CONTENT_WIDTH, 32, 5).fill("#eff6ff");
+
+//       doc
+//         .roundedRect(25, counterBoxY, CONTENT_WIDTH, 32, 5)
+//         .lineWidth(0.5)
+//         .strokeColor("#bfdbfe")
+//         .stroke();
+
+//       doc
+//         .fontSize(10)
+//         .font("Helvetica-Bold")
+//         .fillColor("#1d4ed8")
+//         .text(`COUNTER: ${counter}`, 33, counterBoxY + 7);
+
+//       if (counterLocation) {
+//         doc
+//           .fontSize(7)
+//           .font("Helvetica")
+//           .fillColor("#64748b")
+//           .text(`Location: ${counterLocation}`, 33, counterBoxY + 20);
+//       }
+
+//       doc.y = counterBoxY + 40;
+
+//       // ==========================================================
+//       // CATEGORY LOOP
+//       // ==========================================================
+
+//       const categories = Object.keys(groupedData[counter]);
+
+//       for (
+//         let categoryIndex = 0;
+//         categoryIndex < categories.length;
+//         categoryIndex++
+//       ) {
+//         const category = categories[categoryIndex];
+
+//         const categoryItems = groupedData[counter][category];
+
+//         // Category heading
+//         if (doc.y + 35 > PAGE_HEIGHT - 25) {
+//           doc.addPage();
+
+//           drawPageHeader();
+
+//           doc
+//             .fontSize(8)
+//             .font("Helvetica-Bold")
+//             .fillColor("#1d4ed8")
+//             .text(`Counter: ${counter}`);
+
+//           doc.moveDown(0.4);
+//         }
+
+//         doc
+//           .fontSize(8.5)
+//           .font("Helvetica-Bold")
+//           .fillColor("#7c3aed")
+//           .text(`Category: ${category}`);
+
+//         doc.moveDown(0.3);
+
+//         // Table header
+//         let tableConfig = drawTableHeader();
+
+//         let total = 0;
+
+//         // ========================================================
+//         // ITEMS
+//         // ========================================================
+
+//         categoryItems.forEach((item, index) => {
+//           const qty = Number(item.supplied_quantity || 0);
+
+//           total += qty;
+
+//           const beforeY = doc.y;
+
+//           drawItem(item, index, tableConfig);
+
+//           // If page changed inside drawItem,
+//           // table config may need to remain valid.
+//           if (doc.y < beforeY) {
+//             tableConfig = drawTableHeader();
+//           }
+//         });
+
+//         // ========================================================
+//         // CATEGORY TOTAL
+//         // ========================================================
+
+//         if (doc.y + 24 > PAGE_HEIGHT - 25) {
+//           doc.addPage();
+
+//           drawPageHeader();
+
+//           doc
+//             .fontSize(8)
+//             .font("Helvetica-Bold")
+//             .fillColor("#1d4ed8")
+//             .text(`Counter: ${counter}`);
+
+//           doc.moveDown(0.4);
+
+//           tableConfig = drawTableHeader();
+//         }
+
+//         drawTotal(total);
+
+//         doc.moveDown(0.7);
+//       }
+//     }
+
+//     // ============================================================
+//     // FINAL FOOTER
+//     // ============================================================
+
+//     if (doc.y > PAGE_HEIGHT - 45) {
+//       doc.addPage();
+//     }
+
+//     doc.moveDown(1);
+
+//     doc
+//       .fontSize(7)
+//       .font("Helvetica")
+//       .fillColor("#6b7280")
+//       .text("This is a system generated document. No signature is required.", {
+//         align: "center",
+//         width: CONTENT_WIDTH,
+//       });
+
+//     // Footer on current page
+//     drawFooter();
+
+//     // ============================================================
+//     // END PDF
+//     // ============================================================
+
+//     doc.end();
+
+//     // ============================================================
+//     // RESPONSE AFTER PDF CREATED
+//     // ============================================================
+
+//     writeStream.on("finish", () => {
+//       const fileUrl = `.public/uploads/ShopMedia/${fileName}`;
+
+//       const serverUrl = "https://api.joswee.cloud";
+
+//       return libFunc.sendResponse(res, {
+//         status: 0,
+//         msg: "Chalan PDF generated successfully",
+//         filePath: serverUrl + fileUrl,
+//       });
+//     });
+
+//     writeStream.on("error", (error) => {
+//       console.log("Chalan PDF write error:", error);
+
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error saving Chalan PDF");
+//       }
+//     });
+//   } catch (error) {
+//     console.log("downloadChalanPDF error:", error);
+
+//     if (!res.headersSent) {
+//       return res.status(500).send("Error generating PDF");
+//     }
+//   }
+// }
+
 async function downloadOrderRequestPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -7051,7 +7944,9 @@ async function downloadOrderRequestPDF(req, res) {
 
     const safeOrderId = order_id.trim().replaceAll("'", "`");
 
-    // ================= QUERY =================
+    // =====================================================
+    // FETCH ORDER DATA
+    // =====================================================
 
     const result = await db_query.customQuery(`
       SELECT
@@ -7061,6 +7956,7 @@ async function downloadOrderRequestPDF(req, res) {
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
+        o.supplier_id,
 
         -- Shop
         sh.row_id AS shop_id,
@@ -7075,41 +7971,25 @@ async function downloadOrderRequestPDF(req, res) {
         oi.request_id,
         oi.quantity,
         oi.item_status,
+        oi.counter_id,
 
         -- Sweet
         sw.row_id AS sweet_id,
-        COALESCE(
-          sw.sweet_name,
-          'Unknown Sweet'
-        ) AS sweet_name,
-
-        COALESCE(
-          sw.unit,
-          '-'
-        ) AS unit,
+        COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
+        COALESCE(sw.unit, '-') AS unit,
 
         -- Counter
         c.row_id AS counter_id,
-        COALESCE(
-          c.counter_name,
-          'Default Counter'
-        ) AS counter_name,
-
+        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
         c.location AS counter_location,
 
         -- Category
         cat.row_id AS category_id,
-        COALESCE(
-          cat.category_name,
-          'Others'
-        ) AS category_name,
+        COALESCE(cat.category_name, 'Others') AS category_name,
 
         -- Department
         d.row_id AS department_id,
-        COALESCE(
-          d.department_name,
-          'Others'
-        ) AS department_name
+        COALESCE(d.department_name, 'Others') AS department_name
 
       FROM ${orderTable} o
 
@@ -7147,50 +8027,22 @@ async function downloadOrderRequestPDF(req, res) {
 
     const order = data[0];
 
-    // ================= DISPLAY ID =================
+    // =====================================================
+    // DISPLAY ORDER ID
+    // =====================================================
 
     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
       6,
       "0",
     )}`;
 
-    // ================= COUNTER + CATEGORY GROUPING =================
+    // =====================================================
+    // FILE SETUP
+    // =====================================================
 
-    const groupedData = {};
-
-    data.forEach((item) => {
-      const counter = item.counter_name || "Default Counter";
-
-      const category = item.category_name || "Others";
-
-      if (!groupedData[counter]) {
-        groupedData[counter] = {};
-      }
-
-      if (!groupedData[counter][category]) {
-        groupedData[counter][category] = [];
-      }
-
-      groupedData[counter][category].push(item);
-    });
-
-    // ================= DEPARTMENT GROUPING =================
-
-    const departmentGrouped = {};
-
-    data.forEach((item) => {
-      const department = item.department_name || "Others";
-
-      if (!departmentGrouped[department]) {
-        departmentGrouped[department] = [];
-      }
-
-      departmentGrouped[department].push(item);
-    });
-
-    // ================= FILE SETUP =================
     // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
+
 
     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
 
@@ -7205,340 +8057,891 @@ async function downloadOrderRequestPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     const doc = new PDFDocument({
-      margin: 40,
+      margin: 30,
       size: "A4",
     });
 
     doc.pipe(fs.createWriteStream(filePath));
 
-    let isFirstPage = true;
-
     // =====================================================
-    // COUNTER + CATEGORY REQUEST PAGES
+    // HEADER
     // =====================================================
 
-    for (const counter of Object.keys(groupedData)) {
-      for (const category of Object.keys(groupedData[counter])) {
-        if (!isFirstPage) {
-          doc.addPage();
-        }
+    doc.fontSize(17).font("Helvetica-Bold").text("ORDER REQUEST", {
+      align: "center",
+    });
 
-        isFirstPage = false;
+    doc.moveDown(0.4);
 
-        // ================= HEADER =================
+    doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
 
-        doc
-          .fontSize(16)
-          .font("Helvetica-Bold")
-          .fillColor("#000")
-          .text("ORDER REQUEST", {
-            align: "center",
-          });
+    doc.moveDown(0.5);
 
-        doc.moveDown();
+    // =====================================================
+    // ORDER INFORMATION
+    // =====================================================
 
-        doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+    doc.fontSize(9).font("Helvetica");
 
-        doc.moveDown();
+    doc.text(`Order ID: ${orderDisplayId}`, {
+      continued: true,
+    });
 
-        // ================= ORDER INFO =================
+    doc.text(`Status: ${order.order_status || "-"}`, {
+      align: "right",
+    });
 
-        doc.fontSize(10).font("Helvetica");
+    doc.text(
+      `Order Date: ${
+        order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
+      }`,
+    );
 
-        doc.text(`Order ID: ${orderDisplayId}`);
+    doc.moveDown(0.5);
 
-        doc.text(`Status: ${order.order_status || "-"}`);
+    // =====================================================
+    // SHOP
+    // =====================================================
 
-        doc.text(
-          `Order Date: ${
-            order.order_date
-              ? new Date(order.order_date).toLocaleDateString()
-              : "-"
-          }`,
-        );
+    doc.fontSize(10).font("Helvetica-Bold").text("Shop Details");
 
-        doc.moveDown();
+    doc.fontSize(8).font("Helvetica");
 
-        // ================= SHOP =================
+    doc.text(`Shop: ${order.shop_name || "-"}`, {
+      continued: true,
+    });
 
-        doc.fontSize(11).font("Helvetica-Bold").text("Shop Details", {
-          underline: true,
-        });
+    doc.text(`Phone: ${order.shop_phone || "-"}`, {
+      align: "right",
+    });
 
-        doc.moveDown(0.3).fontSize(10).font("Helvetica");
+    doc.text(
+      `Address: ${order.shop_address || "-"}, ${
+        order.city || "-"
+      }, ${order.state || "-"}`,
+    );
 
-        doc.text(`Shop Name: ${order.shop_name || "-"}`);
+    doc.moveDown(0.6);
 
-        doc.text(`Phone: ${order.shop_phone || "-"}`);
+    // =====================================================
+    // TABLE
+    // =====================================================
 
-        doc.text(`Address: ${order.shop_address || "-"}`);
+    const startX = 30;
+    let y = doc.y;
 
-        doc.text(`City: ${order.city || "-"}, ${order.state || "-"}`);
+    const rowHeight = 18;
 
-        doc.moveDown();
+    const colWidths = {
+      counter: 105,
+      category: 105,
+      department: 105,
+      sweet: 135,
+      qty: 40,
+      unit: 45,
+    };
 
-        // ================= COUNTER =================
+    const totalWidth = 535;
 
-        doc.fontSize(13).font("Helvetica-Bold").text(`Counter: ${counter}`);
+    // =====================================================
+    // TABLE HEADER
+    // =====================================================
 
-        const counterItems = groupedData[counter][category];
+    doc.rect(startX, y, totalWidth, rowHeight).fill("#e5e5e5");
 
-        const location = counterItems[0]?.counter_location;
+    doc.fillColor("#000").fontSize(7).font("Helvetica-Bold");
 
-        if (location) {
-          doc
-            .fontSize(9)
-            .font("Helvetica")
-            .fillColor("#555")
-            .text(`Location: ${location}`);
+    let x = startX;
 
-          doc.fillColor("#000");
-        }
+    doc.text("Counter", x + 3, y + 5, {
+      width: colWidths.counter,
+    });
 
-        doc.fontSize(12).font("Helvetica-Bold").text(`Category: ${category}`);
+    x += colWidths.counter;
 
-        doc.moveDown(0.5);
+    doc.text("Category", x + 3, y + 5, {
+      width: colWidths.category,
+    });
 
-        // ================= TABLE =================
+    x += colWidths.category;
 
-        let y = doc.y;
+    doc.text("Department", x + 3, y + 5, {
+      width: colWidths.department,
+    });
 
-        const startX = 40;
-        const rowHeight = 20;
+    x += colWidths.department;
 
-        const colWidths = {
-          name: 260,
-          qty: 80,
-          unit: 60,
-          status: 100,
-        };
+    doc.text("Sweet", x + 3, y + 5, {
+      width: colWidths.sweet,
+    });
 
-        // ================= TABLE HEADER =================
+    x += colWidths.sweet;
 
-        doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+    doc.text("Qty", x, y + 5, {
+      width: colWidths.qty,
+      align: "center",
+    });
 
-        doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+    x += colWidths.qty;
 
-        doc.text("Sweet Name", startX + 5, y + 5, {
-          width: colWidths.name,
-        });
+    doc.text("Unit", x, y + 5, {
+      width: colWidths.unit,
+      align: "center",
+    });
 
-        doc.text("Qty", startX + colWidths.name, y + 5, {
-          width: colWidths.qty,
-          align: "center",
-        });
+    y += rowHeight;
 
-        doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
-          width: colWidths.unit,
-          align: "center",
-        });
+    // =====================================================
+    // ITEMS
+    // =====================================================
 
-        doc.text(
-          "Status",
-          startX + colWidths.name + colWidths.qty + colWidths.unit,
-          y + 5,
-          {
-            width: colWidths.status,
-            align: "center",
-          },
-        );
+    let grandTotal = 0;
 
-        y += rowHeight;
+    data.forEach((item, index) => {
+      const qty = Number(item.quantity || 0);
 
-        let total = 0;
+      grandTotal += qty;
 
-        // ================= ITEMS =================
-
-        groupedData[counter][category].forEach((item, index) => {
-          const qty = Number(item.quantity || 0);
-
-          total += qty;
-
-          // Page break
-          if (y > 750) {
-            doc.addPage();
-            y = 50;
-          }
-
-          if (index % 2 === 0) {
-            doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
-          }
-
-          doc.fillColor("#000").fontSize(9).font("Helvetica");
-
-          doc.text(item.sweet_name || "-", startX + 5, y + 5, {
-            width: colWidths.name,
-          });
-
-          doc.text(qty.toString(), startX + colWidths.name, y + 5, {
-            width: colWidths.qty,
-            align: "center",
-          });
-
-          doc.text(
-            item.unit || "-",
-            startX + colWidths.name + colWidths.qty,
-            y + 5,
-            {
-              width: colWidths.unit,
-              align: "center",
-            },
-          );
-
-          doc.text(
-            item.item_status || "PENDING",
-            startX + colWidths.name + colWidths.qty + colWidths.unit,
-            y + 5,
-            {
-              width: colWidths.status,
-              align: "center",
-            },
-          );
-
-          y += rowHeight;
-        });
-
-        // ================= TOTAL =================
-
-        doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
-
-        doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
-
-        doc.text("Total", startX + 5, y + 5, {
-          width: colWidths.name,
-        });
-
-        doc.text(total.toString(), startX + colWidths.name, y + 5, {
-          width: colWidths.qty,
-          align: "center",
-        });
-
-        doc.moveDown(2);
-
-        // ================= FOOTER =================
-
-        doc
-          .fontSize(9)
-          .fillColor("gray")
-          .font("Helvetica")
-          .text("System generated order request.", {
-            align: "center",
-          });
-
-        doc.fillColor("#000");
+      // Keep single page
+      if (y > 760) {
+        return;
       }
-    }
 
-    // =====================================================
-    // DEPARTMENT WISE PRODUCTION SLIPS
-    // =====================================================
+      if (index % 2 === 0) {
+        doc.rect(startX, y, totalWidth, rowHeight).fill("#fafafa");
+      }
 
-    for (const department of Object.keys(departmentGrouped)) {
-      doc.addPage();
+      doc.fillColor("#000").fontSize(7).font("Helvetica");
 
-      // ================= HEADER =================
+      let x = startX;
 
-      doc
-        .fontSize(18)
-        .font("Helvetica-Bold")
-        .fillColor("#000")
-        .text("DEPARTMENT SLIP", {
-          align: "center",
-        });
+      doc.text(item.counter_name || "-", x + 3, y + 5, {
+        width: colWidths.counter - 6,
+        ellipsis: true,
+      });
 
-      doc.moveDown(0.5);
+      x += colWidths.counter;
 
-      doc.fontSize(14).font("Helvetica-Bold").text(department, {
+      doc.text(item.category_name || "-", x + 3, y + 5, {
+        width: colWidths.category - 6,
+        ellipsis: true,
+      });
+
+      x += colWidths.category;
+
+      doc.text(item.department_name || "-", x + 3, y + 5, {
+        width: colWidths.department - 6,
+        ellipsis: true,
+      });
+
+      x += colWidths.department;
+
+      doc.text(item.sweet_name || "-", x + 3, y + 5, {
+        width: colWidths.sweet - 6,
+        ellipsis: true,
+      });
+
+      x += colWidths.sweet;
+
+      doc.text(qty.toString(), x, y + 5, {
+        width: colWidths.qty,
         align: "center",
       });
 
-      doc.moveDown();
+      x += colWidths.qty;
 
-      // ================= ORDER INFO =================
-
-      doc.fontSize(10).font("Helvetica");
-
-      doc.text(`Order: ${orderDisplayId}`);
-
-      doc.text(
-        `Date: ${
-          order.order_date
-            ? new Date(order.order_date).toLocaleDateString()
-            : "-"
-        }`,
-      );
-
-      doc.moveDown();
-
-      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-
-      doc.moveDown();
-
-      let total = 0;
-
-      // ================= DEPARTMENT ITEMS =================
-
-      departmentGrouped[department].forEach((item) => {
-        const qty = Number(item.quantity || 0);
-
-        total += qty;
-
-        doc
-          .fontSize(12)
-          .font("Helvetica")
-          .text(item.sweet_name || "Unknown Sweet", 40, doc.y, {
-            continued: true,
-          })
-          .text(`${qty} ${item.unit || ""}`, {
-            align: "right",
-          });
-
-        doc.moveDown(0.3);
-      });
-
-      // ================= TOTAL =================
-
-      doc.moveDown();
-
-      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-
-      doc.moveDown();
-
-      doc.fontSize(13).font("Helvetica-Bold").text(`TOTAL QTY : ${total}`, {
-        align: "right",
-      });
-
-      doc.moveDown(2);
-
-      doc.fontSize(9).fillColor("gray").text("Department Production Slip", {
+      doc.text(item.unit || "-", x, y + 5, {
+        width: colWidths.unit,
         align: "center",
       });
 
-      doc.fillColor("#000");
-    }
+      y += rowHeight;
+    });
 
-    // ================= END PDF =================
+    // =====================================================
+    // TOTAL
+    // =====================================================
+
+    doc.rect(startX, y, totalWidth, rowHeight).fill("#e8f8f5");
+
+    doc.fillColor("#000").fontSize(8).font("Helvetica-Bold");
+
+    doc.text("TOTAL", startX + 5, y + 5, {
+      width: 420,
+    });
+
+    doc.text(grandTotal.toString(), startX + 420, y + 5, {
+      width: 60,
+      align: "center",
+    });
+
+    doc.moveDown(2);
+
+    // =====================================================
+    // FOOTER
+    // =====================================================
+
+    doc
+      .fontSize(8)
+      .font("Helvetica")
+      .fillColor("gray")
+      .text("System generated order request.", {
+        align: "center",
+      });
+
+    doc.fillColor("#000");
+
+    // =====================================================
+    // END
+    // =====================================================
 
     doc.end();
 
-    // ================= RESPONSE =================
-
-    const fileUrl = `/uploads/OrderRequests/${fileName}`;
+    const fileUrl = `.public/uploads/OrderRequests/${fileName}`;
 
     const serverUrl = "https://api.joswee.cloud";
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Order request PDF generated",
+      msg: "Order request PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
   } catch (error) {
     console.log("downloadOrderRequestPDF error:", error);
 
-    return res.status(500).send("Error generating PDF");
+    return res.status(500).send("Error generating order request PDF");
   }
 }
 
+// async function downloadOrderRequestPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+//     // =====================================================
+//     // FETCH ORDER DATA
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         -- Sweet
+//         sw.row_id AS sweet_id,
+//         COALESCE(
+//           sw.sweet_name,
+//           'Unknown Sweet'
+//         ) AS sweet_name,
+
+//         COALESCE(
+//           sw.unit,
+//           '-'
+//         ) AS unit,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         COALESCE(
+//           c.counter_name,
+//           'Default Counter'
+//         ) AS counter_name,
+
+//         c.location AS counter_location,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         COALESCE(
+//           cat.category_name,
+//           'Others'
+//         ) AS category_name,
+
+//         -- Department
+//         d.row_id AS department_id,
+//         COALESCE(
+//           d.department_name,
+//           'Others'
+//         ) AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         d.department_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     if (data.length === 0) {
+//       return res.status(404).send("No order found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "./public/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `OrderRequest_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // A5 SETTINGS
+//     // =====================================================
+
+//     /*
+//       A5:
+//       148mm × 210mm
+
+//       PDF points:
+//       419.53 × 595.28
+//     */
+
+//     const PAGE_WIDTH = 419.53;
+//     const PAGE_HEIGHT = 595.28;
+
+//     const MARGIN = 25;
+
+//     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+//     // =====================================================
+//     // PDF
+//     // =====================================================
+
+//     const doc = new PDFDocument({
+//       size: "A5",
+//       margins: {
+//         top: MARGIN,
+//         bottom: MARGIN,
+//         left: MARGIN,
+//         right: MARGIN,
+//       },
+//       autoFirstPage: true,
+//     });
+
+//     const writeStream = fs.createWriteStream(filePath);
+
+//     doc.pipe(writeStream);
+
+//     // =====================================================
+//     // LOGO
+//     // =====================================================
+
+//     const LOGO_PATH = "./public/uploads/logo.jpg";
+
+//     function drawRoundLogo() {
+//       if (!fs.existsSync(LOGO_PATH)) {
+//         console.log("Logo not found:", LOGO_PATH);
+
+//         return;
+//       }
+
+//       const logoSize = 48;
+
+//       const x = (PAGE_WIDTH - logoSize) / 2;
+
+//       const y = 18;
+
+//       doc.save();
+
+//       // Circular clipping
+//       doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2).clip();
+
+//       doc.image(LOGO_PATH, x, y, {
+//         width: logoSize,
+//         height: logoSize,
+//       });
+
+//       doc.restore();
+
+//       // Circular border
+//       doc
+//         .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.y = y + logoSize + 8;
+//     }
+
+//     // =====================================================
+//     // PAGE HEADER
+//     // =====================================================
+
+//     function drawPageHeader(continuation = false) {
+//       // Logo
+//       drawRoundLogo();
+
+//       // -----------------------------------------------
+//       // TITLE
+//       // -----------------------------------------------
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(16)
+//         .fillColor("#000000")
+//         .text(continuation ? "ORDER REQUEST - CONTINUED" : "ORDER REQUEST", {
+//           align: "center",
+//           width: CONTENT_WIDTH,
+//         });
+
+//       doc.moveDown(0.35);
+
+//       // Small separator
+//       doc
+//         .moveTo(MARGIN, doc.y)
+//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
+//         .lineWidth(0.8)
+//         .stroke();
+
+//       doc.moveDown(0.6);
+//     }
+
+//     // =====================================================
+//     // ORDER INFORMATION
+//     // =====================================================
+
+//     function drawOrderInfo() {
+//       const boxY = doc.y;
+
+//       const boxHeight = 73;
+
+//       // Outer box
+//       doc
+//         .roundedRect(MARGIN, boxY, CONTENT_WIDTH, boxHeight, 5)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       // Title
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(9)
+//         .fillColor("#000000")
+//         .text("ORDER INFORMATION", MARGIN + 10, boxY + 8);
+
+//       // Left column
+//       doc.font("Helvetica").fontSize(7.5);
+
+//       doc.text(`Order ID: ${orderDisplayId}`, MARGIN + 10, boxY + 25);
+
+//       doc.text(
+//         `Date: ${
+//           order.order_date
+//             ? new Date(order.order_date).toLocaleDateString("en-IN")
+//             : "-"
+//         }`,
+//         MARGIN + 10,
+//         boxY + 40,
+//       );
+
+//       doc.text(`Status: ${order.order_status || "-"}`, MARGIN + 10, boxY + 55);
+
+//       // Right column
+//       const rightX = MARGIN + 205;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(8)
+//         .text("SHOP", rightX, boxY + 8);
+
+//       doc.font("Helvetica").fontSize(7.5);
+
+//       doc.text(order.shop_name || "-", rightX, boxY + 25, {
+//         width: 155,
+//         ellipsis: true,
+//       });
+
+//       doc.text(`Phone: ${order.shop_phone || "-"}`, rightX, boxY + 40, {
+//         width: 155,
+//         ellipsis: true,
+//       });
+
+//       const address = [order.shop_address, order.city, order.state]
+//         .filter(Boolean)
+//         .join(", ");
+
+//       doc.text(`Address: ${address || "-"}`, rightX, boxY + 55, {
+//         width: 155,
+//         ellipsis: true,
+//       });
+
+//       doc.y = boxY + boxHeight + 12;
+//     }
+
+//     // =====================================================
+//     // TABLE SETTINGS
+//     // =====================================================
+
+//     const rowHeight = 21;
+
+//     const colWidths = {
+//       counter: 65,
+//       category: 60,
+//       department: 60,
+//       sweet: 90,
+//       qty: 40,
+//       unit: 34,
+//     };
+
+//     // =====================================================
+//     // TABLE HEADER
+//     // =====================================================
+
+//     function drawTableHeader() {
+//       const y = doc.y;
+
+//       let x = MARGIN;
+
+//       // Background
+//       doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill("#eeeeee");
+
+//       doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.5);
+
+//       doc.text("COUNTER", x + 3, y + 7, {
+//         width: colWidths.counter - 6,
+//       });
+
+//       x += colWidths.counter;
+
+//       doc.text("CATEGORY", x + 3, y + 7, {
+//         width: colWidths.category - 6,
+//       });
+
+//       x += colWidths.category;
+
+//       doc.text("DEPARTMENT", x + 3, y + 7, {
+//         width: colWidths.department - 6,
+//       });
+
+//       x += colWidths.department;
+
+//       doc.text("SWEET", x + 3, y + 7, {
+//         width: colWidths.sweet - 6,
+//       });
+
+//       x += colWidths.sweet;
+
+//       doc.text("QTY", x, y + 7, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       x += colWidths.qty;
+
+//       doc.text("UNIT", x, y + 7, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       doc.y = y + rowHeight;
+
+//       // Bottom line
+//       doc
+//         .moveTo(MARGIN, doc.y)
+//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
+//         .lineWidth(0.5)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW ITEM
+//     // =====================================================
+
+//     function drawItem(item, index) {
+//       const y = doc.y;
+
+//       if (index % 2 === 0) {
+//         doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill("#fafafa");
+//       }
+
+//       doc.fillColor("#000000").font("Helvetica").fontSize(6.8);
+
+//       let x = MARGIN;
+
+//       doc.text(item.counter_name || "-", x + 3, y + 7, {
+//         width: colWidths.counter - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.counter;
+
+//       doc.text(item.category_name || "-", x + 3, y + 7, {
+//         width: colWidths.category - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.category;
+
+//       doc.text(item.department_name || "-", x + 3, y + 7, {
+//         width: colWidths.department - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.department;
+
+//       doc.text(item.sweet_name || "-", x + 3, y + 7, {
+//         width: colWidths.sweet - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.sweet;
+
+//       const qty = Number(item.quantity || 0);
+
+//       doc.text(String(qty), x, y + 7, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       x += colWidths.qty;
+
+//       doc.text(item.unit || "-", x, y + 7, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       doc.y = y + rowHeight;
+
+//       // Row separator
+//       doc
+//         .moveTo(MARGIN, doc.y)
+//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
+//         .lineWidth(0.25)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW TOTAL
+//     // =====================================================
+
+//     function drawTotal(total) {
+//       const y = doc.y;
+
+//       doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight + 2).fill("#eeeeee");
+
+//       doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8);
+
+//       doc.text("TOTAL QUANTITY", MARGIN + 8, y + 7, {
+//         width: CONTENT_WIDTH - 70,
+//       });
+
+//       doc.text(String(total), PAGE_WIDTH - MARGIN - 50, y + 7, {
+//         width: 40,
+//         align: "right",
+//       });
+
+//       doc.y = y + rowHeight + 12;
+//     }
+
+//     // =====================================================
+//     // FOOTER
+//     // =====================================================
+
+//     function drawFooter() {
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6.5)
+//         .fillColor("#666666")
+//         .text("System generated order request", {
+//           align: "center",
+//           width: CONTENT_WIDTH,
+//         });
+
+//       doc.fillColor("#000000");
+//     }
+
+//     // =====================================================
+//     // FIRST PAGE HEADER
+//     // =====================================================
+
+//     drawPageHeader(false);
+
+//     drawOrderInfo();
+
+//     drawTableHeader();
+
+//     // =====================================================
+//     // ITEMS + PAGE BREAK
+//     // =====================================================
+
+//     let grandTotal = 0;
+
+//     let itemIndex = 0;
+
+//     data.forEach((item) => {
+//       const qty = Number(item.quantity || 0);
+
+//       grandTotal += qty;
+
+//       /*
+//        * A5 usable area:
+//        * If current row is too close to bottom,
+//        * create a new A5 page.
+//        */
+
+//       if (doc.y > PAGE_HEIGHT - 65) {
+//         doc.addPage({
+//           size: "A5",
+//           margins: {
+//             top: MARGIN,
+//             bottom: MARGIN,
+//             left: MARGIN,
+//             right: MARGIN,
+//           },
+//         });
+
+//         drawPageHeader(true);
+
+//         drawOrderInfo();
+
+//         drawTableHeader();
+
+//         itemIndex = 0;
+//       }
+
+//       drawItem(item, itemIndex);
+
+//       itemIndex++;
+//     });
+
+//     // =====================================================
+//     // TOTAL
+//     // =====================================================
+
+//     /*
+//      * Make sure total does not get pushed
+//      * outside the A5 page.
+//      */
+
+//     if (doc.y > PAGE_HEIGHT - 45) {
+//       doc.addPage({
+//         size: "A5",
+//         margins: {
+//           top: MARGIN,
+//           bottom: MARGIN,
+//           left: MARGIN,
+//           right: MARGIN,
+//         },
+//       });
+
+//       drawPageHeader(true);
+//     }
+
+//     drawTotal(grandTotal);
+
+//     drawFooter();
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // RESPONSE AFTER FILE CREATION
+//     // =====================================================
+
+//     writeStream.on("finish", () => {
+//       // IMPORTANT: leading /
+//       const fileUrl = `/public/uploads/OrderRequests/${fileName}`;
+
+//       const serverUrl = "https://api.joswee.cloud";
+
+//       return libFunc.sendResponse(res, {
+//         status: 0,
+//         msg: "Order request PDF generated successfully",
+//         filePath: serverUrl + fileUrl,
+//       });
+//     });
+
+//     writeStream.on("error", (error) => {
+//       console.log("Order PDF write error:", error);
+
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error writing order request PDF");
+//       }
+//     });
+//   } catch (error) {
+//     console.log("downloadOrderRequestPDF error:", error);
+
+//     if (!res.headersSent) {
+//       return res.status(500).send("Error generating order request PDF");
+//     }
+//   }
+// }
 async function getDashboardData(req, res) {
   try {
     const user = req.data;
@@ -12484,7 +13887,7 @@ async function fetchCounterSweets(req, res) {
     // =====================================
     const sql = `
       SELECT
-        s.row_id AS sweet_id,
+        s.row_id ,
         s.sweet_name,
         s.unit,
         s.price,
@@ -12546,5 +13949,1747 @@ async function fetchCounterSweets(req, res) {
       msg: "Something went wrong",
       error: error.message,
     });
+  }
+}
+
+// async function downloadDepartmentSlipPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+//     // =====================================================
+//     // GET ORDER + CHECK SUPPLIER ACCEPTANCE
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         oi.row_id AS order_item_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         sw.row_id AS sweet_id,
+//         COALESCE(
+//           sw.sweet_name,
+//           'Unknown Sweet'
+//         ) AS sweet_name,
+
+//         COALESCE(
+//           sw.unit,
+//           '-'
+//         ) AS unit,
+
+//         c.row_id AS counter_id,
+//         COALESCE(
+//           c.counter_name,
+//           'Default Counter'
+//         ) AS counter_name,
+
+//         c.location AS counter_location,
+
+//         cat.row_id AS category_id,
+//         COALESCE(
+//           cat.category_name,
+//           'Others'
+//         ) AS category_name,
+
+//         d.row_id AS department_id,
+//         COALESCE(
+//           d.department_name,
+//           'Others'
+//         ) AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+//       AND o.order_status = 'ACCEPTED'
+
+//       ORDER BY
+//         d.department_name ASC,
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     // =====================================================
+//     // SUPPLIER HAS NOT ACCEPTED
+//     // =====================================================
+
+//     if (data.length === 0) {
+//       // Check whether order exists
+//       const orderCheck = await db_query.customQuery(`
+//         SELECT
+//           row_id,
+//           order_status
+//         FROM ${orderTable}
+//         WHERE row_id = '${safeOrderId}'
+//       `);
+
+//       const orderData = orderCheck.data || [];
+
+//       if (orderData.length === 0) {
+//         return res.status(404).send("Order not found");
+//       }
+
+//       if (orderData[0].order_status !== "ACCEPTED") {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Department slip is not available. Supplier must accept the order first.",
+//         });
+//       }
+
+//       return res.status(404).send("No department items found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // DEPARTMENT GROUPING
+//     // =====================================================
+
+//     const departmentGrouped = {};
+
+//     data.forEach((item) => {
+//       const departmentId = item.department_id || "NO_DEPARTMENT";
+
+//       const departmentName = item.department_name || "Others";
+
+//       if (!departmentGrouped[departmentId]) {
+//         departmentGrouped[departmentId] = {
+//           department_name: departmentName,
+//           items: [],
+//         };
+//       }
+
+//       departmentGrouped[departmentId].items.push(item);
+//     });
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "./public/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `DepartmentSlip_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     const doc = new PDFDocument({
+//       margin: 40,
+//       size: "A4",
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // =====================================================
+//     // DEPARTMENT PAGES
+//     // =====================================================
+
+//     const departments = Object.values(departmentGrouped);
+
+//     departments.forEach((department, departmentIndex) => {
+//       if (departmentIndex > 0) {
+//         doc.addPage();
+//       }
+
+//       // =================================================
+//       // HEADER
+//       // =================================================
+
+//       doc
+//         .fontSize(18)
+//         .font("Helvetica-Bold")
+//         .fillColor("#000")
+//         .text("DEPARTMENT SLIP", {
+//           align: "center",
+//         });
+
+//       doc.moveDown(0.4);
+
+//       doc.fontSize(14).font("Helvetica-Bold").text(department.department_name, {
+//         align: "center",
+//       });
+
+//       doc.moveDown();
+
+//       // =================================================
+//       // ORDER INFO
+//       // =================================================
+
+//       doc.fontSize(10).font("Helvetica");
+
+//       doc.text(`Order ID: ${orderDisplayId}`);
+
+//       doc.text(`Status: ${order.order_status}`);
+
+//       doc.text(
+//         `Date: ${
+//           order.order_date
+//             ? new Date(order.order_date).toLocaleDateString()
+//             : "-"
+//         }`,
+//       );
+
+//       doc.text(`Shop: ${order.shop_name || "-"}`);
+
+//       doc.moveDown();
+
+//       doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
+//       doc.moveDown();
+
+//       // =================================================
+//       // TABLE HEADER
+//       // =================================================
+
+//       let y = doc.y;
+
+//       const startX = 40;
+//       const rowHeight = 22;
+
+//       const colWidths = {
+//         counter: 150,
+//         category: 130,
+//         sweet: 160,
+//         qty: 60,
+//       };
+
+//       doc.rect(startX, y, 500, rowHeight).fill("#e5e5e5");
+
+//       doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+
+//       doc.text("Counter", startX + 5, y + 6, {
+//         width: colWidths.counter,
+//       });
+
+//       doc.text("Category", startX + colWidths.counter + 5, y + 6, {
+//         width: colWidths.category,
+//       });
+
+//       doc.text(
+//         "Sweet",
+//         startX + colWidths.counter + colWidths.category + 5,
+//         y + 6,
+//         {
+//           width: colWidths.sweet,
+//         },
+//       );
+
+//       doc.text(
+//         "Qty",
+//         startX + colWidths.counter + colWidths.category + colWidths.sweet,
+//         y + 6,
+//         {
+//           width: colWidths.qty,
+//           align: "center",
+//         },
+//       );
+
+//       y += rowHeight;
+
+//       // =================================================
+//       // ITEMS
+//       // =================================================
+
+//       let total = 0;
+
+//       department.items.forEach((item, index) => {
+//         const qty = Number(item.quantity || 0);
+
+//         total += qty;
+
+//         if (index % 2 === 0) {
+//           doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
+//         }
+
+//         doc.fillColor("#000").fontSize(8).font("Helvetica");
+
+//         doc.text(item.counter_name || "-", startX + 5, y + 6, {
+//           width: colWidths.counter - 10,
+//           ellipsis: true,
+//         });
+
+//         doc.text(
+//           item.category_name || "-",
+//           startX + colWidths.counter + 5,
+//           y + 6,
+//           {
+//             width: colWidths.category - 10,
+//             ellipsis: true,
+//           },
+//         );
+
+//         doc.text(
+//           item.sweet_name || "-",
+//           startX + colWidths.counter + colWidths.category + 5,
+//           y + 6,
+//           {
+//             width: colWidths.sweet - 10,
+//             ellipsis: true,
+//           },
+//         );
+
+//         doc.text(
+//           `${qty} ${item.unit || ""}`,
+//           startX + colWidths.counter + colWidths.category + colWidths.sweet,
+//           y + 6,
+//           {
+//             width: colWidths.qty,
+//             align: "center",
+//           },
+//         );
+
+//         y += rowHeight;
+//       });
+
+//       // =================================================
+//       // TOTAL
+//       // =================================================
+
+//       doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+
+//       doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
+
+//       doc.text("TOTAL", startX + 5, y + 6);
+
+//       doc.text(
+//         total.toString(),
+//         startX + colWidths.counter + colWidths.category + colWidths.sweet,
+//         y + 6,
+//         {
+//           width: colWidths.qty,
+//           align: "center",
+//         },
+//       );
+
+//       // =================================================
+//       // FOOTER
+//       // =================================================
+
+//       doc.moveDown(3);
+
+//       doc
+//         .fontSize(8)
+//         .font("Helvetica")
+//         .fillColor("gray")
+//         .text("Department Production Slip", {
+//           align: "center",
+//         });
+
+//       doc.fillColor("#000");
+//     });
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     const fileUrl = `./public/uploads/DepartmentSlips/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Department slip generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadDepartmentSlipPDF error:", error);
+
+//     return res.status(500).send("Error generating department slip");
+//   }
+// }
+
+// async function downloadDepartmentSlipPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     // IMPORTANT:
+//     // SQL string escape should be ''
+//     const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+//     // =====================================================
+//     // GET ORDER + CHECK SUPPLIER ACCEPTANCE
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         oi.row_id AS order_item_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         sw.row_id AS sweet_id,
+
+//         COALESCE(
+//           sw.sweet_name,
+//           'Unknown Sweet'
+//         ) AS sweet_name,
+
+//         COALESCE(
+//           sw.unit,
+//           '-'
+//         ) AS unit,
+
+//         c.row_id AS counter_id,
+
+//         COALESCE(
+//           c.counter_name,
+//           'Default Counter'
+//         ) AS counter_name,
+
+//         c.location AS counter_location,
+
+//         cat.row_id AS category_id,
+
+//         COALESCE(
+//           cat.category_name,
+//           'Others'
+//         ) AS category_name,
+
+//         d.row_id AS department_id,
+
+//         COALESCE(
+//           d.department_name,
+//           'Others'
+//         ) AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+//       AND o.order_status = 'ACCEPTED'
+
+//       ORDER BY
+//         d.department_name ASC,
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     // =====================================================
+//     // SUPPLIER HAS NOT ACCEPTED
+//     // =====================================================
+
+//     if (data.length === 0) {
+//       const orderCheck = await db_query.customQuery(`
+//         SELECT
+//           row_id,
+//           order_status
+//         FROM ${orderTable}
+//         WHERE row_id = '${safeOrderId}'
+//       `);
+
+//       const orderData = orderCheck.data || [];
+
+//       if (orderData.length === 0) {
+//         return res.status(404).send("Order not found");
+//       }
+
+//       if (orderData[0].order_status !== "ACCEPTED") {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Department slip is not available. Supplier must accept the order first.",
+//         });
+//       }
+
+//       return res.status(404).send("No department items found");
+//     }
+
+//     // =====================================================
+//     // ORDER
+//     // =====================================================
+
+//     const order = data[0];
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
+
+//     // =====================================================
+//     // DEPARTMENT GROUPING
+//     // =====================================================
+
+//     const departmentGrouped = {};
+
+//     data.forEach((item) => {
+//       const departmentId = item.department_id || "NO_DEPARTMENT";
+
+//       const departmentName = item.department_name || "Others";
+
+//       if (!departmentGrouped[departmentId]) {
+//         departmentGrouped[departmentId] = {
+//           department_name: departmentName,
+//           items: [],
+//         };
+//       }
+
+//       departmentGrouped[departmentId].items.push(item);
+//     });
+
+//     // =====================================================
+//     // THERMAL PDF SETTINGS
+//     // =====================================================
+
+//     /*
+//       80mm thermal printer
+
+//       1mm = 2.83465 PDF points
+
+//       80mm = approximately 226.77 points
+//     */
+
+//     const PAPER_WIDTH = 226.77;
+
+//     const SIDE_MARGIN = 8;
+
+//     const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
+
+//     const ROW_HEIGHT = 18;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "./public/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `DepartmentSlip_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // CALCULATE FIRST PAGE HEIGHT
+//     // =====================================================
+
+//     const departments = Object.values(departmentGrouped);
+
+//     function calculatePageHeight(department) {
+//       const itemCount = department.items.length;
+
+//       /*
+//         Header
+//         Logo
+//         Department
+//         Order details
+//         Table header
+//         Items
+//         Total
+//         Footer
+//       */
+
+//       const headerHeight = 155;
+
+//       const tableHeight = ROW_HEIGHT + itemCount * ROW_HEIGHT;
+
+//       const totalHeight = 25;
+
+//       const footerHeight = 30;
+
+//       return headerHeight + tableHeight + totalHeight + footerHeight;
+//     }
+
+//     // =====================================================
+//     // CREATE THERMAL PDF
+//     // =====================================================
+
+//     const firstPageHeight = calculatePageHeight(departments[0]);
+
+//     const doc = new PDFDocument({
+//       size: [PAPER_WIDTH, firstPageHeight],
+
+//       margins: {
+//         top: 8,
+//         bottom: 8,
+//         left: SIDE_MARGIN,
+//         right: SIDE_MARGIN,
+//       },
+
+//       autoFirstPage: true,
+//     });
+
+//     const writeStream = fs.createWriteStream(filePath);
+
+//     doc.pipe(writeStream);
+
+//     // =====================================================
+//     // ROUND LOGO FUNCTION
+//     // =====================================================
+
+//     function drawRoundLogo() {
+//       const logoPath = "./public/uploads/logo.png";
+
+//       if (!fs.existsSync(logoPath)) {
+//         console.log("Logo not found:", logoPath);
+
+//         return;
+//       }
+
+//       const logoSize = 42;
+
+//       const x = (PAPER_WIDTH - logoSize) / 2;
+
+//       const y = 8;
+
+//       doc.save();
+
+//       // Circular clipping
+//       doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2);
+
+//       doc.clip();
+
+//       doc.image(logoPath, x, y, {
+//         width: logoSize,
+//         height: logoSize,
+//       });
+
+//       doc.restore();
+
+//       // Circular border
+//       doc
+//         .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
+//         .lineWidth(0.5)
+//         .stroke();
+
+//       doc.y = y + logoSize + 5;
+//     }
+
+//     // =====================================================
+//     // DEPARTMENT PAGES
+//     // =====================================================
+
+//     departments.forEach((department, departmentIndex) => {
+//       // =================================================
+//       // NEW DEPARTMENT PAGE
+//       // =================================================
+
+//       if (departmentIndex > 0) {
+//         const pageHeight = calculatePageHeight(department);
+
+//         doc.addPage({
+//           size: [PAPER_WIDTH, pageHeight],
+
+//           margins: {
+//             top: 8,
+//             bottom: 8,
+//             left: SIDE_MARGIN,
+//             right: SIDE_MARGIN,
+//           },
+//         });
+//       }
+
+//       // =================================================
+//       // LOGO
+//       // =================================================
+
+//       drawRoundLogo();
+
+//       // =================================================
+//       // TITLE
+//       // =================================================
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(13)
+//         .fillColor("#000000")
+//         .text("DEPARTMENT SLIP", {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc.moveDown(0.2);
+
+//       // =================================================
+//       // DEPARTMENT
+//       // =================================================
+
+//       doc.font("Helvetica-Bold").fontSize(11).text(department.department_name, {
+//         width: CONTENT_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.moveDown(0.5);
+
+//       // =================================================
+//       // SEPARATOR
+//       // =================================================
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.4);
+
+//       // =================================================
+//       // ORDER INFO
+//       // =================================================
+
+//       doc.font("Helvetica").fontSize(8.5);
+
+//       doc.text(`Order: ${orderDisplayId}`);
+
+//       doc.text(`Status: ${order.order_status}`);
+
+//       doc.text(
+//         `Date: ${
+//           order.order_date
+//             ? new Date(order.order_date).toLocaleDateString("en-IN")
+//             : "-"
+//         }`,
+//       );
+
+//       doc.text(`Shop: ${order.shop_name || "-"}`);
+
+//       if (order.shop_phone) {
+//         doc.text(`Phone: ${order.shop_phone}`);
+//       }
+
+//       doc.moveDown(0.5);
+
+//       // =================================================
+//       // SEPARATOR
+//       // =================================================
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.5);
+
+//       // =================================================
+//       // TABLE HEADER
+//       // =================================================
+
+//       const counterWidth = 60;
+//       const categoryWidth = 52;
+//       const sweetWidth = 75;
+//       const qtyWidth = 30;
+
+//       const tableWidth = counterWidth + categoryWidth + sweetWidth + qtyWidth;
+
+//       let y = doc.y;
+
+//       doc.font("Helvetica-Bold").fontSize(7.5);
+
+//       // Header background
+//       doc.rect(SIDE_MARGIN, y, tableWidth, ROW_HEIGHT).fill("#eeeeee");
+
+//       doc.fillColor("#000000");
+
+//       // Counter
+//       doc.text("Counter", SIDE_MARGIN + 2, y + 5, {
+//         width: counterWidth - 4,
+//       });
+
+//       // Category
+//       doc.text("Category", SIDE_MARGIN + counterWidth + 2, y + 5, {
+//         width: categoryWidth - 4,
+//       });
+
+//       // Sweet
+//       doc.text("Sweet", SIDE_MARGIN + counterWidth + categoryWidth + 2, y + 5, {
+//         width: sweetWidth - 4,
+//       });
+
+//       // Qty
+//       doc.text(
+//         "Qty",
+//         SIDE_MARGIN + counterWidth + categoryWidth + sweetWidth,
+//         y + 5,
+//         {
+//           width: qtyWidth,
+//           align: "center",
+//         },
+//       );
+
+//       y += ROW_HEIGHT;
+
+//       // =================================================
+//       // ITEMS
+//       // =================================================
+
+//       let total = 0;
+
+//       department.items.forEach((item, index) => {
+//         const qty = Number(item.quantity || 0);
+
+//         total += qty;
+
+//         // Alternating row
+//         if (index % 2 === 0) {
+//           doc.rect(SIDE_MARGIN, y, tableWidth, ROW_HEIGHT).fill("#fafafa");
+//         }
+
+//         doc.fillColor("#000000").font("Helvetica").fontSize(7);
+
+//         // Counter
+//         doc.text(item.counter_name || "-", SIDE_MARGIN + 2, y + 5, {
+//           width: counterWidth - 4,
+//           ellipsis: true,
+//         });
+
+//         // Category
+//         doc.text(
+//           item.category_name || "-",
+//           SIDE_MARGIN + counterWidth + 2,
+//           y + 5,
+//           {
+//             width: categoryWidth - 4,
+//             ellipsis: true,
+//           },
+//         );
+
+//         // Sweet
+//         doc.text(
+//           item.sweet_name || "-",
+//           SIDE_MARGIN + counterWidth + categoryWidth + 2,
+//           y + 5,
+//           {
+//             width: sweetWidth - 4,
+//             ellipsis: true,
+//           },
+//         );
+
+//         // Quantity
+//         doc.text(
+//           `${qty}`,
+//           SIDE_MARGIN + counterWidth + categoryWidth + sweetWidth,
+//           y + 5,
+//           {
+//             width: qtyWidth,
+//             align: "center",
+//           },
+//         );
+
+//         y += ROW_HEIGHT;
+//       });
+
+//       // =================================================
+//       // TOTAL
+//       // =================================================
+
+//       doc.rect(SIDE_MARGIN, y, tableWidth, ROW_HEIGHT).fill("#eeeeee");
+
+//       doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8);
+
+//       doc.text("TOTAL", SIDE_MARGIN + 2, y + 5, {
+//         width: counterWidth + categoryWidth + sweetWidth - 5,
+//         align: "right",
+//       });
+
+//       doc.text(
+//         total.toString(),
+//         SIDE_MARGIN + counterWidth + categoryWidth + sweetWidth,
+//         y + 5,
+//         {
+//           width: qtyWidth,
+//           align: "center",
+//         },
+//       );
+
+//       y += ROW_HEIGHT;
+
+//       // =================================================
+//       // FOOTER
+//       // =================================================
+
+//       doc.y = y + 12;
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(7)
+//         .fillColor("#555555")
+//         .text("Department Production Slip", {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc.moveDown(0.2);
+
+//       doc.text("System Generated", {
+//         width: CONTENT_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.fillColor("#000000");
+//     });
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // RESPONSE AFTER FILE CREATED
+//     // =====================================================
+
+//     writeStream.on("finish", () => {
+//       const fileUrl = `/public/uploads/DepartmentSlips/${fileName}`;
+
+//       const serverUrl = "https://api.joswee.cloud";
+
+//       return libFunc.sendResponse(res, {
+//         status: 0,
+//         msg: "Department slip generated successfully",
+//         filePath: serverUrl + fileUrl,
+//       });
+//     });
+
+//     writeStream.on("error", (error) => {
+//       console.log("Department PDF write error:", error);
+
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error writing department slip PDF");
+//       }
+//     });
+//   } catch (error) {
+//     console.log("downloadDepartmentSlipPDF error:", error);
+
+//     if (!res.headersSent) {
+//       return res.status(500).send("Error generating department slip");
+//     }
+//   }
+// }
+
+async function downloadDepartmentSlipPDF(req, res) {
+  try {
+    const { order_id } = req.data || {};
+
+    if (!order_id) {
+      return res.status(400).send("Order ID required");
+    }
+
+    const orderTable = schema + ".orders";
+    const itemTable = schema + ".order_items";
+    const shopTable = schema + ".shops";
+    const sweetTable = schema + ".sweets";
+    const counterTable = schema + ".counters";
+    const categoryTable = schema + ".categories";
+    const departmentTable = schema + ".departments";
+
+    const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+    // =====================================================
+    // GET ORDER + CHECK SUPPLIER ACCEPTANCE
+    // =====================================================
+
+    const result = await db_query.customQuery(`
+      SELECT
+
+        o.id AS order_serial_id,
+        o.row_id AS order_id,
+        o.order_status,
+        o.order_date,
+        o.supplier_id,
+
+        sh.row_id AS shop_id,
+        sh.shop_name,
+        sh.address AS shop_address,
+        sh.city,
+        sh.state,
+        sh.phone AS shop_phone,
+
+        oi.row_id AS order_item_id,
+        oi.quantity,
+        oi.item_status,
+        oi.counter_id,
+
+        sw.row_id AS sweet_id,
+
+        COALESCE(
+          sw.sweet_name,
+          'Unknown Sweet'
+        ) AS sweet_name,
+
+        COALESCE(
+          sw.unit,
+          '-'
+        ) AS unit,
+
+        c.row_id AS counter_id,
+
+        COALESCE(
+          c.counter_name,
+          'Default Counter'
+        ) AS counter_name,
+
+        c.location AS counter_location,
+
+        cat.row_id AS category_id,
+
+        COALESCE(
+          cat.category_name,
+          'Others'
+        ) AS category_name,
+
+        d.row_id AS department_id,
+
+        COALESCE(
+          d.department_name,
+          'Others'
+        ) AS department_name
+
+      FROM ${orderTable} o
+
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${itemTable} oi
+        ON oi.order_id = o.row_id
+
+      LEFT JOIN ${sweetTable} sw
+        ON sw.row_id = oi.sweet_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
+      LEFT JOIN ${categoryTable} cat
+        ON cat.row_id = sw.category_id
+
+      LEFT JOIN ${departmentTable} d
+        ON d.row_id = cat.department_id
+
+      WHERE
+        o.row_id = '${safeOrderId}'
+        AND o.order_status = 'ACCEPTED'
+
+      ORDER BY
+        d.department_name ASC,
+        c.counter_name ASC,
+        cat.category_name ASC,
+        sw.sweet_name ASC
+    `);
+
+    const data = result.data || [];
+
+    // =====================================================
+    // SUPPLIER HAS NOT ACCEPTED
+    // =====================================================
+
+    if (data.length === 0) {
+      const orderCheck = await db_query.customQuery(`
+        SELECT
+          row_id,
+          order_status
+        FROM ${orderTable}
+        WHERE row_id = '${safeOrderId}'
+      `);
+
+      const orderData = orderCheck.data || [];
+
+      if (orderData.length === 0) {
+        return res.status(404).send("Order not found");
+      }
+
+      if (orderData[0].order_status !== "ACCEPTED") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Department slip is not available. Supplier must accept the order first.",
+        });
+      }
+
+      return res.status(404).send("No department items found");
+    }
+
+    const order = data[0];
+
+    // =====================================================
+    // DISPLAY ORDER ID
+    // =====================================================
+
+    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
+
+    // =====================================================
+    // GROUP DATA BY DEPARTMENT
+    // =====================================================
+
+    const departmentGrouped = {};
+
+    data.forEach((item) => {
+      const departmentId = item.department_id || "NO_DEPARTMENT";
+
+      const departmentName = item.department_name || "Others";
+
+      if (!departmentGrouped[departmentId]) {
+        departmentGrouped[departmentId] = {
+          department_name: departmentName,
+          items: [],
+        };
+      }
+
+      departmentGrouped[departmentId].items.push(item);
+    });
+
+    const departments = Object.values(departmentGrouped);
+
+    // =====================================================
+    // THERMAL PAPER SETTINGS
+    // =====================================================
+
+    // 80mm thermal paper
+    const PAPER_WIDTH = 226.77;
+
+    const SIDE_MARGIN = 8;
+
+    const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
+
+    // =====================================================
+    // TABLE WIDTHS
+    // =====================================================
+
+    const COUNTER_WIDTH = 55;
+    const CATEGORY_WIDTH = 48;
+    const SWEET_WIDTH = 82;
+    const QTY_WIDTH = 25;
+
+    const TABLE_WIDTH =
+      COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
+
+    const ROW_HEIGHT = 17;
+
+    // =====================================================
+    // FILE SETUP
+    // =====================================================
+
+    const BASE_UPLOAD_PATH = "./public/uploads";
+
+    const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
+
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, {
+        recursive: true,
+      });
+    }
+
+    const fileName = `DepartmentSlip_${Date.now()}.pdf`;
+
+    const filePath = path.join(folder, fileName);
+
+    // =====================================================
+    // PAGE HEIGHT
+    // =====================================================
+
+    /*
+      Thermal printers use roll paper.
+
+      We calculate the height according to
+      the number of rows.
+
+      If there are too many rows, we split
+      the department into multiple pages.
+    */
+
+    const MAX_ROWS_PER_PAGE = 28;
+
+    function splitItems(items) {
+      const pages = [];
+
+      for (let i = 0; i < items.length; i += MAX_ROWS_PER_PAGE) {
+        pages.push(items.slice(i, i + MAX_ROWS_PER_PAGE));
+      }
+
+      return pages;
+    }
+
+    // =====================================================
+    // ROUND LOGO
+    // =====================================================
+
+    const LOGO_PATH = "./public/uploads/logo.jpg";
+
+    function drawRoundLogo(doc) {
+      if (!fs.existsSync(LOGO_PATH)) {
+        return;
+      }
+
+      const logoSize = 38;
+
+      const x = (PAPER_WIDTH - logoSize) / 2;
+
+      const y = 6;
+
+      doc.save();
+
+      doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2).clip();
+
+      doc.image(LOGO_PATH, x, y, {
+        width: logoSize,
+        height: logoSize,
+      });
+
+      doc.restore();
+
+      // Small circular outline
+      doc
+        .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
+        .lineWidth(0.5)
+        .stroke();
+
+      doc.y = y + logoSize + 4;
+    }
+
+    // =====================================================
+    // CALCULATE PAGE HEIGHT
+    // =====================================================
+
+    function calculatePageHeight(itemCount) {
+      /*
+        Logo                  48
+        Title                 18
+        Department            16
+        Separator              8
+        Order information     55
+        Separator              8
+        Table header          17
+        Items                 dynamic
+        Total                 20
+        Footer                25
+        Bottom margin         10
+      */
+
+      return (
+        48 + 18 + 16 + 8 + 55 + 8 + 17 + itemCount * ROW_HEIGHT + 20 + 25 + 10
+      );
+    }
+
+    // =====================================================
+    // FIRST PAGE
+    // =====================================================
+
+    const firstDepartment = departments[0];
+
+    const firstPages = splitItems(firstDepartment.items);
+
+    const firstPageHeight = calculatePageHeight(firstPages[0].length);
+
+    // =====================================================
+    // CREATE PDF
+    // =====================================================
+
+    const doc = new PDFDocument({
+      size: [PAPER_WIDTH, firstPageHeight],
+
+      margins: {
+        top: 6,
+        bottom: 6,
+        left: SIDE_MARGIN,
+        right: SIDE_MARGIN,
+      },
+
+      autoFirstPage: true,
+    });
+
+    const writeStream = fs.createWriteStream(filePath);
+
+    doc.pipe(writeStream);
+
+    // =====================================================
+    // DRAW DEPARTMENT HEADER
+    // =====================================================
+
+    function drawHeader(department, isContinuation = false) {
+      // -----------------------------------------------
+      // LOGO
+      // -----------------------------------------------
+
+      drawRoundLogo(doc);
+
+      // -----------------------------------------------
+      // TITLE
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(11)
+        .fillColor("#000000")
+        .text(
+          isContinuation ? "DEPARTMENT SLIP - CONTINUED" : "DEPARTMENT SLIP",
+          {
+            width: CONTENT_WIDTH,
+            align: "center",
+            lineBreak: false,
+          },
+        );
+
+      doc.moveDown(0.1);
+
+      // -----------------------------------------------
+      // DEPARTMENT
+      // -----------------------------------------------
+
+      doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
+        width: CONTENT_WIDTH,
+        align: "center",
+      });
+
+      doc.moveDown(0.35);
+
+      // -----------------------------------------------
+      // TOP SEPARATOR
+      // -----------------------------------------------
+
+      doc
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+        .lineWidth(0.7)
+        .stroke();
+
+      doc.moveDown(0.35);
+
+      // -----------------------------------------------
+      // ORDER INFO
+      // -----------------------------------------------
+
+      doc.font("Helvetica").fontSize(7.5);
+
+      doc.text(`Order : ${orderDisplayId}`);
+
+      doc.text(`Shop  : ${order.shop_name || "-"}`);
+
+      doc.text(
+        `Date  : ${
+          order.order_date
+            ? new Date(order.order_date).toLocaleDateString("en-IN")
+            : "-"
+        }`,
+      );
+
+      doc.text(`Status: ${order.order_status}`);
+
+      doc.moveDown(0.35);
+
+      // -----------------------------------------------
+      // SECOND SEPARATOR
+      // -----------------------------------------------
+
+      doc
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+        .lineWidth(0.7)
+        .stroke();
+
+      doc.moveDown(0.35);
+    }
+
+    // =====================================================
+    // DRAW TABLE HEADER
+    // =====================================================
+
+    function drawTableHeader() {
+      const y = doc.y;
+
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
+
+      // Header line
+      doc
+        .moveTo(SIDE_MARGIN, y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
+        .lineWidth(0.5)
+        .stroke();
+
+      doc.text("COUNTER", SIDE_MARGIN, y + 3, {
+        width: COUNTER_WIDTH,
+        align: "left",
+      });
+
+      doc.text("CATEGORY", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+        width: CATEGORY_WIDTH,
+        align: "left",
+      });
+
+      doc.text("SWEET", SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH, y + 3, {
+        width: SWEET_WIDTH,
+        align: "left",
+      });
+
+      doc.text(
+        "QTY",
+        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        y + 3,
+        {
+          width: QTY_WIDTH,
+          align: "center",
+        },
+      );
+
+      doc.y = y + ROW_HEIGHT;
+
+      // Bottom line
+      doc
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+        .lineWidth(0.5)
+        .stroke();
+    }
+
+    // =====================================================
+    // DRAW ITEM
+    // =====================================================
+
+    function drawItem(item) {
+      const y = doc.y;
+
+      const qty = Number(item.quantity || 0);
+
+      doc.font("Helvetica").fontSize(7).fillColor("#000000");
+
+      // Counter
+      doc.text(item.counter_name || "-", SIDE_MARGIN, y + 3, {
+        width: COUNTER_WIDTH - 2,
+        ellipsis: true,
+      });
+
+      // Category
+      doc.text(item.category_name || "-", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+        width: CATEGORY_WIDTH - 2,
+        ellipsis: true,
+      });
+
+      // Sweet
+      doc.text(
+        item.sweet_name || "-",
+        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH,
+        y + 3,
+        {
+          width: SWEET_WIDTH - 2,
+          ellipsis: true,
+        },
+      );
+
+      // Quantity
+      const quantityText =
+        item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+
+      doc.text(
+        quantityText,
+        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        y + 3,
+        {
+          width: QTY_WIDTH,
+          align: "center",
+          ellipsis: true,
+        },
+      );
+
+      doc.y = y + ROW_HEIGHT;
+
+      // Row separator
+      doc
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+        .lineWidth(0.25)
+        .stroke();
+    }
+
+    // =====================================================
+    // DRAW TOTAL
+    // =====================================================
+
+    function drawTotal(total) {
+      const y = doc.y;
+
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+
+      doc.text("TOTAL", SIDE_MARGIN, y + 4, {
+        width: COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        align: "right",
+      });
+
+      doc.text(
+        String(total),
+        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        y + 4,
+        {
+          width: QTY_WIDTH,
+          align: "center",
+        },
+      );
+
+      doc.y = y + 20;
+
+      doc
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+        .lineWidth(0.7)
+        .stroke();
+    }
+
+    // =====================================================
+    // DRAW FOOTER
+    // =====================================================
+
+    function drawFooter() {
+      doc.moveDown(0.5);
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor("#555555")
+        .text("Department Production Slip", {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      doc.text("System Generated", {
+        width: CONTENT_WIDTH,
+        align: "center",
+      });
+
+      doc.fillColor("#000000");
+    }
+
+    // =====================================================
+    // PROCESS DEPARTMENTS
+    // =====================================================
+
+    departments.forEach((department, departmentIndex) => {
+      const departmentPages = splitItems(department.items);
+
+      departmentPages.forEach((pageItems, pageIndex) => {
+        // -----------------------------------------
+        // NEW PAGE
+        // -----------------------------------------
+
+        if (departmentIndex !== 0 || pageIndex !== 0) {
+          const pageHeight = calculatePageHeight(pageItems.length);
+
+          doc.addPage({
+            size: [PAPER_WIDTH, pageHeight],
+
+            margins: {
+              top: 6,
+              bottom: 6,
+              left: SIDE_MARGIN,
+              right: SIDE_MARGIN,
+            },
+          });
+        }
+
+        // -----------------------------------------
+        // HEADER
+        // -----------------------------------------
+
+        drawHeader(department, pageIndex > 0);
+
+        // -----------------------------------------
+        // TABLE HEADER
+        // -----------------------------------------
+
+        drawTableHeader();
+
+        // -----------------------------------------
+        // ITEMS
+        // -----------------------------------------
+
+        let pageTotal = 0;
+
+        pageItems.forEach((item) => {
+          pageTotal += Number(item.quantity || 0);
+
+          drawItem(item);
+        });
+
+        // -----------------------------------------
+        // TOTAL
+        // -----------------------------------------
+
+        /*
+              Only show final total on the last
+              page of that department.
+
+              On continuation pages show
+              "Page Total".
+            */
+
+        if (pageIndex === departmentPages.length - 1) {
+          const departmentTotal = department.items.reduce(
+            (sum, item) => sum + Number(item.quantity || 0),
+            0,
+          );
+
+          drawTotal(departmentTotal);
+        } else {
+          const y = doc.y;
+
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(7.5)
+            .text(`PAGE TOTAL: ${pageTotal}`, SIDE_MARGIN, y + 4, {
+              width: TABLE_WIDTH,
+              align: "right",
+            });
+
+          doc.y = y + 20;
+
+          doc
+            .moveTo(SIDE_MARGIN, doc.y)
+            .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+            .lineWidth(0.5)
+            .stroke();
+        }
+
+        // -----------------------------------------
+        // FOOTER
+        // -----------------------------------------
+
+        drawFooter();
+      });
+    });
+
+    // =====================================================
+    // END PDF
+    // =====================================================
+
+    doc.end();
+
+    // =====================================================
+    // SEND RESPONSE AFTER PDF CREATED
+    // =====================================================
+
+    writeStream.on("finish", () => {
+      const fileUrl = `/public/uploads/DepartmentSlips/${fileName}`;
+
+      const serverUrl = "https://api.joswee.cloud";
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Department slip generated successfully",
+        filePath: serverUrl + fileUrl,
+      });
+    });
+
+    writeStream.on("error", (error) => {
+      console.log("Department PDF write error:", error);
+
+      if (!res.headersSent) {
+        return res.status(500).send("Error writing department slip");
+      }
+    });
+  } catch (error) {
+    console.log("downloadDepartmentSlipPDF error:", error);
+
+    if (!res.headersSent) {
+      return res.status(500).send("Error generating department slip");
+    }
   }
 }

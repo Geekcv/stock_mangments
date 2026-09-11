@@ -8043,7 +8043,6 @@ async function downloadOrderRequestPDF(req, res) {
     // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
 
-
     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
 
     if (!fs.existsSync(folder)) {
@@ -12482,100 +12481,297 @@ async function getShopDashboard(user) {
   try {
     const shopId = user.shopId;
 
+    if (!shopId) {
+      throw new Error("Shop ID not found");
+    }
+
+    // ==========================================
+    // SHOP SUMMARY
+    // ==========================================
+
     const summaryQuery = `
-      SELECT 
-        COUNT(*) as total_orders,
-        COUNT(*) FILTER (WHERE order_status='PENDING') as pending,
-        COUNT(*) FILTER (WHERE order_status='APPROVED') as approved,
-        COUNT(*) FILTER (WHERE order_status='REJECTED') as rejected
+      SELECT
+        COUNT(*) AS total_orders,
+
+        COUNT(*) FILTER (
+          WHERE order_status = 'PENDING'
+        ) AS pending,
+
+        COUNT(*) FILTER (
+          WHERE order_status = 'ACCEPTED'
+        ) AS accepted,
+
+        COUNT(*) FILTER (
+          WHERE order_status = 'DISPATCHED'
+        ) AS dispatched,
+
+        COUNT(*) FILTER (
+          WHERE order_status = 'DELIVERED'
+        ) AS delivered,
+
+        COUNT(*) FILTER (
+          WHERE order_status = 'REJECTED'
+        ) AS rejected
+
       FROM sms.orders
+
       WHERE shop_id = '${shopId}'
     `;
 
+    // ==========================================
+    // LOW STOCK
+    // Inventory -> Counter -> Shop
+    // ==========================================
+
     const lowStockQuery = `
-      SELECT i.*, s.sweet_name
+      SELECT
+        i.row_id AS inventory_id,
+        i.counter_id,
+        c.counter_name,
+        i.sweet_id,
+        s.sweet_name,
+        i.quantity,
+        i.min_stock,
+        i.max_stock,
+        i.expiry_date
+
       FROM sms.inventory i
-      JOIN sms.sweets s ON s.row_id = i.sweet_id
-      WHERE i.quantity::int <= i.min_stock
-      AND s.shop_id = '${shopId}'
+
+      JOIN sms.counters c
+        ON c.row_id = i.counter_id
+
+      JOIN sms.sweets s
+        ON s.row_id = i.sweet_id
+
+      WHERE c.shop_id = '${shopId}'
+        AND i.quantity::numeric <= COALESCE(i.min_stock, 0)
+
+      ORDER BY i.quantity::numeric ASC
+
       LIMIT 10
     `;
 
+    // ==========================================
+    // OUT OF STOCK
+    // ==========================================
+
     const outStockQuery = `
-    SELECT i.*, s.sweet_name
-    FROM sms.inventory i
-    JOIN sms.sweets s ON s.row_id = i.sweet_id
-    WHERE i.quantity::numeric = 0
-    AND s.shop_id = '${shopId}'
-  `;
+      SELECT
+        i.row_id AS inventory_id,
+        i.counter_id,
+        c.counter_name,
+        i.sweet_id,
+        s.sweet_name,
+        i.quantity,
+        i.min_stock,
+        i.max_stock
+
+      FROM sms.inventory i
+
+      JOIN sms.counters c
+        ON c.row_id = i.counter_id
+
+      JOIN sms.sweets s
+        ON s.row_id = i.sweet_id
+
+      WHERE c.shop_id = '${shopId}'
+        AND i.quantity::numeric = 0
+
+      ORDER BY s.sweet_name ASC
+    `;
+
+    // ==========================================
+    // EXPIRING INVENTORY
+    // ==========================================
 
     const expiryQuery = `
- SELECT 
-  i.*,
-  s.sweet_name
-FROM sms.inventory i
+      SELECT
+        i.row_id AS inventory_id,
+        i.counter_id,
+        c.counter_name,
+        i.sweet_id,
+        s.sweet_name,
+        i.quantity,
+        i.expiry_date
 
-LEFT JOIN sms.sweets s 
-  ON s.row_id = i.sweet_id
+      FROM sms.inventory i
 
-WHERE i.expiry_date <= CURRENT_DATE + INTERVAL '2 days'
-AND i.counter_id IN (
-  SELECT row_id FROM sms.counters WHERE shop_id = '${shopId}'
-)
+      JOIN sms.counters c
+        ON c.row_id = i.counter_id
 
-ORDER BY i.expiry_date ASC
-LIMIT 10;
+      JOIN sms.sweets s
+        ON s.row_id = i.sweet_id
+
+      WHERE c.shop_id = '${shopId}'
+        AND i.expiry_date <= CURRENT_DATE + INTERVAL '2 days'
+
+      ORDER BY i.expiry_date ASC
+
+      LIMIT 10
     `;
+
+    // ==========================================
+    // ORDER TREND
+    // ==========================================
 
     const trendQuery = `
-     SELECT 
-  order_date::date::text AS date,
-  COUNT(*) AS count
-FROM sms.orders
-WHERE shop_id = '${shopId}'
-GROUP BY order_date::date
-ORDER BY date DESC
-LIMIT 7;
+      SELECT
+        order_date::date::text AS date,
+        COUNT(*) AS count
+
+      FROM sms.orders
+
+      WHERE shop_id = '${shopId}'
+
+      GROUP BY order_date::date
+
+      ORDER BY date DESC
+
+      LIMIT 7
     `;
 
-    const financialQuery = `
-    SELECT COALESCE(SUM(oi.quantity::numeric * s.price),0) as total_amount
-    FROM sms.order_items oi
-    JOIN sms.sweets s ON s.row_id = oi.sweet_id
-    JOIN sms.orders o ON o.row_id = oi.order_id
-    WHERE o.shop_id = '${shopId}'
-  `;
+    // ==========================================
+    // FINANCIAL
+    // ==========================================
 
-    const [summary, lowStock, expiry, trend, out, financial] =
-      await Promise.all([
-        db_query.customQuery(summaryQuery),
-        db_query.customQuery(lowStockQuery),
-        db_query.customQuery(expiryQuery),
-        db_query.customQuery(trendQuery),
-        db_query.customQuery(outStockQuery),
-        db_query.customQuery(financialQuery),
-      ]);
+    const financialQuery = `
+      SELECT
+        COALESCE(
+          SUM(
+            oi.supplied_quantity::numeric * s.price::numeric
+          ),
+          0
+        ) AS total_amount
+
+      FROM sms.order_items oi
+
+      JOIN sms.sweets s
+        ON s.row_id = oi.sweet_id
+
+      JOIN sms.orders o
+        ON o.row_id = oi.order_id
+
+      WHERE o.shop_id = '${shopId}'
+        AND oi.item_status = 'ACCEPTED'
+        AND COALESCE(oi.supplied_quantity, 0) > 0
+    `;
+
+    // ==========================================
+    // COUNTER COUNT
+    // ==========================================
+
+    const counterQuery = `
+      SELECT COUNT(*) AS total_counters
+
+      FROM sms.counters
+
+      WHERE shop_id = '${shopId}'
+    `;
+
+    // ==========================================
+    // ASSIGNED SWEETS
+    // Shop -> Counter -> Sweet
+    // ==========================================
+
+    const assignedSweetsQuery = `
+      SELECT COUNT(DISTINCT cs.sweet_id) AS total_assigned_sweets
+
+      FROM sms.counter_sweets cs
+
+      WHERE cs.shop_id = '${shopId}'
+        AND cs.is_active = true
+    `;
+
+    // ==========================================
+    // COUNTER REQUESTS
+    // ==========================================
+
+    const requestsQuery = `
+      SELECT
+        COUNT(*) AS total_requests,
+
+        COUNT(*) FILTER (
+          WHERE cr.status = 'PENDING'
+        ) AS pending_requests,
+
+        COUNT(*) FILTER (
+          WHERE cr.status = 'APPROVED'
+        ) AS approved_requests,
+
+        COUNT(*) FILTER (
+          WHERE cr.status = 'REJECTED'
+        ) AS rejected_requests
+
+      FROM sms.counter_requests cr
+
+      JOIN sms.counters c
+        ON c.row_id = cr.counter_id
+
+      WHERE c.shop_id = '${shopId}'
+    `;
+
+    const [
+      summary,
+      lowStock,
+      expiry,
+      trend,
+      out,
+      financial,
+      counters,
+      assignedSweets,
+      requests,
+    ] = await Promise.all([
+      db_query.customQuery(summaryQuery),
+
+      db_query.customQuery(lowStockQuery),
+
+      db_query.customQuery(expiryQuery),
+
+      db_query.customQuery(trendQuery),
+
+      db_query.customQuery(outStockQuery),
+
+      db_query.customQuery(financialQuery),
+
+      db_query.customQuery(counterQuery),
+
+      db_query.customQuery(assignedSweetsQuery),
+
+      db_query.customQuery(requestsQuery),
+    ]);
 
     return {
-      summary: summary.data,
+      summary: {
+        ...(summary.data?.[0] || {}),
+        total_counters: counters.data?.[0]?.total_counters || 0,
+
+        total_assigned_sweets:
+          assignedSweets.data?.[0]?.total_assigned_sweets || 0,
+      },
+
       inventory: {
-        low_stock: lowStock.data,
-        out_of_stock: out.data,
-        // expiring: expiry.data,
+        low_stock: lowStock.data || [],
+        out_of_stock: out.data || [],
       },
-      financials: financial.data[0] || {},
+
+      financials: financial.data?.[0] || {
+        total_amount: 0,
+      },
+
+      requests: requests.data?.[0] || {},
+
       charts: {
-        orders_trend: trend.data,
+        orders_trend: trend.data || [],
       },
+
       alerts: {
-        expiry: expiry.data,
+        expiry: expiry.data || [],
       },
     };
   } catch (err) {
     throw err;
   }
 }
-
 async function getCounterDashboard(user) {
   try {
     const counterId = user.counterId;

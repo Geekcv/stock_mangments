@@ -358,3 +358,8 @@ CREATE TABLE sms.counter_sweets (
 
 ALTER TABLE sms.counter_sweets
 ADD COLUMN shop_id TEXT NOT NULL;
+
+
+ALTER TABLE sms.order_items
+ADD COLUMN request_id TEXT
+REFERENCES sms.counter_requests(row_id);

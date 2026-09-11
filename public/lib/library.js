@@ -57,7 +57,7 @@ let common_fn = {
   fe_counter: fetchCounters,
   fe_order_req: getCounterRequests,
   cr_counter_req: createCounterRequest,
-  fe_all_my_sweets:fetchCounterSweets,
+  fe_all_my_sweets: fetchCounterSweets,
 
   // supplier
   cr_supplier: createSupplier,
@@ -2496,90 +2496,207 @@ async function getStockHistory(req, res) {
 
     const user = req.data;
 
-    const { counter_id, sweet_id, transaction_type, from_date, to_date } =
-      req.data || {};
+    const {
+      counter_id,
+      sweet_id,
+      transaction_type,
+      from_date,
+      to_date,
+      shop_id,
+    } = req.data || {};
 
-    let conditions = ["1=1"];
+    // ==============================
+    // ROLE VALIDATION
+    // ==============================
 
-    // 🔒 ================= ROLE BASE FILTER =================
-
-    if (user.user_role === "SHOP_ADMIN") {
-      conditions.push(`c.shop_id = '${user.shopId}'`);
-    }
-
-    if (user.user_role === "COUNTER_USER") {
-      conditions.push(`st.counter_id = '${user.counterId}'`);
-    }
-
-    if (user.user_role === "SUPPLIER") {
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
       });
     }
 
-    // 🔎 ================= FILTERS =================
+    let conditions = [];
 
-    if (counter_id) {
-      conditions.push(`st.counter_id = '${counter_id.trim()}'`);
+    // ==============================
+    // SHOP ADMIN
+    // ==============================
+
+    if (user.user_role === "SHOP_ADMIN") {
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      // Only transactions from own shop
+      conditions.push(
+        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`,
+      );
+
+      // Optional counter filter
+      if (counter_id) {
+        conditions.push(
+          `st.counter_id = '${counter_id.trim().replaceAll("'", "`")}'`,
+        );
+      }
     }
+
+    // ==============================
+    // COUNTER USER
+    // ==============================
+
+    if (user.user_role === "COUNTER_USER") {
+      if (!user.counterId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Counter ID not found in token",
+        });
+      }
+
+      // Counter user can only see own counter
+      conditions.push(
+        `st.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`,
+      );
+    }
+
+    // ==============================
+    // ADMIN
+    // ==============================
+
+    if (user.user_role === "ADMIN") {
+      // Optional shop filter
+      if (shop_id) {
+        conditions.push(`c.shop_id = '${shop_id.trim().replaceAll("'", "`")}'`);
+      }
+
+      // Optional counter filter
+      if (counter_id) {
+        conditions.push(
+          `st.counter_id = '${counter_id.trim().replaceAll("'", "`")}'`,
+        );
+      }
+    }
+
+    // ==============================
+    // SWEET FILTER
+    // ==============================
 
     if (sweet_id) {
-      conditions.push(`st.sweet_id = '${sweet_id.trim()}'`);
+      conditions.push(
+        `st.sweet_id = '${sweet_id.trim().replaceAll("'", "`")}'`,
+      );
     }
+
+    // ==============================
+    // TRANSACTION TYPE
+    // ==============================
 
     if (transaction_type) {
-      conditions.push(`st.transaction_type = '${transaction_type}'`);
+      conditions.push(
+        `st.transaction_type = '${transaction_type
+          .trim()
+          .replaceAll("'", "`")
+          .toUpperCase()}'`,
+      );
     }
 
+    // ==============================
+    // DATE FILTER
+    // ==============================
+
     if (from_date) {
-      conditions.push(`st.cr_on >= '${from_date}'`);
+      conditions.push(`st.cr_on >= '${from_date.trim().replaceAll("'", "`")}'`);
     }
 
     if (to_date) {
-      conditions.push(`st.cr_on <= '${to_date}'`);
+      conditions.push(`st.cr_on <= '${to_date.trim().replaceAll("'", "`")}'`);
     }
 
-    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+    // ==============================
+    // WHERE
+    // ==============================
 
-    // 📊 QUERY (UPDATED)
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // ==============================
+    // QUERY
+    // ==============================
+
     const result = await db_query.customQuery(`
       SELECT
+
         st.row_id AS transaction_id,
+
         st.counter_id,
-        st.sweet_id,
-        st.transaction_type,
-        st.quantity,
-        st.reference_id,
-        st.notes,
-        TO_CHAR(st.cr_on, 'YYYY-MM-DD HH24:MI:SS') AS cr_on,
-
-        s.sweet_name,
-        s.unit,
-
         c.counter_name,
+        c.location,
 
-        sh.row_id AS shop_id,
+        c.shop_id,
         sh.shop_name,
         sh.city,
-        sh.state
+        sh.state,
+
+        st.sweet_id,
+        s.sweet_name,
+        s.unit,
+        s.price,
+
+        st.transaction_type,
+        st.quantity,
+
+        st.reference_id,
+        st.notes,
+
+        TO_CHAR(
+          st.cr_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS cr_on,
+
+        st.up_on
 
       FROM ${transactionTable} st
-      LEFT JOIN ${sweetTable} s 
+
+      LEFT JOIN ${sweetTable} s
         ON s.row_id = st.sweet_id
-      LEFT JOIN ${counterTable} c 
+
+      LEFT JOIN ${counterTable} c
         ON c.row_id = st.counter_id
+
       LEFT JOIN ${shopTable} sh
         ON sh.row_id = c.shop_id
 
       ${whereClause}
-      ORDER BY st.cr_on DESC
+
+      ORDER BY
+        st.cr_on DESC
     `);
+
+    const stockHistory =
+      result.status === 0 && Array.isArray(result.data) ? result.data : [];
+
+    // ==============================
+    // NO DATA
+    // ==============================
+
+    if (stockHistory.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "No stock history found",
+        data: [],
+      });
+    }
+
+    // ==============================
+    // SUCCESS
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Stock history fetched successfully",
-      data: result.data || [],
+      data: stockHistory,
     });
   } catch (error) {
     console.log("getStockHistory error:", error);
@@ -2599,81 +2716,151 @@ async function getStockHistory(req, res) {
 //   "from_date": "2026-03-01",
 //   "to_date": "2026-03-21"
 // }
+
 async function getInventory(req, res) {
   try {
     const inventoryTable = schema + ".inventory";
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
 
     const user = req.data;
 
-    let whereConditions = ["i.quantity::int > 0"];
+    // ==============================
+    // ROLE VALIDATION
+    // ==============================
 
-    // 🟠 SHOP ADMIN → only own shop counters
-    if (user.user_role === "SHOP_ADMIN") {
-      whereConditions.push(`c.shop_id = '${user.shopId}'`);
-    }
-
-    // 🟡 COUNTER USER → only own counter
-    if (user.user_role === "COUNTER_USER") {
-      whereConditions.push(`i.counter_id = '${user.counterId}'`);
-    }
-
-    // 🟢 SUPPLIER → access deny
-    if (user.user_role === "SUPPLIER") {
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
       });
     }
 
-    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
+    let whereConditions = ["i.quantity::NUMERIC > 0"];
+
+    // ==============================
+    // SHOP ADMIN
+    // ==============================
+
+    if (user.user_role === "SHOP_ADMIN") {
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      // Only counters belonging to this shop
+      whereConditions.push(
+        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`,
+      );
+    }
+
+    // ==============================
+    // COUNTER USER
+    // ==============================
+
+    if (user.user_role === "COUNTER_USER") {
+      if (!user.counterId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Counter ID not found in token",
+        });
+      }
+
+      // Only own counter inventory
+      whereConditions.push(
+        `i.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`,
+      );
+    }
+
+    // ==============================
+    // ADMIN
+    // ==============================
+
+    // ADMIN can see all inventory.
+    // No additional filter required.
+
+    const whereClause = `
+      WHERE ${whereConditions.join(" AND ")}
+    `;
+
+    // ==============================
+    // FETCH INVENTORY
+    // ==============================
 
     const result = await db_query.customQuery(`
-      SELECT 
-        i.row_id,
-        i.quantity,
-        i.min_stock,
-        i.max_stock,
-        i.expiry_date,
+      SELECT
 
-        s.row_id AS sweet_id,
+        i.row_id AS inventory_id,
+
+        i.counter_id,
+        c.counter_name,
+        c.location,
+
+        c.shop_id,
+        sh.shop_name,
+
+        i.sweet_id,
         s.sweet_name,
         s.unit,
         s.price,
         s.image_url,
 
-        c.row_id AS counter_id,
-        c.counter_name,
-        c.location,
-        c.shop_id,
+        i.quantity,
+        i.min_stock,
+        i.max_stock,
+        i.expiry_date,
 
-        i.cr_on
+        CASE
+          WHEN i.quantity::NUMERIC <= i.min_stock
+          THEN true
+          ELSE false
+        END AS low_stock,
+
+        CASE
+          WHEN i.max_stock > 0
+          AND i.quantity::NUMERIC >= i.max_stock
+          THEN true
+          ELSE false
+        END AS max_stock_reached,
+
+        CASE
+          WHEN i.expiry_date < CURRENT_DATE
+          THEN true
+          ELSE false
+        END AS is_expired,
+
+        i.cr_on,
+        i.up_on
 
       FROM ${inventoryTable} i
-      LEFT JOIN ${sweetTable} s 
+
+      LEFT JOIN ${sweetTable} s
         ON s.row_id = i.sweet_id
-      LEFT JOIN ${counterTable} c 
+
+      LEFT JOIN ${counterTable} c
         ON c.row_id = i.counter_id
 
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = c.shop_id
+
       ${whereClause}
-      ORDER BY i.cr_on DESC
+
+      ORDER BY
+        i.cr_on DESC
     `);
 
-    console.log("inventory result:", result);
+    console.log("getInventory result:", result);
+
+    const inventoryData =
+      result.status === 0 && Array.isArray(result.data) ? result.data : [];
 
     // ==============================
-    // ✅ SAFE DATA HANDLING
+    // NO DATA
     // ==============================
-    let inventoryData = [];
 
-    if (result.status === 0 && result.data) {
-      inventoryData = result.data;
-    }
-
-    // ==============================
-    // ⚠️ NO DATA CASE
-    // ==============================
     if (inventoryData.length === 0) {
       return libFunc.sendResponse(res, {
         status: 0,
@@ -2683,8 +2870,9 @@ async function getInventory(req, res) {
     }
 
     // ==============================
-    // ✅ SUCCESS
+    // SUCCESS
     // ==============================
+
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Inventory fetched successfully",
@@ -2742,7 +2930,6 @@ async function getInventoryAlerts(req, res) {
     });
   }
 }
-
 
 async function createCounterRequest(req, res) {
   try {
@@ -2908,11 +3095,7 @@ async function createCounterRequest(req, res) {
       // =====================================
       const mappingShopId = mappingCheck.data[0].shop_id;
 
-      if (
-        mappingShopId &&
-        counterShopId &&
-        mappingShopId !== counterShopId
-      ) {
+      if (mappingShopId && counterShopId && mappingShopId !== counterShopId) {
         await connect_db.query("ROLLBACK");
 
         return libFunc.sendResponse(res, {
@@ -2935,10 +3118,7 @@ async function createCounterRequest(req, res) {
       `);
 
       if (existing.data?.length > 0) {
-        console.log(
-          "Pending request already exists:",
-          sweetId
-        );
+        console.log("Pending request already exists:", sweetId);
 
         skippedItems.push({
           sweet_id: sweetId,
@@ -2961,7 +3141,7 @@ async function createCounterRequest(req, res) {
           status: "PENDING",
         },
         null,
-        "Counter Request"
+        "Counter Request",
       );
 
       createdItems.push({
@@ -2971,10 +3151,7 @@ async function createCounterRequest(req, res) {
 
       isRequestCreated = true;
 
-      console.log(
-        "Counter request created:",
-        sweetId
-      );
+      console.log("Counter request created:", sweetId);
     }
 
     // =====================================
@@ -3014,21 +3191,12 @@ async function createCounterRequest(req, res) {
     // =====================================
     // Final Response
     // =====================================
-    console.log(
-      "Created Items:",
-      createdItems
-    );
+    console.log("Created Items:", createdItems);
 
-    console.log(
-      "Skipped Items:",
-      skippedItems
-    );
+    console.log("Skipped Items:", skippedItems);
 
     // Some items created + some already pending
-    if (
-      createdItems.length > 0 &&
-      skippedItems.length > 0
-    ) {
+    if (createdItems.length > 0 && skippedItems.length > 0) {
       return libFunc.sendResponse(res, {
         status: 0,
         msg: `${createdItems.length} request(s) created successfully, ${skippedItems.length} already pending`,
@@ -3041,10 +3209,7 @@ async function createCounterRequest(req, res) {
     }
 
     // All items already pending
-    if (
-      createdItems.length === 0 &&
-      skippedItems.length > 0
-    ) {
+    if (createdItems.length === 0 && skippedItems.length > 0) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "All selected sweets already have pending requests",
@@ -3066,25 +3231,15 @@ async function createCounterRequest(req, res) {
         skipped_items: [],
       },
     });
-
   } catch (error) {
-    console.log(
-      "createCounterRequest error:",
-      error
-    );
+    console.log("createCounterRequest error:", error);
 
-    console.log(
-      "Error message:",
-      error.message
-    );
+    console.log("Error message:", error.message);
 
     try {
       await connect_db.query("ROLLBACK");
     } catch (rollbackError) {
-      console.log(
-        "Rollback error:",
-        rollbackError
-      );
+      console.log("Rollback error:", rollbackError);
     }
 
     return libFunc.sendResponse(res, {
@@ -3104,12 +3259,16 @@ async function createFinalOrder(req, res) {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const supplierTable = schema + ".suppliers";
+    const sweetTable = schema + ".sweets";
 
     const { supplier_id, request_ids, shop_id } = req.data || {};
 
-    console.log("reuestings", req.data);
+    console.log("createFinalOrder request:", req.data);
 
-    // 🔐 Role validation
+    // =====================================
+    // ROLE VALIDATION
+    // =====================================
+
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -3117,10 +3276,20 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    // 🏪 Resolve shop_id
+    // =====================================
+    // SHOP VALIDATION
+    // =====================================
+
     let finalShopId;
 
     if (user.user_role === "SHOP_ADMIN") {
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
       finalShopId = user.shopId;
     }
 
@@ -3131,87 +3300,181 @@ async function createFinalOrder(req, res) {
           msg: "shop_id is required",
         });
       }
-      finalShopId = shop_id;
+
+      finalShopId = shop_id.trim();
     }
 
-    // 📦 Validation
-    if (!supplier_id || !request_ids || request_ids.length === 0) {
+    // =====================================
+    // BASIC VALIDATION
+    // =====================================
+
+    if (!supplier_id) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Supplier and request_ids required",
+        msg: "supplier_id is required",
       });
     }
 
+    if (!Array.isArray(request_ids) || request_ids.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "request_ids are required",
+      });
+    }
+
+    const supplierId = supplier_id.trim();
+
+    // =====================================
+    // UNIQUE REQUEST IDS
+    // =====================================
+
+    const uniqueRequestIds = [
+      ...new Set(request_ids.filter(Boolean).map((id) => id.trim())),
+    ];
+
+    if (uniqueRequestIds.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Valid request_ids are required",
+      });
+    }
+
+    const requestIdsSql = uniqueRequestIds
+      .map((id) => `'${id.replaceAll("'", "`")}'`)
+      .join(",");
+
+    // =====================================
+    // BEGIN TRANSACTION
+    // =====================================
+
     await connect_db.query("BEGIN");
 
-    // ✅ Supplier validation
+    // =====================================
+    // SUPPLIER VALIDATION
+    // =====================================
+
     const supplierCheck = await db_query.customQuery(`
-      SELECT 1 FROM ${supplierTable}
-      WHERE row_id = '${supplier_id}'
+      SELECT
+        row_id,
+        supplier_name
+      FROM ${supplierTable}
+      WHERE row_id = '${supplierId}'
     `);
 
     if (!supplierCheck.data?.length) {
       await connect_db.query("ROLLBACK");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid supplier",
       });
     }
 
-    // 📥 Fetch requests
+    // =====================================
+    // FETCH REQUESTS
+    // =====================================
+
     const requests = await db_query.customQuery(`
-      SELECT r.*, c.shop_id
+      SELECT
+        r.row_id,
+        r.counter_id,
+        r.sweet_id,
+        r.quantity,
+        r.status,
+
+        c.shop_id,
+        c.counter_name,
+
+        s.sweet_name,
+        s.supplier_id AS sweet_supplier_id
+
       FROM ${requestTable} r
+
       LEFT JOIN ${counterTable} c
         ON c.row_id = r.counter_id
-      WHERE r.row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
+
+      LEFT JOIN ${sweetTable} s
+        ON s.row_id = r.sweet_id
+
+      WHERE r.row_id IN (${requestIdsSql})
       AND r.status = 'PENDING'
     `);
 
+    // =====================================
+    // REQUEST VALIDATION
+    // =====================================
+
     if (!requests.data || requests.data.length === 0) {
       await connect_db.query("ROLLBACK");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "No valid pending requests found",
       });
     }
 
-    if (requests.data.length !== request_ids.length) {
+    if (requests.data.length !== uniqueRequestIds.length) {
       await connect_db.query("ROLLBACK");
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Some request_ids are invalid or already processed",
       });
     }
 
-    // 🏪 Shop validation
-    for (let r of requests.data) {
-      if (r.shop_id !== finalShopId) {
+    // =====================================
+    // SHOP + SUPPLIER VALIDATION
+    // =====================================
+
+    for (const request of requests.data) {
+      // -------------------------------------
+      // Shop validation
+      // -------------------------------------
+
+      if (request.shop_id !== finalShopId) {
         await connect_db.query("ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "All requests must belong to your shop",
         });
       }
-    }
-    // 🧮 Combine sweets WITH COUNTER
-    const itemMap = {};
 
-    for (let r of requests.data) {
-      const key = `${r.sweet_id}_${r.counter_id}`;
+      // -------------------------------------
+      // Supplier validation
+      // -------------------------------------
 
-      if (!itemMap[key]) {
-        itemMap[key] = {
-          sweet_id: r.sweet_id,
-          counter_id: r.counter_id,
-          quantity: 0,
-        };
+      if (request.sweet_supplier_id !== supplierId) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Sweet "${request.sweet_name}" does not belong to selected supplier`,
+        });
       }
 
-      itemMap[key].quantity += Number(r.quantity);
+      // -------------------------------------
+      // Quantity validation
+      // -------------------------------------
+
+      if (
+        request.quantity === null ||
+        request.quantity === undefined ||
+        Number(request.quantity) <= 0
+      ) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Invalid quantity for sweet "${request.sweet_name}"`,
+        });
+      }
     }
 
-    // 🧾 Create Order
+    // =====================================
+    // CREATE ORDER
+    // =====================================
+
     const orderRowId = libFunc.randomid();
 
     await db_query.addData(
@@ -3219,108 +3482,164 @@ async function createFinalOrder(req, res) {
       {
         row_id: orderRowId,
         shop_id: finalShopId,
-        supplier_id,
+        supplier_id: supplierId,
         order_status: "PENDING",
       },
       null,
       "Order",
     );
 
-    // 📦 Order Items WITH COUNTER
-    for (let key in itemMap) {
-      const item = itemMap[key];
+    // =====================================
+    // CREATE ORDER ITEMS
+    //
+    // ONE REQUEST = ONE ORDER ITEM
+    // =====================================
 
+    for (const request of requests.data) {
       await db_query.addData(
         itemTable,
         {
           row_id: libFunc.randomid(),
+
           order_id: orderRowId,
-          sweet_id: item.sweet_id,
-          counter_id: item.counter_id, // ✅ IMPORTANT
-          quantity: item.quantity,
+
+          // IMPORTANT:
+          // Exact counter request reference
+          request_id: request.row_id,
+
+          sweet_id: request.sweet_id,
+
+          // Counter remains attached to item
+          counter_id: request.counter_id,
+
+          quantity: Number(request.quantity),
+
+          item_status: "PENDING",
+
+          supplied_quantity: 0,
         },
         null,
         "Order Item",
       );
     }
 
-    // 🔄 Update requests
+    // =====================================
+    // UPDATE REQUEST STATUS
+    // =====================================
+
     await db_query.customQuery(`
       UPDATE ${requestTable}
-      SET status = 'APPROVED'
-      WHERE row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
+      SET
+        status = 'APPROVED',
+        up_on = now()
+      WHERE row_id IN (${requestIdsSql})
     `);
 
-    // ✅ COMMIT
+    // =====================================
+    // COMMIT
+    // =====================================
+
     await connect_db.query("COMMIT");
 
-    // ==============================
-    // 🔔 NOTIFICATIONS START HERE
-    // ==============================
+    // =====================================
+    // NOTIFY SUPPLIER
+    // =====================================
 
-    // 🔵 1. Notify Supplier
     const supplierUsers = await db_query.customQuery(`
-      SELECT row_id FROM ${schema}.users
-      WHERE supplier_id = '${supplier_id}'
+      SELECT
+        row_id
+      FROM ${schema}.users
+      WHERE supplier_id = '${supplierId}'
     `);
 
     if (supplierUsers.data?.length) {
-      for (let u of supplierUsers.data) {
+      for (const supplierUser of supplierUsers.data) {
         await createNotification({
-          user_id: u.row_id,
+          user_id: supplierUser.row_id,
+
           title: "New Order Received",
-          message: `New order created with ${Object.keys(itemMap).length} item(s)`,
+
+          message: `New order created with ${requests.data.length} item(s)`,
+
           type: "ORDER",
+
           reference_id: orderRowId,
         });
       }
     }
 
-    // 🟢 2. Notify Counter Users (Request Approved)
+    // =====================================
+    // NOTIFY COUNTER USERS
+    // =====================================
+
     const counterUsers = await db_query.customQuery(`
-      SELECT u.row_id
+      SELECT
+        u.row_id
       FROM ${requestTable} r
-      LEFT JOIN ${schema}.users u 
+
+      LEFT JOIN ${schema}.users u
         ON u.counter_id = r.counter_id
-      WHERE r.row_id IN (${request_ids.map((id) => `'${id}'`).join(",")})
+
+      WHERE r.row_id IN (${requestIdsSql})
     `);
 
     if (counterUsers.data?.length) {
       const uniqueUsers = [...new Set(counterUsers.data.map((u) => u.row_id))];
 
-      for (let userId of uniqueUsers) {
+      for (const userId of uniqueUsers) {
         await createNotification({
           user_id: userId,
+
           title: "Request Approved",
-          message: `${request_ids.length} request(s) approved`,
+
+          message: `${uniqueRequestIds.length} request(s) approved`,
+
           type: "REQUEST",
+
           reference_id: orderRowId,
         });
       }
     }
 
-    // ==============================
+    // =====================================
+    // FINAL RESPONSE
+    // =====================================
 
     return libFunc.sendResponse(res, {
       status: 0,
+
       msg: "Final order created successfully",
-      data: { order_id: orderRowId },
+
+      data: {
+        order_id: orderRowId,
+
+        shop_id: finalShopId,
+
+        supplier_id: supplierId,
+
+        request_count: uniqueRequestIds.length,
+
+        item_count: requests.data.length,
+      },
     });
   } catch (error) {
     console.log("createFinalOrder ERROR:", error);
 
     try {
       await connect_db.query("ROLLBACK");
-    } catch (e) {}
+    } catch (e) {
+      console.log("Rollback error:", e);
+    }
 
     return libFunc.sendResponse(res, {
       status: 1,
+
       msg: "Something went wrong",
+
       error: error.message,
     });
   }
 }
-
 async function createOrder(req, res) {
   try {
     const orderTable = schema + ".orders";
@@ -3408,7 +3727,10 @@ async function getShopOrders(req, res) {
   try {
     const user = req.data;
 
-    // 🔒 Only SHOP_ADMIN & ADMIN
+    // =====================================
+    // ROLE VALIDATION
+    // =====================================
+
     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -3416,93 +3738,180 @@ async function getShopOrders(req, res) {
       });
     }
 
-    let whereCondition = "";
+    let conditions = [];
 
-    // 🔹 SHOP_ADMIN → only own shop data
+    // =====================================
+    // SHOP_ADMIN
+    // =====================================
+
     if (user.user_role === "SHOP_ADMIN") {
-      whereCondition = `WHERE o.shop_id = '${user.shopId}'`;
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      conditions.push(`o.shop_id = '${user.shopId}'`);
     }
 
-    // 🔹 ADMIN
-    // if shop_id passed then filter shop wise
-    // otherwise show all orders
+    // =====================================
+    // ADMIN
+    // =====================================
+
     if (user.user_role === "ADMIN") {
-      const { shop_id } = req.data;
+      const { shop_id } = req.data || {};
 
       if (shop_id) {
-        whereCondition = `WHERE o.shop_id = '${shop_id}'`;
+        conditions.push(`o.shop_id = '${shop_id.trim()}'`);
       }
     }
 
+    const whereCondition =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // =====================================
+    // FETCH ORDERS
+    // =====================================
+
     const result = await db_query.customQuery(`
-      SELECT 
+      SELECT
+
+        -- Order
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
+        -- Supplier
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
+        -- Shop
         sh.row_id AS shop_id,
         sh.shop_name,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+
+        -- IMPORTANT:
+        -- Exact counter request
+        oi.request_id,
+
         oi.sweet_id,
+        oi.quantity,
+
+        -- Supplier fulfillment
+        oi.item_status,
+        oi.supplied_quantity,
+        oi.reject_reason,
+
+        -- Counter
+        oi.counter_id,
+        c.counter_name,
+        c.location,
+
+        -- Sweet
         s.sweet_name,
-        s.unit,
-        oi.quantity
+        s.unit
 
       FROM ${schema}.orders o
 
-      LEFT JOIN ${schema}.shops sh 
+      LEFT JOIN ${schema}.shops sh
         ON sh.row_id = o.shop_id
 
-      LEFT JOIN ${schema}.suppliers sup 
+      LEFT JOIN ${schema}.suppliers sup
         ON sup.row_id = o.supplier_id
 
-      LEFT JOIN ${schema}.order_items oi 
+      LEFT JOIN ${schema}.order_items oi
         ON oi.order_id = o.row_id
 
-      LEFT JOIN ${schema}.sweets s 
+      LEFT JOIN ${schema}.sweets s
         ON s.row_id = oi.sweet_id
+
+      LEFT JOIN ${schema}.counters c
+        ON c.row_id = oi.counter_id
 
       ${whereCondition}
 
-      ORDER BY o.order_date DESC
+      ORDER BY
+        o.order_date DESC,
+        oi.cr_on ASC
     `);
 
-    // 🔹 Group order-wise
+    console.log("getShopOrders result:", result);
+
+    // =====================================
+    // GROUP ORDER-WISE
+    // =====================================
+
     const ordersMap = {};
 
-    for (let row of result.data || []) {
+    for (const row of result.data || []) {
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
+
           order_status: row.order_status,
+
           order_date: row.order_date,
 
           shop_id: row.shop_id,
+
           shop_name: row.shop_name,
 
           supplier_id: row.supplier_id,
+
           supplier_name: row.supplier_name,
 
           items: [],
         };
       }
 
-      if (row.sweet_id) {
+      // =====================================
+      // ADD ORDER ITEM
+      // =====================================
+
+      if (row.order_item_id) {
         ordersMap[row.order_id].items.push({
+          order_item_id: row.order_item_id,
+
+          // Exact counter request
+          request_id: row.request_id,
+
           sweet_id: row.sweet_id,
+
           sweet_name: row.sweet_name,
+
           unit: row.unit,
+
           quantity: row.quantity,
+
+          // Counter
+          counter_id: row.counter_id,
+
+          counter_name: row.counter_name,
+
+          location: row.location,
+
+          // Supplier status
+          item_status: row.item_status || "PENDING",
+
+          supplied_quantity: Number(row.supplied_quantity || 0),
+
+          reject_reason: row.reject_reason,
         });
       }
     }
 
+    // =====================================
+    // FINAL RESPONSE
+    // =====================================
+
     return libFunc.sendResponse(res, {
       status: 0,
+
       msg: "Shop orders fetched successfully",
+
       data: Object.values(ordersMap),
     });
   } catch (error) {
@@ -3510,7 +3919,9 @@ async function getShopOrders(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 1,
+
       msg: "Something went wrong",
+
       error: error.message,
     });
   }
@@ -4145,7 +4556,8 @@ async function updateOrderStatus(req, res) {
   try {
     const orderTable = schema + ".orders";
     const userTable = schema + ".users";
-    const chalanTable = schema + ".chalans"; // for checking chalan
+    const chalanTable = schema + ".chalans";
+    const orderItemTable = schema + ".order_items";
 
     const { order_id, status } = req.data || {};
     const user = req.data;
@@ -4153,12 +4565,27 @@ async function updateOrderStatus(req, res) {
     const validStatuses = [
       "PENDING",
       "ACCEPTED",
-      "PARTIAL", // 🔥 ADD THIS
+      "PARTIAL",
       "REJECTED",
       "DISPATCHED",
       "DELIVERED",
     ];
-    // ✅ Validation
+
+    // =========================
+    // ROLE VALIDATION
+    // =========================
+
+    if (!["ADMIN", "SHOP_ADMIN", "SUPPLIER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    // =========================
+    // BASIC VALIDATION
+    // =========================
+
     if (!order_id || !status) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -4166,18 +4593,28 @@ async function updateOrderStatus(req, res) {
       });
     }
 
-    if (!validStatuses.includes(status)) {
+    const orderId = order_id.trim();
+    const finalStatus = status.trim().toUpperCase();
+
+    if (!validStatuses.includes(finalStatus)) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Invalid status",
       });
     }
 
-    // ✅ Get order
+    // =========================
+    // GET ORDER
+    // =========================
+
     const orderCheck = await db_query.customQuery(`
-      SELECT supplier_id, shop_id, order_status
+      SELECT
+        row_id,
+        supplier_id,
+        shop_id,
+        order_status
       FROM ${orderTable}
-      WHERE row_id = '${order_id.trim()}'
+      WHERE row_id = '${orderId.replaceAll("'", "`")}'
     `);
 
     if (!orderCheck.data?.length) {
@@ -4189,8 +4626,18 @@ async function updateOrderStatus(req, res) {
 
     const order = orderCheck.data[0];
 
-    // ✅ Role validation
+    // =========================
+    // SUPPLIER AUTHORIZATION
+    // =========================
+
     if (user.user_role === "SUPPLIER") {
+      if (!user.supplierId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier ID not found in token",
+        });
+      }
+
       if (order.supplier_id !== user.supplierId) {
         return libFunc.sendResponse(res, {
           status: 1,
@@ -4198,7 +4645,9 @@ async function updateOrderStatus(req, res) {
         });
       }
 
-      if (!["ACCEPTED", "REJECTED", "DISPATCHED"].includes(status)) {
+      // Supplier should not mark delivered.
+      // Partial should normally be handled at item level.
+      if (!["ACCEPTED", "REJECTED", "DISPATCHED"].includes(finalStatus)) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Supplier cannot set this status",
@@ -4206,15 +4655,26 @@ async function updateOrderStatus(req, res) {
       }
     }
 
+    // =========================
+    // SHOP ADMIN AUTHORIZATION
+    // =========================
+
     if (user.user_role === "SHOP_ADMIN") {
-      if (order.shop_id !== user.shop_id) {
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      if (order.shop_id !== user.shopId) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Unauthorized shop order",
         });
       }
 
-      if (status !== "DELIVERED") {
+      if (finalStatus !== "DELIVERED") {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Shop admin can only mark delivered",
@@ -4222,34 +4682,41 @@ async function updateOrderStatus(req, res) {
       }
     }
 
-    if (!["ADMIN", "SHOP_ADMIN", "SUPPLIER"].includes(user.user_role)) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Access denied",
-      });
-    }
+    // =========================
+    // STATUS FLOW
+    // =========================
 
-    // ✅ Status flow validation
-    const current = order.order_status;
+    const currentStatus = order.order_status;
 
     const validFlow = {
       PENDING: ["ACCEPTED", "REJECTED"],
+
       ACCEPTED: ["DISPATCHED"],
+
       DISPATCHED: ["DELIVERED"],
+
+      PARTIAL: ["DISPATCHED"],
     };
 
-    if (validFlow[current] && !validFlow[current].includes(status)) {
+    if (
+      validFlow[currentStatus] &&
+      !validFlow[currentStatus].includes(finalStatus)
+    ) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: `Invalid status transition from ${current} → ${status}`,
+        msg: `Invalid status transition from ${currentStatus} → ${finalStatus}`,
       });
     }
 
-    // 🔎 SPECIAL CASE: DISPATCHED
-    if (status === "DISPATCHED") {
+    // =========================
+    // DISPATCHED → CHALAN REQUIRED
+    // =========================
+
+    if (finalStatus === "DISPATCHED") {
       const existingChalan = await db_query.customQuery(`
-        SELECT 1 FROM ${chalanTable}
-        WHERE order_id = '${order_id.trim()}'
+        SELECT row_id
+        FROM ${chalanTable}
+        WHERE order_id = '${orderId.replaceAll("'", "`")}'
       `);
 
       if (!existingChalan.data?.length) {
@@ -4260,85 +4727,110 @@ async function updateOrderStatus(req, res) {
       }
     }
 
-    // ✅ Update Order
+    // =========================
+    // UPDATE ORDER
+    // =========================
+
     await db_query.addData(
       orderTable,
-      { order_status: status },
-      order_id.trim(),
+      {
+        order_status: finalStatus,
+      },
+      orderId,
       "Order",
     );
 
-    // =====================================
-    // 🔔 NOTIFICATIONS START HERE
-    // =====================================
+    // =========================
+    // NOTIFY SHOP ADMIN
+    // =========================
 
-    // 🟠 1. Notify Shop Admin
     const shopAdmins = await db_query.customQuery(`
-      SELECT row_id FROM ${userTable}
+      SELECT row_id
+      FROM ${userTable}
       WHERE role = 'SHOP_ADMIN'
       AND shop_id = '${order.shop_id}'
     `);
 
     if (shopAdmins.data?.length) {
-      for (let admin of shopAdmins.data) {
+      for (const admin of shopAdmins.data) {
         await createNotification({
           user_id: admin.row_id,
           title: "Order Status Updated",
-          message: `Order is ${status}`,
+          message: `Order is ${finalStatus}`,
           type: "ORDER",
-          reference_id: order_id,
+          reference_id: orderId,
         });
       }
     }
 
-    // 🔵 2. Notify Supplier Users
+    // =========================
+    // NOTIFY SUPPLIER USERS
+    // =========================
+
     const supplierUsers = await db_query.customQuery(`
-      SELECT row_id FROM ${userTable}
+      SELECT row_id
+      FROM ${userTable}
       WHERE supplier_id = '${order.supplier_id}'
     `);
 
     if (supplierUsers.data?.length) {
-      for (let u of supplierUsers.data) {
+      for (const supplierUser of supplierUsers.data) {
         await createNotification({
-          user_id: u.row_id,
+          user_id: supplierUser.row_id,
           title: "Order Update",
-          message: `Order is ${status}`,
+          message: `Order is ${finalStatus}`,
           type: "ORDER",
-          reference_id: order_id,
+          reference_id: orderId,
         });
       }
     }
 
-    // 🟢 3. Notify Counter Users (optional but powerful 🔥)
+    // =========================
+    // NOTIFY COUNTER USERS
+    // =========================
+
+    /*
+      IMPORTANT:
+
+      Do NOT find counter users using only sweet_id.
+
+      order_items.request_id directly identifies
+      the original counter request.
+    */
+
     const counterUsers = await db_query.customQuery(`
-      SELECT DISTINCT u.row_id
-      FROM ${schema}.counter_requests r
-      LEFT JOIN ${userTable} u 
+      SELECT DISTINCT
+        u.row_id
+      FROM ${orderItemTable} oi
+
+      INNER JOIN ${schema}.counter_requests r
+        ON r.row_id = oi.request_id
+
+      INNER JOIN ${userTable} u
         ON u.counter_id = r.counter_id
-      WHERE r.status = 'APPROVED'
-      AND r.sweet_id IN (
-        SELECT sweet_id FROM ${schema}.order_items
-        WHERE order_id = '${order_id}'
-      )
+
+      WHERE oi.order_id = '${orderId.replaceAll("'", "`")}'
     `);
 
     if (counterUsers.data?.length) {
-      for (let u of counterUsers.data) {
+      for (const counterUser of counterUsers.data) {
         await createNotification({
-          user_id: u.row_id,
+          user_id: counterUser.row_id,
           title: "Order Update",
-          message: `Your requested items are ${status}`,
+          message: `Your requested items are ${finalStatus}`,
           type: "ORDER",
-          reference_id: order_id,
+          reference_id: orderId,
         });
       }
     }
 
-    // =====================================
+    // =========================
+    // RESPONSE
+    // =========================
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: `Order ${status} successfully`,
+      msg: `Order ${finalStatus} successfully`,
     });
   } catch (error) {
     console.log("updateOrderStatus error:", error);
@@ -4634,98 +5126,195 @@ async function getAllChalans(req, res) {
     const sweetTable = schema + ".sweets";
     const supplierTable = schema + ".suppliers";
     const shopTable = schema + ".shops";
+    const counterTable = schema + ".counters";
 
-    let where = "WHERE 1=1";
+    // =========================
+    // ROLE VALIDATION
+    // =========================
 
-    // 🔵 SUPPLIER → only own chalans
+    if (!["SUPPLIER", "SHOP_ADMIN", "ADMIN"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    let conditions = [];
+
+    // =========================
+    // SUPPLIER
+    // =========================
+
     if (user.user_role === "SUPPLIER") {
-      where += ` AND ch.supplier_id = '${user.supplierId}'`;
+      if (!user.supplierId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier ID not found in token",
+        });
+      }
+
+      conditions.push(`ch.supplier_id = '${user.supplierId}'`);
     }
 
-    // 🟠 SHOP_ADMIN → only own shop
+    // =========================
+    // SHOP ADMIN
+    // =========================
+
     if (user.user_role === "SHOP_ADMIN") {
-      where += ` AND o.shop_id = '${user.shopId}'`;
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      conditions.push(`o.shop_id = '${user.shopId}'`);
     }
+
+    // =========================
+    // ADMIN
+    // =========================
+    // ADMIN can see all chalans
+
+    const where =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // =========================
+    // FETCH CHALANS
+    // =========================
 
     const result = await db_query.customQuery(`
       SELECT
+
+        -- Chalan
         ch.row_id AS chalan_id,
-        ch.dispatch_date::date::text AS dispatch_date,     
+        ch.order_id,
+        ch.dispatch_date::date::text AS dispatch_date,
         ch.transport_details,
         ch.is_verified,
         ch.verification_code,
 
-        o.row_id AS order_id,
+        -- Order
         o.order_status,
         o.order_date,
 
+        -- Shop
+        sh.row_id AS shop_id,
         sh.shop_name,
         sh.city,
         sh.state,
 
+        -- Supplier
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+        oi.request_id,
         oi.sweet_id,
+        oi.quantity AS requested_quantity,
+        oi.item_status,
+        oi.supplied_quantity,
+        oi.reject_reason,
+
+        -- Counter
+        oi.counter_id,
+        c.counter_name,
+        c.location,
+
+        -- Sweet
         s.sweet_name,
-        s.unit,
-        oi.supplied_quantity as quantity
+        s.unit
 
       FROM ${chalanTable} ch
 
-      LEFT JOIN ${orderTable} o 
+      LEFT JOIN ${orderTable} o
         ON o.row_id = ch.order_id
 
-      LEFT JOIN ${shopTable} sh 
+      LEFT JOIN ${shopTable} sh
         ON sh.row_id = o.shop_id
 
-      LEFT JOIN ${supplierTable} sup 
+      LEFT JOIN ${supplierTable} sup
         ON sup.row_id = ch.supplier_id
 
-      LEFT JOIN ${itemTable} oi 
+      LEFT JOIN ${itemTable} oi
         ON oi.order_id = o.row_id
 
-      LEFT JOIN ${sweetTable} s 
+      LEFT JOIN ${sweetTable} s
         ON s.row_id = oi.sweet_id
 
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
       ${where}
+
+      -- Only actually supplied items
+      AND oi.supplied_quantity > 0
+
       ORDER BY ch.dispatch_date DESC
     `);
 
-    // 🔹 Group chalan-wise
+    // =========================
+    // GROUP CHALAN-WISE
+    // =========================
+
     const chalanMap = {};
 
-    for (let row of result.data || []) {
+    for (const row of result.data || []) {
       if (!chalanMap[row.chalan_id]) {
         chalanMap[row.chalan_id] = {
           chalan_id: row.chalan_id,
-          dispatch_date: row.dispatch_date,
-          transport_details: row.transport_details,
-
-          is_verified: row.is_verified,
-          verification_code: row.verification_code, // optional (hide if needed)
 
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
 
-          shop_name: row.shop_name,
-          city: row.city,
-          state: row.state,
+          dispatch_date: row.dispatch_date,
+          transport_details: row.transport_details,
 
-          supplier_id: row.supplier_id,
-          supplier_name: row.supplier_name,
+          is_verified: row.is_verified,
+
+          // ⚠️ Consider hiding this from normal responses
+          verification_code: row.verification_code,
+
+          shop: {
+            shop_id: row.shop_id,
+            shop_name: row.shop_name,
+            city: row.city,
+            state: row.state,
+          },
+
+          supplier: {
+            supplier_id: row.supplier_id,
+            supplier_name: row.supplier_name,
+          },
 
           items: [],
         };
       }
 
-      if (row.sweet_id) {
+      if (row.order_item_id) {
         chalanMap[row.chalan_id].items.push({
+          order_item_id: row.order_item_id,
+          request_id: row.request_id,
+
           sweet_id: row.sweet_id,
           sweet_name: row.sweet_name,
           unit: row.unit,
-          quantity: row.quantity,
+
+          requested_quantity: Number(row.requested_quantity || 0),
+
+          supplied_quantity: Number(row.supplied_quantity || 0),
+
+          item_status: row.item_status || "PENDING",
+
+          reject_reason: row.reject_reason,
+
+          counter: {
+            counter_id: row.counter_id,
+            counter_name: row.counter_name,
+            location: row.location,
+          },
         });
       }
     }
@@ -4763,12 +5352,15 @@ async function getSupplierOrders(req, res) {
     const itemTable = schema + ".order_items";
     const sweetTable = schema + ".sweets";
     const shopTable = schema + ".shops";
+    const counterTable = schema + ".counters";
+    const supplierTable = schema + ".suppliers";
 
     const { supplier_id } = req.data || {};
     const user = req.data;
-    console.log("usrs", user);
 
-    //  Role validation
+    console.log("getSupplierOrders user:", user);
+
+    // Role validation
     if (!["SUPPLIER", "ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -4776,14 +5368,25 @@ async function getSupplierOrders(req, res) {
       });
     }
 
-    let whereCondition = "";
+    let conditions = [];
 
-    //  SUPPLIER → only own orders
+    // =========================
+    // SUPPLIER
+    // =========================
     if (user.user_role === "SUPPLIER") {
-      whereCondition = `o.supplier_id = '${user.supplierId}'`;
+      if (!user.supplierId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Supplier ID not found in token",
+        });
+      }
+
+      conditions.push(`o.supplier_id = '${user.supplierId}'`);
     }
 
-    //  ADMIN → any supplier
+    // =========================
+    // ADMIN
+    // =========================
     if (user.user_role === "ADMIN") {
       if (!supplier_id) {
         return libFunc.sendResponse(res, {
@@ -4791,42 +5394,94 @@ async function getSupplierOrders(req, res) {
           msg: "Supplier ID required",
         });
       }
-      whereCondition = `o.supplier_id = '${supplier_id.trim()}'`;
+
+      conditions.push(
+        `o.supplier_id = '${supplier_id.trim().replaceAll("'", "`")}'`,
+      );
     }
 
-    //  SHOP_ADMIN → only own shop orders
+    // =========================
+    // SHOP ADMIN
+    // =========================
     if (user.user_role === "SHOP_ADMIN") {
-      whereCondition = `o.shop_id = '${user.shop_id}'`;
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found in token",
+        });
+      }
+
+      conditions.push(`o.shop_id = '${user.shopId}'`);
     }
+
+    const whereCondition =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const result = await db_query.customQuery(`
-      SELECT 
+      SELECT
+
+        -- Order
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
+        -- Supplier
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
+
+        -- Shop
         sh.row_id AS shop_id,
         sh.shop_name,
         sh.city,
         sh.state,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+        oi.request_id,
         oi.sweet_id,
+        oi.quantity,
+
+        -- Item processing
+        oi.item_status,
+        oi.supplied_quantity,
+        oi.reject_reason,
+
+        -- Counter
+        oi.counter_id,
+        c.counter_name,
+        c.location,
+
+        -- Sweet
         s.sweet_name,
-        s.unit,
-        oi.quantity
+        s.unit
 
       FROM ${orderTable} o
-      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
-      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} s ON s.row_id = oi.sweet_id
 
-      WHERE ${whereCondition}
-      ORDER BY o.order_date DESC
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${supplierTable} sup
+        ON sup.row_id = o.supplier_id
+
+      LEFT JOIN ${itemTable} oi
+        ON oi.order_id = o.row_id
+
+      LEFT JOIN ${sweetTable} s
+        ON s.row_id = oi.sweet_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
+      ${whereCondition}
+
+      ORDER BY
+        o.order_date DESC,
+        oi.cr_on ASC
     `);
 
-    const rows = Array.isArray(result) ? result : result.data;
+    const rows = Array.isArray(result) ? result : result.data || [];
 
-    if (!rows || rows.length === 0) {
+    if (rows.length === 0) {
       return libFunc.sendResponse(res, {
         status: 0,
         msg: "No orders found",
@@ -4836,28 +5491,52 @@ async function getSupplierOrders(req, res) {
 
     const ordersMap = {};
 
-    for (let row of rows) {
+    for (const row of rows) {
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
+
+          supplier: {
+            supplier_id: row.supplier_id,
+            supplier_name: row.supplier_name,
+          },
+
           shop: {
             shop_id: row.shop_id,
             shop_name: row.shop_name,
             city: row.city,
             state: row.state,
           },
+
           items: [],
         };
       }
 
-      if (row.sweet_id) {
+      if (row.order_item_id) {
         ordersMap[row.order_id].items.push({
+          // Order item
+          order_item_id: row.order_item_id,
+          request_id: row.request_id,
+
+          // Sweet
           sweet_id: row.sweet_id,
           sweet_name: row.sweet_name,
           unit: row.unit,
           quantity: row.quantity,
+
+          // Counter
+          counter_id: row.counter_id,
+          counter_name: row.counter_name,
+          location: row.location,
+
+          // Supplier processing
+          item_status: row.item_status || "PENDING",
+
+          supplied_quantity: Number(row.supplied_quantity || 0),
+
+          reject_reason: row.reject_reason,
         });
       }
     }
@@ -5288,40 +5967,86 @@ var fs = require("fs");
 
 async function downloadOrderPDF(req, res) {
   try {
-    const { order_id } = req.data;
+    const { order_id } = req.data || {};
+
+    if (!order_id) {
+      return res.status(400).send("Order ID required");
+    }
 
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const sweetTable = schema + ".sweets";
     const supplierTable = schema + ".suppliers";
     const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
 
-    // 🔹 Fetch Data
+    const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+    // ==============================
+    // FETCH ORDER DATA
+    // ==============================
+
     const result = await db_query.customQuery(`
       SELECT
         o.row_id AS order_id,
         o.order_date,
         o.order_status,
 
-        s.supplier_name,
-        s.phone,
-        s.email,
-        s.address,
+        -- Supplier
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
+        sup.phone AS supplier_phone,
+        sup.email AS supplier_email,
+        sup.address AS supplier_address,
 
-        c.counter_name,
-        c.location,
+        -- Shop
+        sh.row_id AS shop_id,
+        sh.shop_name,
+        sh.address AS shop_address,
+        sh.city,
+        sh.state,
+        sh.pincode,
+        sh.phone AS shop_phone,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+        oi.request_id,
         oi.quantity,
+        oi.supplied_quantity,
+        oi.item_status,
+        oi.reject_reason,
+
+        -- Sweet
+        sw.row_id AS sweet_id,
         sw.sweet_name,
-        sw.unit
+        sw.unit,
+        sw.price,
+
+        -- Counter
+        c.row_id AS counter_id,
+        c.counter_name,
+        c.location
 
       FROM ${orderTable} o
-      LEFT JOIN ${supplierTable} s ON s.row_id = o.supplier_id
-      LEFT JOIN ${counterTable} c ON c.row_id = o.counter_id
-      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
 
-      WHERE o.row_id = '${order_id}'
+      LEFT JOIN ${supplierTable} sup
+        ON sup.row_id = o.supplier_id
+
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${itemTable} oi
+        ON oi.order_id = o.row_id
+
+      LEFT JOIN ${sweetTable} sw
+        ON sw.row_id = oi.sweet_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
+      WHERE o.row_id = '${safeOrderId}'
+
+      ORDER BY oi.cr_on ASC
     `);
 
     if (!result.data || result.data.length === 0) {
@@ -5329,109 +6054,226 @@ async function downloadOrderPDF(req, res) {
     }
 
     const data = result.data;
+    const order = data[0];
+
+    // ==============================
+    // PDF FOLDER
+    // ==============================
 
     const orgFolder = path.join("./public/uploads", "ShopMedia");
+
     if (!fs.existsSync(orgFolder)) {
-      fs.mkdirSync(orgFolder, { recursive: true });
+      fs.mkdirSync(orgFolder, {
+        recursive: true,
+      });
     }
 
-    // 🔹 File name + path
+    // ==============================
+    // FILE
+    // ==============================
+
     const fileName = `Report_${Date.now()}.pdf`;
+
     const filePath = path.join(orgFolder, fileName);
 
-    // 🔥 Create PDF
-    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    // ==============================
+    // CREATE PDF
+    // ==============================
+
+    const doc = new PDFDocument({
+      margin: 40,
+      size: "A4",
+    });
 
     res.setHeader("Content-Type", "application/pdf");
+
     res.setHeader(
       "Content-Disposition",
       `attachment; filename=order_${order_id}.pdf`,
     );
 
-    // Stream PDF to file + you can also pipe to res if needed
     doc.pipe(fs.createWriteStream(filePath));
 
-    // ================= HEADER =================
-    doc
-      .fontSize(18)
-      .fillColor("#2c3e50")
-      .text("PURCHASE ORDER", { align: "center" });
+    // ==============================
+    // HEADER
+    // ==============================
+
+    doc.fontSize(18).fillColor("#2c3e50").text("PURCHASE ORDER", {
+      align: "center",
+    });
 
     doc.moveDown(0.5);
+
     doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
     doc.moveDown();
 
-    // ================= ORDER INFO =================
+    // ==============================
+    // ORDER INFO
+    // ==============================
+
     doc.fontSize(11).fillColor("#000");
-    doc
-      .text(`Order ID: ${data[0].order_id}`, { continued: true })
-      .text(
-        `        Date: ${new Date(data[0].order_date).toLocaleDateString()}`,
-        { align: "right" },
-      );
-    doc.text(`Status: ${data[0].order_status}`);
+
+    doc.text(`Order ID: ${order.order_id}`);
+
+    doc.text(
+      `Date: ${
+        order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
+      }`,
+    );
+
+    doc.text(`Status: ${order.order_status || "-"}`);
+
     doc.moveDown();
 
-    // ================= SUPPLIER =================
-    doc
-      .fontSize(12)
-      .fillColor("#34495e")
-      .text("Supplier Details", { underline: true });
+    // ==============================
+    // SHOP DETAILS
+    // ==============================
+
+    doc.fontSize(12).fillColor("#34495e").text("Shop Details", {
+      underline: true,
+    });
+
     doc.moveDown(0.3);
+
     doc.fontSize(10).fillColor("#000");
-    doc.text(`Name: ${data[0].supplier_name}`);
-    doc.text(`Phone: ${data[0].phone}`);
-    doc.text(`Email: ${data[0].email}`);
-    doc.text(`Address: ${data[0].address}`);
+
+    doc.text(`Name: ${order.shop_name || "-"}`);
+
+    doc.text(`Address: ${order.shop_address || "-"}`);
+
+    doc.text(`City: ${order.city || "-"}`);
+
+    doc.text(`State: ${order.state || "-"}`);
+
+    doc.text(`Pincode: ${order.pincode || "-"}`);
+
+    doc.text(`Phone: ${order.shop_phone || "-"}`);
+
     doc.moveDown();
 
-    // ================= COUNTER =================
-    doc
-      .fontSize(12)
-      .fillColor("#34495e")
-      .text("Counter Details", { underline: true });
+    // ==============================
+    // SUPPLIER DETAILS
+    // ==============================
+
+    doc.fontSize(12).fillColor("#34495e").text("Supplier Details", {
+      underline: true,
+    });
+
     doc.moveDown(0.3);
+
     doc.fontSize(10).fillColor("#000");
-    doc.text(`Name: ${data[0].counter_name}`);
-    doc.text(`Location: ${data[0].location}`);
+
+    doc.text(`Name: ${order.supplier_name || "-"}`);
+
+    doc.text(`Phone: ${order.supplier_phone || "-"}`);
+
+    doc.text(`Email: ${order.supplier_email || "-"}`);
+
+    doc.text(`Address: ${order.supplier_address || "-"}`);
+
     doc.moveDown();
 
-    // ================= TABLE =================
-    doc.fontSize(12).fillColor("#000").text("Items", { underline: true });
+    // ==============================
+    // ITEMS
+    // ==============================
+
+    doc.fontSize(12).fillColor("#000").text("Order Items", {
+      underline: true,
+    });
+
     doc.moveDown(0.5);
 
-    // Column positions
-    const col1 = 50;
-    const col2 = 300;
-    const col3 = 400;
+    const col1 = 45; // Sweet
+    const col2 = 210; // Counter
+    const col3 = 350; // Requested
+    const col4 = 420; // Supplied
+    const col5 = 490; // Unit
 
     let tableTop = doc.y;
 
-    // ===== TABLE HEADER =====
-    doc.rect(40, tableTop, 500, 20).fill("#f2f2f2");
-    doc.fillColor("#000").fontSize(10);
-    doc.text("Sweet Name", col1, tableTop + 5);
-    doc.text("Qty", col2, tableTop + 5);
-    doc.text("Unit", col3, tableTop + 5);
+    // ==============================
+    // TABLE HEADER
+    // ==============================
 
-    let y = tableTop + 25;
+    doc.rect(40, tableTop, 515, 22).fill("#f2f2f2");
 
-    // ===== TABLE ROWS =====
+    doc.fillColor("#000").fontSize(9);
+
+    doc.text("Sweet", col1, tableTop + 6);
+
+    doc.text("Counter", col2, tableTop + 6);
+
+    doc.text("Requested", col3, tableTop + 6);
+
+    doc.text("Supplied", col4, tableTop + 6);
+
+    doc.text("Unit", col5, tableTop + 6);
+
+    let y = tableTop + 28;
+
+    // ==============================
+    // TABLE ROWS
+    // ==============================
+
     data.forEach((item, index) => {
-      if (index % 2 === 0) {
-        doc.rect(40, y - 2, 500, 20).fill("#fafafa");
-        doc.fillColor("#000");
+      // Prevent rows from going outside page
+      if (y > 750) {
+        doc.addPage();
+        y = 50;
       }
 
-      doc.text(item.sweet_name, col1, y, { width: 200 });
-      doc.text(item.quantity.toString(), col2, y);
-      doc.text(item.unit, col3, y);
+      if (index % 2 === 0) {
+        doc.rect(40, y - 3, 515, 22).fill("#fafafa");
+      }
 
-      y += 20;
+      doc.fillColor("#000").fontSize(8);
+
+      doc.text(item.sweet_name || "-", col1, y, {
+        width: 155,
+      });
+
+      doc.text(item.counter_name || "-", col2, y, {
+        width: 130,
+      });
+
+      doc.text(Number(item.quantity || 0).toString(), col3, y);
+
+      doc.text(Number(item.supplied_quantity || 0).toString(), col4, y);
+
+      doc.text(item.unit || "-", col5, y);
+
+      y += 22;
     });
 
-    // ================= FOOTER =================
+    // ==============================
+    // SUMMARY
+    // ==============================
+
     doc.moveDown(2);
+
+    const totalRequested = data.reduce(
+      (sum, item) => sum + Number(item.quantity || 0),
+      0,
+    );
+
+    const totalSupplied = data.reduce(
+      (sum, item) => sum + Number(item.supplied_quantity || 0),
+      0,
+    );
+
+    doc.fontSize(10).fillColor("#000");
+
+    doc.text(`Total Requested Quantity: ${totalRequested}`);
+
+    doc.text(`Total Supplied Quantity: ${totalSupplied}`);
+
+    doc.moveDown();
+
+    // ==============================
+    // FOOTER
+    // ==============================
+
     doc
       .fontSize(9)
       .fillColor("gray")
@@ -5441,7 +6283,12 @@ async function downloadOrderPDF(req, res) {
 
     doc.end();
 
-    const fileUrl = `uploads/${order_id}/${fileName}`;
+    // ==============================
+    // FILE URL
+    // ==============================
+
+    const fileUrl = `uploads/ShopMedia/${fileName}`;
+
     const serverUrl = "https://stock-mangments.onrender.com/";
 
     return libFunc.sendResponse(res, {
@@ -5451,9 +6298,11 @@ async function downloadOrderPDF(req, res) {
     });
   } catch (error) {
     console.log("downloadOrderPDF error:", error);
-    res.status(500).send("Error generating PDF");
+
+    return res.status(500).send("Error generating PDF");
   }
 }
+
 // async function downloadChalanPDF(req, res) {
 //   try {
 //     const { chalan_id } = req.data;
@@ -5731,7 +6580,11 @@ async function downloadOrderPDF(req, res) {
 
 async function downloadChalanPDF(req, res) {
   try {
-    const { chalan_id } = req.data;
+    const { chalan_id } = req.data || {};
+
+    if (!chalan_id) {
+      return res.status(400).send("Chalan ID required");
+    }
 
     const chalanTable = schema + ".chalans";
     const orderTable = schema + ".orders";
@@ -5739,71 +6592,128 @@ async function downloadChalanPDF(req, res) {
     const shopTable = schema + ".shops";
     const itemTable = schema + ".order_items";
     const sweetTable = schema + ".sweets";
+    const categoryTable = schema + ".categories";
+    const counterTable = schema + ".counters";
+
+    const safeChalanId = chalan_id.trim().replaceAll("'", "`");
 
     // ================= QUERY =================
+
     const result = await db_query.customQuery(`
       SELECT
-         ch.id AS chalan_serial_id,
+
+        -- Chalan
+        ch.id AS chalan_serial_id,
         ch.row_id AS chalan_id,
         ch.dispatch_date,
         ch.transport_details,
         ch.verification_code,
+        ch.is_verified,
 
-          o.id AS order_serial_id,
+        -- Order
+        o.id AS order_serial_id,
         o.row_id AS order_id,
+        o.order_status,
 
-        s.supplier_name,
-        s.phone AS supplier_phone,
-        s.address AS supplier_address,
+        -- Supplier
+        sup.row_id AS supplier_id,
+        sup.supplier_name,
+        sup.phone AS supplier_phone,
+        sup.address AS supplier_address,
 
+        -- Shop
+        sh.row_id AS shop_id,
         sh.shop_name,
         sh.city,
         sh.state,
         sh.address AS shop_address,
         sh.phone AS shop_phone,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+        oi.request_id,
+        oi.sweet_id,
+        oi.counter_id,
+        oi.quantity AS ordered_quantity,
         oi.supplied_quantity,
+        oi.item_status,
+
+        -- Sweet
         sw.sweet_name,
         sw.unit,
 
-        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
-        COALESCE(cat.category_name, 'Others') AS category_name
+        -- Category
+        cat.row_id AS category_id,
+        cat.category_name,
+
+        -- Counter
+        c.counter_name,
+        c.location AS counter_location
 
       FROM ${chalanTable} ch
-      LEFT JOIN ${orderTable} o ON o.row_id = ch.order_id
-      LEFT JOIN ${supplierTable} s ON s.row_id = ch.supplier_id
-      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
 
-      LEFT JOIN ${itemTable} oi 
-        ON oi.order_id = o.row_id 
+      INNER JOIN ${orderTable} o
+        ON o.row_id = ch.order_id
+
+      LEFT JOIN ${supplierTable} sup
+        ON sup.row_id = ch.supplier_id
+
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = o.shop_id
+
+      INNER JOIN ${itemTable} oi
+        ON oi.order_id = o.row_id
         AND oi.item_status = 'ACCEPTED'
+        AND oi.supplied_quantity > 0
 
-      LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
-      LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
-      LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
+      LEFT JOIN ${sweetTable} sw
+        ON sw.row_id = oi.sweet_id
 
-      WHERE ch.row_id = '${chalan_id}'
-      AND oi.sweet_id IS NOT NULL
+      LEFT JOIN ${categoryTable} cat
+        ON cat.row_id = sw.category_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
+      WHERE ch.row_id = '${safeChalanId}'
+
+      ORDER BY
+        c.counter_name ASC,
+        cat.category_name ASC,
+        sw.sweet_name ASC
     `);
 
     if (!result.data?.length) {
-      return res.status(404).send("No accepted items found");
+      return res
+        .status(404)
+        .send("Chalan not found or no accepted supplied items found");
     }
 
     const data = result.data;
+    const firstRow = data[0];
 
-    const chalanDisplayId = `CHL-${String(data[0].chalan_serial_id).padStart(6, "0")}`;
-    const orderDisplayId = `ORD-${String(data[0].order_serial_id).padStart(6, "0")}`;
+    // ================= DISPLAY IDS =================
+
+    const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(6, "0")}`;
+
+    const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(6, "0")}`;
 
     // ================= GROUPING =================
+
     const groupedData = {};
 
     data.forEach((item) => {
       const counter = item.counter_name || "Default Counter";
+
       const category = item.category_name || "Others";
 
-      if (!groupedData[counter]) groupedData[counter] = {};
-      if (!groupedData[counter][category]) groupedData[counter][category] = [];
+      if (!groupedData[counter]) {
+        groupedData[counter] = {};
+      }
+
+      if (!groupedData[counter][category]) {
+        groupedData[counter][category] = [];
+      }
 
       groupedData[counter][category].push(item);
     });
@@ -5811,119 +6721,176 @@ async function downloadChalanPDF(req, res) {
     // ================= FILE SETUP =================
     // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
+
     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
 
     if (!fs.existsSync(folder)) {
-      fs.mkdirSync(folder, { recursive: true });
+      fs.mkdirSync(folder, {
+        recursive: true,
+      });
     }
 
     const fileName = `Chalan_${Date.now()}.pdf`;
+
     const filePath = path.join(folder, fileName);
 
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({
+      margin: 40,
+      size: "A4",
+    });
+
     doc.pipe(fs.createWriteStream(filePath));
 
     const startX = 40;
-    const colWidths = { name: 260, qty: 100, unit: 80 };
+
+    const colWidths = {
+      name: 230,
+      qty: 90,
+      unit: 70,
+      status: 90,
+    };
+
     const rowHeight = 20;
 
     let isFirstPage = true;
 
-    // ================= LOOP COUNTERS =================
-    for (let counter in groupedData) {
-      // 👉 New page except first
+    // ================= COUNTER LOOP =================
+
+    for (const counter of Object.keys(groupedData)) {
       if (!isFirstPage) {
         doc.addPage();
       }
+
       isFirstPage = false;
 
       // ================= HEADER =================
+
       doc
         .fontSize(16)
         .fillColor("#2c3e50")
         .font("Helvetica-Bold")
-        .text("DISPATCH CHALAN", { align: "center" });
+        .text("DISPATCH CHALAN", {
+          align: "center",
+        });
 
       doc.moveDown(0.5);
+
       doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
       doc.moveDown();
 
       // ================= BASIC INFO =================
+
       doc.fontSize(10).fillColor("#000").font("Helvetica");
 
       doc.text(`Chalan ID: ${chalanDisplayId}`);
+
       doc.text(`Order ID: ${orderDisplayId}`);
 
       doc
         .font("Helvetica-Bold")
-        .text(`Verification Code: ${data[0].verification_code || "-"}`)
+        .text(`Verification Code: ${firstRow.verification_code || "-"}`)
         .font("Helvetica");
 
       doc.text(
         `Dispatch Date: ${
-          data[0].dispatch_date
-            ? new Date(data[0].dispatch_date).toLocaleDateString()
+          firstRow.dispatch_date
+            ? new Date(firstRow.dispatch_date).toLocaleDateString()
             : "-"
+        }`,
+      );
+
+      doc.text(
+        `Chalan Status: ${
+          firstRow.is_verified ? "VERIFIED" : "PENDING VERIFICATION"
         }`,
       );
 
       doc.moveDown();
 
       // ================= SUPPLIER =================
+
       doc
         .fontSize(11)
         .fillColor("#34495e")
         .font("Helvetica-Bold")
-        .text("Supplier Details", { underline: true });
+        .text("Supplier Details", {
+          underline: true,
+        });
 
-      doc.moveDown(0.3).fontSize(10).font("Helvetica");
+      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
 
-      doc.text(`Name: ${data[0].supplier_name || "-"}`);
-      doc.text(`Phone: ${data[0].supplier_phone || "-"}`);
-      doc.text(`Address: ${data[0].supplier_address || "-"}`);
+      doc.text(`Name: ${firstRow.supplier_name || "-"}`);
+
+      doc.text(`Phone: ${firstRow.supplier_phone || "-"}`);
+
+      doc.text(`Address: ${firstRow.supplier_address || "-"}`);
 
       doc.moveDown();
 
       // ================= SHOP =================
+
       doc
         .fontSize(11)
         .fillColor("#34495e")
         .font("Helvetica-Bold")
-        .text("Shop Details", { underline: true });
+        .text("Shop Details", {
+          underline: true,
+        });
 
-      doc.moveDown(0.3).fontSize(10).font("Helvetica");
+      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
 
-      doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
-      doc.text(`Phone: ${data[0].shop_phone || "-"}`);
-      doc.text(`Address: ${data[0].shop_address || "-"}`);
-      doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+      doc.text(`Shop Name: ${firstRow.shop_name || "-"}`);
+
+      doc.text(`Phone: ${firstRow.shop_phone || "-"}`);
+
+      doc.text(`Address: ${firstRow.shop_address || "-"}`);
+
+      doc.text(`City: ${firstRow.city || "-"}, ${firstRow.state || "-"}`);
 
       doc.moveDown();
 
       // ================= TRANSPORT =================
+
       doc
         .fontSize(11)
         .fillColor("#34495e")
         .font("Helvetica-Bold")
-        .text("Transport Details", { underline: true });
+        .text("Transport Details", {
+          underline: true,
+        });
 
-      doc.moveDown(0.3).fontSize(10).font("Helvetica");
+      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
 
-      doc.text(`${data[0].transport_details || "-"}`);
+      doc.text(firstRow.transport_details || "-");
 
       doc.moveDown();
 
       // ================= COUNTER =================
+
+      const counterItems = Object.values(groupedData[counter]).flat();
+
+      const counterLocation = counterItems[0]?.counter_location;
+
       doc
         .fontSize(13)
         .fillColor("#2980b9")
         .font("Helvetica-Bold")
         .text(`Counter: ${counter}`);
 
+      if (counterLocation) {
+        doc
+          .fontSize(9)
+          .fillColor("#555")
+          .font("Helvetica")
+          .text(`Location: ${counterLocation}`);
+      }
+
       doc.moveDown(0.5);
 
       // ================= CATEGORY LOOP =================
-      for (let category in groupedData[counter]) {
+
+      for (const category of Object.keys(groupedData[counter])) {
         doc
           .fontSize(11)
           .fillColor("#8e44ad")
@@ -5934,12 +6901,15 @@ async function downloadChalanPDF(req, res) {
 
         let y = doc.y;
 
-        // Header Row
+        // ================= TABLE HEADER =================
+
         doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
 
         doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
 
-        doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
+        doc.text("Sweet Name", startX + 5, y + 5, {
+          width: colWidths.name,
+        });
 
         doc.text("Qty", startX + colWidths.name, y + 5, {
           width: colWidths.qty,
@@ -5951,12 +6921,25 @@ async function downloadChalanPDF(req, res) {
           align: "center",
         });
 
+        doc.text(
+          "Status",
+          startX + colWidths.name + colWidths.qty + colWidths.unit,
+          y + 5,
+          {
+            width: colWidths.status,
+            align: "center",
+          },
+        );
+
         y += rowHeight;
+
         let total = 0;
 
         // ================= ITEMS =================
+
         groupedData[counter][category].forEach((item, index) => {
           const qty = Number(item.supplied_quantity || 0);
+
           total += qty;
 
           if (index % 2 === 0) {
@@ -5984,15 +6967,28 @@ async function downloadChalanPDF(req, res) {
             },
           );
 
+          doc.text(
+            item.item_status || "ACCEPTED",
+            startX + colWidths.name + colWidths.qty + colWidths.unit,
+            y + 5,
+            {
+              width: colWidths.status,
+              align: "center",
+            },
+          );
+
           y += rowHeight;
         });
 
         // ================= TOTAL =================
+
         doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
 
         doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
 
-        doc.text("Total", startX + 5, y + 5, { width: colWidths.name });
+        doc.text("Total", startX + 5, y + 5, {
+          width: colWidths.name,
+        });
 
         doc.text(total.toString(), startX + colWidths.name, y + 5, {
           width: colWidths.qty,
@@ -6003,17 +6999,26 @@ async function downloadChalanPDF(req, res) {
       }
 
       // ================= FOOTER =================
+
       doc.moveDown(2);
+
       doc
         .fontSize(9)
         .fillColor("gray")
-        .text("This is a system generated document.", { align: "center" });
+        .font("Helvetica")
+        .text("This is a system generated document.", {
+          align: "center",
+        });
     }
+
+    // ================= END PDF =================
 
     doc.end();
 
     // ================= RESPONSE =================
+
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
+
     const serverUrl = "https://api.joswee.cloud";
 
     return libFunc.sendResponse(res, {
@@ -6023,75 +7028,153 @@ async function downloadChalanPDF(req, res) {
     });
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
+
     return res.status(500).send("Error generating PDF");
   }
 }
 
 async function downloadOrderRequestPDF(req, res) {
   try {
-    const { order_id } = req.data;
+    const { order_id } = req.data || {};
+
+    if (!order_id) {
+      return res.status(400).send("Order ID required");
+    }
 
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const shopTable = schema + ".shops";
     const sweetTable = schema + ".sweets";
+    const counterTable = schema + ".counters";
+    const categoryTable = schema + ".categories";
+    const departmentTable = schema + ".departments";
+
+    const safeOrderId = order_id.trim().replaceAll("'", "`");
 
     // ================= QUERY =================
+
     const result = await db_query.customQuery(`
       SELECT
-          o.id AS order_serial_id,
+
+        -- Order
+        o.id AS order_serial_id,
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
+        -- Shop
+        sh.row_id AS shop_id,
         sh.shop_name,
         sh.address AS shop_address,
         sh.city,
         sh.state,
         sh.phone AS shop_phone,
 
+        -- Order Item
+        oi.row_id AS order_item_id,
+        oi.request_id,
         oi.quantity,
         oi.item_status,
 
-        COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
-        COALESCE(sw.unit, '-') AS unit,
+        -- Sweet
+        sw.row_id AS sweet_id,
+        COALESCE(
+          sw.sweet_name,
+          'Unknown Sweet'
+        ) AS sweet_name,
 
-        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
-        COALESCE(cat.category_name, 'Others') AS category_name,
-        COALESCE(d.department_name, 'Others') AS department_name
+        COALESCE(
+          sw.unit,
+          '-'
+        ) AS unit,
+
+        -- Counter
+        c.row_id AS counter_id,
+        COALESCE(
+          c.counter_name,
+          'Default Counter'
+        ) AS counter_name,
+
+        c.location AS counter_location,
+
+        -- Category
+        cat.row_id AS category_id,
+        COALESCE(
+          cat.category_name,
+          'Others'
+        ) AS category_name,
+
+        -- Department
+        d.row_id AS department_id,
+        COALESCE(
+          d.department_name,
+          'Others'
+        ) AS department_name
 
       FROM ${orderTable} o
-      LEFT JOIN ${shopTable} sh ON sh.row_id = o.shop_id
-      LEFT JOIN ${itemTable} oi ON oi.order_id = o.row_id
-      LEFT JOIN ${sweetTable} sw ON sw.row_id = oi.sweet_id
-      LEFT JOIN ${schema}.counters c ON c.row_id = oi.counter_id
-      LEFT JOIN ${schema}.categories cat ON cat.row_id = sw.category_id
-      LEFT JOIN ${schema}.departments d
-  ON d.row_id = cat.department_id
 
-      WHERE o.row_id = '${order_id}'
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${itemTable} oi
+        ON oi.order_id = o.row_id
+
+      LEFT JOIN ${sweetTable} sw
+        ON sw.row_id = oi.sweet_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = oi.counter_id
+
+      LEFT JOIN ${categoryTable} cat
+        ON cat.row_id = sw.category_id
+
+      LEFT JOIN ${departmentTable} d
+        ON d.row_id = cat.department_id
+
+      WHERE o.row_id = '${safeOrderId}'
+
+      ORDER BY
+        c.counter_name ASC,
+        cat.category_name ASC,
+        sw.sweet_name ASC
     `);
 
-    const data = result.data;
+    const data = result.data || [];
 
-    if (!data || data.length === 0) {
+    if (data.length === 0) {
       return res.status(404).send("No order found");
     }
 
-    const orderDisplayId = `ORD-${String(data[0].order_serial_id).padStart(6, "0")}`;
+    const order = data[0];
 
-    // ================= GROUPING =================
+    // ================= DISPLAY ID =================
+
+    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+      6,
+      "0",
+    )}`;
+
+    // ================= COUNTER + CATEGORY GROUPING =================
+
     const groupedData = {};
 
     data.forEach((item) => {
       const counter = item.counter_name || "Default Counter";
+
       const category = item.category_name || "Others";
 
-      if (!groupedData[counter]) groupedData[counter] = {};
-      if (!groupedData[counter][category]) groupedData[counter][category] = [];
+      if (!groupedData[counter]) {
+        groupedData[counter] = {};
+      }
+
+      if (!groupedData[counter][category]) {
+        groupedData[counter][category] = [];
+      }
 
       groupedData[counter][category].push(item);
     });
+
+    // ================= DEPARTMENT GROUPING =================
 
     const departmentGrouped = {};
 
@@ -6108,45 +7191,68 @@ async function downloadOrderRequestPDF(req, res) {
     // ================= FILE SETUP =================
     // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
+
     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
 
     if (!fs.existsSync(folder)) {
-      fs.mkdirSync(folder, { recursive: true });
+      fs.mkdirSync(folder, {
+        recursive: true,
+      });
     }
 
     const fileName = `OrderRequest_${Date.now()}.pdf`;
+
     const filePath = path.join(folder, fileName);
 
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({
+      margin: 40,
+      size: "A4",
+    });
+
     doc.pipe(fs.createWriteStream(filePath));
 
     let isFirstPage = true;
 
-    // ================= LOOP =================
-    for (let counter in groupedData) {
-      for (let category in groupedData[counter]) {
-        // NEW PAGE FOR EACH CATEGORY
-        if (!isFirstPage) doc.addPage();
+    // =====================================================
+    // COUNTER + CATEGORY REQUEST PAGES
+    // =====================================================
+
+    for (const counter of Object.keys(groupedData)) {
+      for (const category of Object.keys(groupedData[counter])) {
+        if (!isFirstPage) {
+          doc.addPage();
+        }
+
         isFirstPage = false;
 
         // ================= HEADER =================
-        doc.fontSize(16).font("Helvetica-Bold").text("ORDER REQUEST", {
-          align: "center",
-        });
+
+        doc
+          .fontSize(16)
+          .font("Helvetica-Bold")
+          .fillColor("#000")
+          .text("ORDER REQUEST", {
+            align: "center",
+          });
 
         doc.moveDown();
+
         doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
         doc.moveDown();
 
         // ================= ORDER INFO =================
+
         doc.fontSize(10).font("Helvetica");
 
         doc.text(`Order ID: ${orderDisplayId}`);
-        doc.text(`Status: ${data[0].order_status}`);
+
+        doc.text(`Status: ${order.order_status || "-"}`);
+
         doc.text(
           `Order Date: ${
-            data[0].order_date
-              ? new Date(data[0].order_date).toLocaleDateString()
+            order.order_date
+              ? new Date(order.order_date).toLocaleDateString()
               : "-"
           }`,
         );
@@ -6154,50 +7260,87 @@ async function downloadOrderRequestPDF(req, res) {
         doc.moveDown();
 
         // ================= SHOP =================
+
         doc.fontSize(11).font("Helvetica-Bold").text("Shop Details", {
           underline: true,
         });
 
         doc.moveDown(0.3).fontSize(10).font("Helvetica");
 
-        doc.text(`Shop Name: ${data[0].shop_name || "-"}`);
-        doc.text(`Phone: ${data[0].shop_phone || "-"}`);
-        doc.text(`Address: ${data[0].shop_address || "-"}`);
-        doc.text(`City: ${data[0].city || "-"}, ${data[0].state || "-"}`);
+        doc.text(`Shop Name: ${order.shop_name || "-"}`);
+
+        doc.text(`Phone: ${order.shop_phone || "-"}`);
+
+        doc.text(`Address: ${order.shop_address || "-"}`);
+
+        doc.text(`City: ${order.city || "-"}, ${order.state || "-"}`);
 
         doc.moveDown();
 
-        // ================= COUNTER + CATEGORY =================
+        // ================= COUNTER =================
+
         doc.fontSize(13).font("Helvetica-Bold").text(`Counter: ${counter}`);
+
+        const counterItems = groupedData[counter][category];
+
+        const location = counterItems[0]?.counter_location;
+
+        if (location) {
+          doc
+            .fontSize(9)
+            .font("Helvetica")
+            .fillColor("#555")
+            .text(`Location: ${location}`);
+
+          doc.fillColor("#000");
+        }
 
         doc.fontSize(12).font("Helvetica-Bold").text(`Category: ${category}`);
 
         doc.moveDown(0.5);
 
+        // ================= TABLE =================
+
         let y = doc.y;
 
         const startX = 40;
         const rowHeight = 20;
-        const colWidths = { name: 260, qty: 80, unit: 60, status: 100 };
+
+        const colWidths = {
+          name: 260,
+          qty: 80,
+          unit: 60,
+          status: 100,
+        };
 
         // ================= TABLE HEADER =================
+
         doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+
         doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
 
-        doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
+        doc.text("Sweet Name", startX + 5, y + 5, {
+          width: colWidths.name,
+        });
+
         doc.text("Qty", startX + colWidths.name, y + 5, {
           width: colWidths.qty,
           align: "center",
         });
+
         doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
           width: colWidths.unit,
           align: "center",
         });
+
         doc.text(
           "Status",
           startX + colWidths.name + colWidths.qty + colWidths.unit,
           y + 5,
-          { width: colWidths.status, align: "center" },
+          {
+            width: colWidths.status,
+            align: "center",
+          },
         );
 
         y += rowHeight;
@@ -6205,11 +7348,13 @@ async function downloadOrderRequestPDF(req, res) {
         let total = 0;
 
         // ================= ITEMS =================
+
         groupedData[counter][category].forEach((item, index) => {
           const qty = Number(item.quantity || 0);
+
           total += qty;
 
-          // PAGE BREAK INSIDE TABLE
+          // Page break
           if (y > 750) {
             doc.addPage();
             y = 50;
@@ -6217,12 +7362,11 @@ async function downloadOrderRequestPDF(req, res) {
 
           if (index % 2 === 0) {
             doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
-            doc.fillColor("#000");
           }
 
-          doc.fontSize(9).font("Helvetica");
+          doc.fillColor("#000").fontSize(9).font("Helvetica");
 
-          doc.text(item.sweet_name, startX + 5, y + 5, {
+          doc.text(item.sweet_name || "-", startX + 5, y + 5, {
             width: colWidths.name,
           });
 
@@ -6231,23 +7375,33 @@ async function downloadOrderRequestPDF(req, res) {
             align: "center",
           });
 
-          doc.text(item.unit, startX + colWidths.name + colWidths.qty, y + 5, {
-            width: colWidths.unit,
-            align: "center",
-          });
+          doc.text(
+            item.unit || "-",
+            startX + colWidths.name + colWidths.qty,
+            y + 5,
+            {
+              width: colWidths.unit,
+              align: "center",
+            },
+          );
 
           doc.text(
-            item.item_status,
+            item.item_status || "PENDING",
             startX + colWidths.name + colWidths.qty + colWidths.unit,
             y + 5,
-            { width: colWidths.status, align: "center" },
+            {
+              width: colWidths.status,
+              align: "center",
+            },
           );
 
           y += rowHeight;
         });
 
         // ================= TOTAL =================
+
         doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+
         doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
 
         doc.text("Total", startX + 5, y + 5, {
@@ -6262,148 +7416,35 @@ async function downloadOrderRequestPDF(req, res) {
         doc.moveDown(2);
 
         // ================= FOOTER =================
+
         doc
           .fontSize(9)
           .fillColor("gray")
-          .text("System generated order request.", { align: "center" });
+          .font("Helvetica")
+          .text("System generated order request.", {
+            align: "center",
+          });
+
+        doc.fillColor("#000");
       }
     }
 
-    // doc.end();
-
     // =====================================================
-    // DEPARTMENT WISE SLIPS
+    // DEPARTMENT WISE PRODUCTION SLIPS
     // =====================================================
 
-    // for (const department in departmentGrouped) {
-    //   doc.addPage();
-
-    //   doc.fontSize(16).font("Helvetica-Bold").text("DEPARTMENT REQUEST", {
-    //     align: "center",
-    //   });
-
-    //   doc.moveDown();
-
-    //   doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-
-    //   doc.moveDown();
-
-    //   doc.fontSize(10).font("Helvetica");
-
-    //   doc.text(`Order ID: ${data[0].order_id}`);
-    //   doc.text(`Status: ${data[0].order_status}`);
-
-    //   doc.text(
-    //     `Order Date: ${
-    //       data[0].order_date
-    //         ? new Date(data[0].order_date).toLocaleDateString()
-    //         : "-"
-    //     }`,
-    //   );
-
-    //   doc.moveDown();
-
-    //   doc.fontSize(14).font("Helvetica-Bold").text(`Department: ${department}`);
-
-    //   doc.moveDown();
-
-    //   let y = doc.y;
-
-    //   const startX = 40;
-    //   const rowHeight = 20;
-
-    //   const colWidths = {
-    //     name: 300,
-    //     qty: 80,
-    //     unit: 80,
-    //   };
-
-    //   // Header
-
-    //   doc.rect(startX, y, 460, rowHeight).fill("#f2f2f2");
-
-    //   doc.fillColor("#000");
-
-    //   doc.fontSize(9).font("Helvetica-Bold");
-
-    //   doc.text("Sweet Name", startX + 5, y + 5, { width: colWidths.name });
-
-    //   doc.text("Qty", startX + colWidths.name, y + 5, {
-    //     width: colWidths.qty,
-    //     align: "center",
-    //   });
-
-    //   doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
-    //     width: colWidths.unit,
-    //     align: "center",
-    //   });
-
-    //   y += rowHeight;
-
-    //   let total = 0;
-
-    //   departmentGrouped[department].forEach((item, index) => {
-    //     const qty = Number(item.quantity || 0);
-
-    //     total += qty;
-
-    //     if (index % 2 === 0) {
-    //       doc.rect(startX, y, 460, rowHeight).fill("#fafafa");
-
-    //       doc.fillColor("#000");
-    //     }
-
-    //     doc.fontSize(9).font("Helvetica");
-
-    //     doc.text(item.sweet_name, startX + 5, y + 5, {
-    //       width: colWidths.name,
-    //     });
-
-    //     doc.text(qty.toString(), startX + colWidths.name, y + 5, {
-    //       width: colWidths.qty,
-    //       align: "center",
-    //     });
-
-    //     doc.text(item.unit, startX + colWidths.name + colWidths.qty, y + 5, {
-    //       width: colWidths.unit,
-    //       align: "center",
-    //     });
-
-    //     y += rowHeight;
-    //   });
-
-    //   doc.rect(startX, y, 460, rowHeight).fill("#e8f8f5");
-
-    //   doc.fillColor("#000");
-
-    //   doc.fontSize(10).font("Helvetica-Bold");
-
-    //   doc.text("Total", startX + 5, y + 5, {
-    //     width: colWidths.name,
-    //   });
-
-    //   doc.text(total.toString(), startX + colWidths.name, y + 5, {
-    //     width: colWidths.qty,
-    //     align: "center",
-    //   });
-
-    //   doc.moveDown(2);
-
-    //   doc.fontSize(9).fillColor("gray").text("Department wise slip", {
-    //     align: "center",
-    //   });
-    // }
-
-    // =====================================================
-    // DEPARTMENT SLIPS (SMALL FORMAT)
-    // =====================================================
-
-    for (const department in departmentGrouped) {
+    for (const department of Object.keys(departmentGrouped)) {
       doc.addPage();
 
-      doc.fontSize(18).font("Helvetica-Bold").text("DEPARTMENT SLIP", {
-        align: "center",
-      });
+      // ================= HEADER =================
+
+      doc
+        .fontSize(18)
+        .font("Helvetica-Bold")
+        .fillColor("#000")
+        .text("DEPARTMENT SLIP", {
+          align: "center",
+        });
 
       doc.moveDown(0.5);
 
@@ -6413,13 +7454,16 @@ async function downloadOrderRequestPDF(req, res) {
 
       doc.moveDown();
 
+      // ================= ORDER INFO =================
+
       doc.fontSize(10).font("Helvetica");
 
-      doc.text(`Order : ${data[0].order_id}`);
+      doc.text(`Order: ${orderDisplayId}`);
+
       doc.text(
-        `Date : ${
-          data[0].order_date
-            ? new Date(data[0].order_date).toLocaleDateString()
+        `Date: ${
+          order.order_date
+            ? new Date(order.order_date).toLocaleDateString()
             : "-"
         }`,
       );
@@ -6432,6 +7476,8 @@ async function downloadOrderRequestPDF(req, res) {
 
       let total = 0;
 
+      // ================= DEPARTMENT ITEMS =================
+
       departmentGrouped[department].forEach((item) => {
         const qty = Number(item.quantity || 0);
 
@@ -6440,15 +7486,17 @@ async function downloadOrderRequestPDF(req, res) {
         doc
           .fontSize(12)
           .font("Helvetica")
-          .text(`${item.sweet_name}`, 40, doc.y, {
+          .text(item.sweet_name || "Unknown Sweet", 40, doc.y, {
             continued: true,
           })
-          .text(`${qty} ${item.unit}`, {
+          .text(`${qty} ${item.unit || ""}`, {
             align: "right",
           });
 
         doc.moveDown(0.3);
       });
+
+      // ================= TOTAL =================
 
       doc.moveDown();
 
@@ -6466,15 +7514,18 @@ async function downloadOrderRequestPDF(req, res) {
         align: "center",
       });
 
-      doc.fillColor("black");
+      doc.fillColor("#000");
     }
+
+    // ================= END PDF =================
 
     doc.end();
 
     // ================= RESPONSE =================
+
     const fileUrl = `/uploads/OrderRequests/${fileName}`;
+
     const serverUrl = "https://api.joswee.cloud";
-    // const serverUrl = "http://localhost:8000";
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -6483,6 +7534,7 @@ async function downloadOrderRequestPDF(req, res) {
     });
   } catch (error) {
     console.log("downloadOrderRequestPDF error:", error);
+
     return res.status(500).send("Error generating PDF");
   }
 }
@@ -7494,7 +8546,10 @@ async function getAllCounterRequestsByShop(req, res) {
     // Filters
     const { status, shop_id } = req.data || {};
 
-    // 🔒 Role validation
+    // =====================================
+    // ROLE VALIDATION
+    // =====================================
+
     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -7502,24 +8557,35 @@ async function getAllCounterRequestsByShop(req, res) {
       });
     }
 
-    // 🔹 Dynamic WHERE
-    let where = "";
+    // =====================================
+    // DYNAMIC WHERE
+    // =====================================
 
-    // SHOP_ADMIN → only own shop data
+    let conditions = [];
+
+    // =====================================
+    // SHOP_ADMIN
+    // Only own shop
+    // =====================================
+
     if (user.user_role === "SHOP_ADMIN") {
-      const shopId = user.shop_id || user.shopId;
+      const shopId = user.shopId;
 
       if (!shopId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Invalid shop",
+          msg: "Shop ID not found in token",
         });
       }
 
-      where = `WHERE c.shop_id = '${shopId}'`;
+      conditions.push(`c.shop_id = '${shopId}'`);
     }
 
-    // ADMIN → shop wise data
+    // =====================================
+    // ADMIN
+    // Shop wise data
+    // =====================================
+
     if (user.user_role === "ADMIN") {
       if (!shop_id) {
         return libFunc.sendResponse(res, {
@@ -7528,40 +8594,58 @@ async function getAllCounterRequestsByShop(req, res) {
         });
       }
 
-      where = `WHERE c.shop_id = '${shop_id}'`;
+      conditions.push(`c.shop_id = '${shop_id.trim()}'`);
     }
 
-    // Status filter
+    // =====================================
+    // STATUS FILTER
+    // =====================================
+
     if (status) {
-      if (where) {
-        where += ` AND r.status = '${status}'`;
-      } else {
-        where = `WHERE r.status = '${status}'`;
-      }
+      conditions.push(`r.status = '${status.trim()}'`);
     }
 
-    // 🔹 Query
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // =====================================
+    // FETCH REQUESTS
+    // =====================================
+
     const result = await db_query.customQuery(`
       SELECT
+
         r.row_id,
 
         CONCAT('REQ-', r.id) AS requested_order,
 
-        -- Requested quantity
+        -- Request details
         r.quantity AS requested_quantity,
 
-        -- Supplied quantity
-        COALESCE(oi.supplied_quantity, 0) AS supplied_quantity,
+        r.status AS request_status,
 
-        -- Pending quantity
+        -- Order item details
+        COALESCE(
+          oi.item_status,
+          'PENDING'
+        ) AS item_status,
+
+        COALESCE(
+          oi.supplied_quantity,
+          0
+        ) AS supplied_quantity,
+
         GREATEST(
-          r.quantity - COALESCE(oi.supplied_quantity, 0),
+          r.quantity -
+          COALESCE(oi.supplied_quantity, 0),
           0
         ) AS pending_quantity,
 
-        r.status,
+        oi.order_id,
 
-        -- Request group
+        oi.reject_reason,
+
+        -- Request dates
         TO_CHAR(
           r.cr_on,
           'YYYY-MM-DD HH24:MI'
@@ -7572,13 +8656,17 @@ async function getAllCounterRequestsByShop(req, res) {
           'YYYY-MM-DD HH24:MI:SS'
         ) AS cr_on,
 
+        -- Sweet
         s.row_id AS sweet_id,
         s.sweet_name,
         s.unit,
 
+        -- Counter
         c.row_id AS counter_id,
         c.counter_name,
         c.location,
+
+        -- Shop
         c.shop_id
 
       FROM ${requestTable} r
@@ -7589,31 +8677,24 @@ async function getAllCounterRequestsByShop(req, res) {
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
-      -- 🔹 Only ONE order_item per counter + sweet
-      LEFT JOIN (
-        SELECT DISTINCT ON (counter_id, sweet_id)
-          counter_id,
-          sweet_id,
-          supplied_quantity
-        FROM ${orderItemTable}
-        ORDER BY
-          counter_id,
-          sweet_id,
-          cr_on DESC
-      ) oi
-        ON oi.counter_id = r.counter_id
-        AND oi.sweet_id = r.sweet_id
+      -- IMPORTANT:
+      -- Exact request → exact order item
+      LEFT JOIN ${orderItemTable} oi
+        ON oi.request_id = r.row_id
 
-      ${where}
+      ${whereClause}
 
       ORDER BY r.cr_on DESC
     `);
 
-    console.log("result", result);
+    console.log("getAllCounterRequestsByShop result:", result);
 
     const requests = result.data || [];
 
-    // 🔹 Group requests according to request time
+    // =====================================
+    // GROUP BY REQUEST TIME
+    // =====================================
+
     const groupedRequests = {};
 
     requests.forEach((item) => {
@@ -7622,40 +8703,60 @@ async function getAllCounterRequestsByShop(req, res) {
       if (!groupedRequests[groupKey]) {
         groupedRequests[groupKey] = {
           request_group: groupKey,
+
           cr_on: groupKey,
+
           total_requests: 0,
+
           total_requested_quantity: 0,
+
           total_supplied_quantity: 0,
+
           total_pending_quantity: 0,
+
           requests: [],
         };
       }
 
+      // Total requests
       groupedRequests[groupKey].total_requests += 1;
 
+      // Requested quantity
       groupedRequests[groupKey].total_requested_quantity += Number(
         item.requested_quantity || 0,
       );
 
+      // Supplied quantity
       groupedRequests[groupKey].total_supplied_quantity += Number(
         item.supplied_quantity || 0,
       );
 
+      // Pending quantity
       groupedRequests[groupKey].total_pending_quantity += Number(
         item.pending_quantity || 0,
       );
 
+      // Individual request
       groupedRequests[groupKey].requests.push(item);
     });
 
-    // 🔹 Convert object → array
+    // =====================================
+    // OBJECT → ARRAY
+    // =====================================
+
     const data = Object.values(groupedRequests);
 
-    console.log("data", data);
+    console.log("Grouped request data:", data);
+
+    // =====================================
+    // RESPONSE
+    // =====================================
 
     return libFunc.sendResponse(res, {
       status: 0,
+
       msg: "Shop counter requests fetched successfully",
+
       data,
     });
   } catch (error) {
@@ -7663,7 +8764,9 @@ async function getAllCounterRequestsByShop(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 1,
+
       msg: "Something went wrong",
+
       error: error.message,
     });
   }
@@ -7972,67 +9075,170 @@ async function createNotification(data) {
 }
 
 async function getNotifications(req, res) {
-  console.log("req", req);
   try {
     const table = schema + ".notifications";
     const user = req.data;
 
     const { page = 1, limit = 10, type, is_read } = req.data || {};
 
-    const offset = (page - 1) * limit;
+    // ==============================
+    // ROLE VALIDATION
+    // ==============================
 
-    // 🔐 user_id always from token
-    const userId = user.userId;
-
-    let where = `WHERE user_id = '${userId}' AND is_deleted = false`;
-
-    // 🎯 Optional filters
-    if (type) {
-      where += ` AND type = '${type}'`;
+    if (
+      !["ADMIN", "SHOP_ADMIN", "COUNTER_USER", "SUPPLIER"].includes(
+        user.user_role,
+      )
+    ) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
     }
+
+    // ==============================
+    // USER ID FROM TOKEN
+    // ==============================
+
+    if (!user.userId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "User ID not found in token",
+      });
+    }
+
+    const userId = user.userId.trim().replaceAll("'", "`");
+
+    // ==============================
+    // PAGINATION VALIDATION
+    // ==============================
+
+    const pageNumber = Math.max(Number(page) || 1, 1);
+
+    const limitNumber = Math.min(Math.max(Number(limit) || 10, 1), 100);
+
+    const offset = (pageNumber - 1) * limitNumber;
+
+    // ==============================
+    // BASE CONDITION
+    // ==============================
+
+    let conditions = [`user_id = '${userId}'`, `is_deleted = false`];
+
+    // ==============================
+    // TYPE FILTER
+    // ==============================
+
+    if (type) {
+      const safeType = type.trim().replaceAll("'", "`");
+
+      conditions.push(`type = '${safeType}'`);
+    }
+
+    // ==============================
+    // READ FILTER
+    // ==============================
 
     if (is_read !== undefined) {
-      where += ` AND is_read = ${is_read}`;
+      const readValue = is_read === true || is_read === "true";
+
+      const unreadValue = is_read === false || is_read === "false";
+
+      if (!readValue && !unreadValue) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid is_read value",
+        });
+      }
+
+      conditions.push(`is_read = ${readValue}`);
     }
 
-    // 📥 Get Notifications
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    // ==============================
+    // FETCH NOTIFICATIONS
+    // ==============================
+
     const notifications = await db_query.customQuery(`
-      SELECT *
-      FROM ${table}
-      ${where}
-      ORDER BY cr_on DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `);
+        SELECT
+          row_id,
+          title,
+          message,
+          type,
+          reference_id,
+          reference_type,
+          priority,
+          is_read,
+          cr_on,
+          up_on
 
-    // 🔢 Total Count
+        FROM ${table}
+
+        ${whereClause}
+
+        ORDER BY
+          cr_on DESC
+
+        LIMIT ${limitNumber}
+        OFFSET ${offset}
+      `);
+
+    // ==============================
+    // TOTAL COUNT
+    // ==============================
+
     const countRes = await db_query.customQuery(`
-      SELECT COUNT(*) as total
-      FROM ${table}
-      ${where}
-    `);
+        SELECT COUNT(*) AS total
 
-    const total = countRes.data[0]?.total || 0;
+        FROM ${table}
 
-    // 🔔 Unread Count (important for bell icon)
+        ${whereClause}
+      `);
+
+    const total = Number(countRes.data?.[0]?.total || 0);
+
+    // ==============================
+    // UNREAD COUNT
+    // ==============================
+
     const unreadRes = await db_query.customQuery(`
-      SELECT COUNT(*) as unread
-      FROM ${table}
-      WHERE user_id = '${userId}'
-      AND is_read = false
-      AND is_deleted = false
-    `);
+        SELECT COUNT(*) AS unread
 
-    const unread = unreadRes.data[0]?.unread || 0;
+        FROM ${table}
+
+        WHERE user_id = '${userId}'
+        AND is_read = false
+        AND is_deleted = false
+      `);
+
+    const unread = Number(unreadRes.data?.[0]?.unread || 0);
+
+    // ==============================
+    // TOTAL PAGES
+    // ==============================
+
+    const totalPages = Math.ceil(total / limitNumber);
+
+    // ==============================
+    // SUCCESS
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Notifications fetched",
+      msg: "Notifications fetched successfully",
       data: {
         notifications: notifications.data || [],
+
         total,
+
         unread,
-        page,
-        limit,
+
+        page: pageNumber,
+
+        limit: limitNumber,
+
+        total_pages: totalPages,
       },
     });
   } catch (error) {
@@ -8049,7 +9255,20 @@ async function getNotifications(req, res) {
 async function markNotificationRead(req, res) {
   try {
     const table = schema + ".notifications";
-    const { notification_id } = req.data;
+
+    const user = req.data;
+    const { notification_id } = req.data || {};
+
+    // ==============================
+    // USER ID FROM TOKEN
+    // ==============================
+
+    if (!user.userId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "User ID not found in token",
+      });
+    }
 
     if (!notification_id) {
       return libFunc.sendResponse(res, {
@@ -8058,15 +9277,50 @@ async function markNotificationRead(req, res) {
       });
     }
 
-    await db_query.customQuery(`
+    const notificationId = notification_id.trim().replaceAll("'", "`");
+
+    const userId = user.userId.trim().replaceAll("'", "`");
+
+    // ==============================
+    // MARK AS READ
+    // ==============================
+
+    const result = await db_query.customQuery(`
       UPDATE ${table}
-      SET is_read = true
-      WHERE row_id = '${notification_id}'
+
+      SET
+        is_read = true,
+        up_on = now()
+
+      WHERE row_id = '${notificationId}'
+      AND user_id = '${userId}'
+      AND is_deleted = false
+
+      RETURNING row_id
     `);
+
+    // ==============================
+    // NOT FOUND / UNAUTHORIZED
+    // ==============================
+
+    if (!result.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Notification not found or unauthorized",
+      });
+    }
+
+    // ==============================
+    // SUCCESS
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Notification marked as read",
+      data: {
+        notification_id: notificationId,
+        is_read: true,
+      },
     });
   } catch (error) {
     console.log("markNotificationRead error:", error);
@@ -8166,54 +9420,170 @@ cron.schedule(
 );
 
 // Fetch Expiry Logs
+
 async function fetchExpiryLogs(req, res) {
   try {
-    const user = req.data; // token info
-    const { sweet_id, start_date, end_date, counter_id } = req.data || {};
-    const expiryTable = "sms.expiry_logs";
-    const sweetTable = "sms.sweets";
-    const counterTable = "sms.counters";
+    const user = req.data;
 
-    // Base query
-    let query = `
-      SELECT e.*, s.sweet_name, c.counter_name
-      FROM ${expiryTable} e
-      LEFT JOIN ${sweetTable} s ON s.row_id = e.sweet_id
-      LEFT JOIN ${counterTable} c ON c.row_id = e.counter_id
-      WHERE 1=1
-    `;
+    const { sweet_id, start_date, end_date, counter_id, shop_id } =
+      req.data || {};
 
-    // Role-based filtering
+    const expiryTable = schema + ".expiry_logs";
+    const sweetTable = schema + ".sweets";
+    const counterTable = schema + ".counters";
+    const shopTable = schema + ".shops";
+
+    // ==============================
+    // ROLE VALIDATION
+    // ==============================
+
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Access denied",
+      });
+    }
+
+    let conditions = [];
+
+    // ==============================
+    // SHOP ADMIN
+    // ==============================
+
     if (user.user_role === "SHOP_ADMIN") {
-      // Shop admin: must provide counter_id to fetch logs for that counter
-      if (counter_id) {
-        query += ` AND e.counter_id = '${counter_id}'`;
-      } else {
+      if (!user.shopId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Please provide counter_id for shop admin",
+          msg: "Shop ID not found in token",
         });
       }
-    } else if (user.user_role === "COUNTER_USER") {
-      // Counter user: automatically use their counterId
-      if (user.counterId) {
-        query += ` AND e.counter_id = '${user.counterId}'`;
-      } else {
+
+      // If counter_id is provided,
+      // make sure it belongs to this shop.
+      if (counter_id) {
+        conditions.push(
+          `e.counter_id = '${counter_id.trim().replaceAll("'", "`")}'`,
+        );
+      }
+
+      conditions.push(`c.shop_id = '${user.shopId}'`);
+    }
+
+    // ==============================
+    // COUNTER USER
+    // ==============================
+
+    if (user.user_role === "COUNTER_USER") {
+      if (!user.counterId) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Counter ID missing in user token",
         });
       }
+
+      conditions.push(
+        `e.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`,
+      );
     }
 
-    // Additional filters
-    if (sweet_id) query += ` AND e.sweet_id = '${sweet_id}'`;
-    if (start_date) query += ` AND e.expiry_date >= '${start_date}'`;
-    if (end_date) query += ` AND e.expiry_date <= '${end_date}'`;
+    // ==============================
+    // ADMIN
+    // ==============================
 
-    query += " ORDER BY e.expiry_date DESC";
+    if (user.user_role === "ADMIN") {
+      if (shop_id) {
+        conditions.push(`c.shop_id = '${shop_id.trim().replaceAll("'", "`")}'`);
+      }
 
-    // Execute query
+      if (counter_id) {
+        conditions.push(
+          `e.counter_id = '${counter_id.trim().replaceAll("'", "`")}'`,
+        );
+      }
+    }
+
+    // ==============================
+    // SWEET FILTER
+    // ==============================
+
+    if (sweet_id) {
+      conditions.push(`e.sweet_id = '${sweet_id.trim().replaceAll("'", "`")}'`);
+    }
+
+    // ==============================
+    // DATE FILTER
+    // ==============================
+
+    if (start_date) {
+      conditions.push(
+        `e.expiry_date >= '${start_date.trim().replaceAll("'", "`")}'`,
+      );
+    }
+
+    if (end_date) {
+      conditions.push(
+        `e.expiry_date <= '${end_date.trim().replaceAll("'", "`")}'`,
+      );
+    }
+
+    // ==============================
+    // WHERE
+    // ==============================
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // ==============================
+    // QUERY
+    // ==============================
+
+    const query = `
+      SELECT
+
+        e.row_id AS expiry_log_id,
+        e.id AS expiry_serial_id,
+
+        e.counter_id,
+        c.counter_name,
+        c.location,
+
+        c.shop_id,
+        sh.shop_name,
+
+        e.sweet_id,
+        s.sweet_name,
+        s.unit,
+
+        e.inventory_id,
+        e.quantity,
+        e.expiry_date,
+
+        e.loss_amount,
+        e.reason,
+
+        e.cr_on,
+        e.up_on
+
+      FROM ${expiryTable} e
+
+      LEFT JOIN ${sweetTable} s
+        ON s.row_id = e.sweet_id
+
+      LEFT JOIN ${counterTable} c
+        ON c.row_id = e.counter_id
+
+      LEFT JOIN ${shopTable} sh
+        ON sh.row_id = c.shop_id
+
+      ${whereClause}
+
+      ORDER BY
+        e.expiry_date DESC,
+        e.cr_on DESC
+    `;
+
+    console.log("fetchExpiryLogs query:", query);
+
     const result = await db_query.customQuery(query);
 
     return libFunc.sendResponse(res, {
@@ -8223,6 +9593,7 @@ async function fetchExpiryLogs(req, res) {
     });
   } catch (error) {
     console.error("fetchExpiryLogs error:", error);
+
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Something went wrong while fetching expiry logs",
@@ -8380,9 +9751,17 @@ async function updateOrderStatusBasedOnItems(order_id) {
 
 async function updateOrderItemsBySupplier(req, res) {
   try {
-    const { order_id, items } = req.data;
-    console.log("req", req);
+    const { order_id, items } = req.data || {};
     const user = req.data;
+
+    const orderTable = schema + ".orders";
+    const orderItemTable = schema + ".order_items";
+
+    console.log("updateOrderItemsBySupplier:", req.data);
+
+    // =========================
+    // ROLE VALIDATION
+    // =========================
 
     if (user.user_role !== "SUPPLIER") {
       return libFunc.sendResponse(res, {
@@ -8391,48 +9770,224 @@ async function updateOrderItemsBySupplier(req, res) {
       });
     }
 
-    if (!order_id || !items?.length) {
+    // =========================
+    // BASIC VALIDATION
+    // =========================
+
+    if (!order_id || !Array.isArray(items) || items.length === 0) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Order and items required",
       });
     }
 
+    if (!user.supplierId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Supplier ID not found in token",
+      });
+    }
+
+    const orderId = order_id.trim();
+
+    // =========================
+    // CHECK ORDER
+    // =========================
+
+    const orderCheck = await db_query.customQuery(`
+      SELECT
+        row_id,
+        supplier_id,
+        order_status
+      FROM ${orderTable}
+      WHERE row_id = '${orderId.replaceAll("'", "`")}'
+    `);
+
+    if (!orderCheck.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid order",
+      });
+    }
+
+    const order = orderCheck.data[0];
+
+    // Supplier can update only own order
+    if (order.supplier_id !== user.supplierId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Unauthorized order",
+      });
+    }
+
+    // =========================
+    // ORDER STATUS CHECK
+    // =========================
+
+    if (!["PENDING", "ACCEPTED", "PARTIAL"].includes(order.order_status)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: `Items cannot be updated when order status is ${order.order_status}`,
+      });
+    }
+
+    // =========================
+    // TRANSACTION
+    // =========================
+
     await connect_db.query("BEGIN");
 
-    for (let item of items) {
-      const { sweet_id, supplied_quantity = 0, status, reason = "" } = item;
+    for (const item of items) {
+      const {
+        order_item_id,
+        supplied_quantity = 0,
+        status,
+        reason = "",
+      } = item;
+
+      // -------------------------
+      // Validate item status
+      // -------------------------
 
       if (!["ACCEPTED", "REJECTED"].includes(status)) {
         await connect_db.query("ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Invalid item status",
         });
       }
 
+      // -------------------------
+      // order_item_id required
+      // -------------------------
+
+      if (!order_item_id) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "order_item_id is required for every item",
+        });
+      }
+
+      const orderItemId = order_item_id.trim().replaceAll("'", "`");
+
+      // -------------------------
+      // Validate supplied quantity
+      // -------------------------
+
+      const suppliedQty = Number(supplied_quantity);
+
+      if (!Number.isFinite(suppliedQty) || suppliedQty < 0) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid supplied quantity",
+        });
+      }
+
+      // REJECTED item should normally have 0 supplied quantity
+      if (status === "REJECTED" && suppliedQty > 0) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Rejected item cannot have supplied quantity",
+        });
+      }
+
+      // ACCEPTED item should have supplied quantity > 0
+      if (status === "ACCEPTED" && suppliedQty <= 0) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Accepted item must have supplied quantity",
+        });
+      }
+
+      // -------------------------
+      // Check order item
+      // -------------------------
+
+      const itemCheck = await db_query.customQuery(`
+        SELECT
+          oi.row_id,
+          oi.order_id,
+          oi.quantity,
+          oi.item_status
+        FROM ${orderItemTable} oi
+        WHERE oi.row_id = '${orderItemId}'
+        AND oi.order_id = '${orderId.replaceAll("'", "`")}'
+      `);
+
+      if (!itemCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Invalid order item: ${order_item_id}`,
+        });
+      }
+
+      const orderItem = itemCheck.data[0];
+
+      // -------------------------
+      // Supplied quantity cannot
+      // exceed requested quantity
+      // -------------------------
+
+      if (suppliedQty > Number(orderItem.quantity)) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Supplied quantity cannot exceed requested quantity for item ${order_item_id}`,
+        });
+      }
+
+      // -------------------------
+      // Update item
+      // -------------------------
+
+      const safeReason = reason ? reason.trim().replaceAll("'", "`") : "";
+
       await db_query.customQuery(`
-        UPDATE ${schema}.order_items
-        SET 
+        UPDATE ${orderItemTable}
+        SET
           item_status = '${status}',
-          supplied_quantity = ${Number(supplied_quantity)},
-          reject_reason = '${reason.replaceAll("'", "`")}'
-        WHERE order_id = '${order_id}'
-        AND sweet_id = '${sweet_id}'
+          supplied_quantity = ${suppliedQty},
+          reject_reason = '${safeReason}',
+          up_on = now()
+        WHERE row_id = '${orderItemId}'
+        AND order_id = '${orderId.replaceAll("'", "`")}'
       `);
     }
 
-    // 🔥 IMPORTANT
-    await updateOrderStatusBasedOnItems(order_id);
+    // =========================
+    // UPDATE ORDER STATUS
+    // =========================
+
+    await updateOrderStatusBasedOnItems(orderId);
+
+    // =========================
+    // COMMIT
+    // =========================
 
     await connect_db.query("COMMIT");
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Items updated successfully",
+      msg: "Order items updated successfully",
     });
   } catch (error) {
-    await connect_db.query("ROLLBACK");
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.log("Rollback error:", rollbackError);
+    }
 
     console.log("updateOrderItemsBySupplier error:", error);
 
@@ -8521,9 +10076,15 @@ async function createChalan(req, res) {
   try {
     const chalanTable = schema + ".chalans";
     const orderTable = schema + ".orders";
+    const userTable = schema + ".users";
 
     const { order_id, dispatch_date, transport_details = "" } = req.data || {};
+
     const user = req.data;
+
+    // =========================
+    // ROLE VALIDATION
+    // =========================
 
     if (user.user_role !== "SUPPLIER") {
       return libFunc.sendResponse(res, {
@@ -8532,83 +10093,204 @@ async function createChalan(req, res) {
       });
     }
 
+    if (!user.supplierId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Supplier ID not found in token",
+      });
+    }
+
+    // =========================
+    // BASIC VALIDATION
+    // =========================
+
+    if (!order_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order ID required",
+      });
+    }
+
+    const orderId = order_id.trim().replaceAll("'", "`");
+
+    // =========================
+    // GET ORDER
+    // =========================
+
+    const orderData = await db_query.customQuery(`
+      SELECT
+        row_id,
+        supplier_id,
+        shop_id,
+        order_status
+      FROM ${orderTable}
+      WHERE row_id = '${orderId}'
+    `);
+
+    if (!orderData.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid order",
+      });
+    }
+
+    const order = orderData.data[0];
+
+    // =========================
+    // SUPPLIER OWNERSHIP
+    // =========================
+
+    if (order.supplier_id !== user.supplierId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Unauthorized order",
+      });
+    }
+
+    // =========================
+    // ORDER STATUS
+    // =========================
+
+    if (!["ACCEPTED", "PARTIAL"].includes(order.order_status)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: `Chalan cannot be created when order status is ${order.order_status}`,
+      });
+    }
+
+    // =========================
+    // CHECK EXISTING CHALAN
+    // =========================
+
+    const existingChalan = await db_query.customQuery(`
+      SELECT
+        row_id,
+        is_verified
+      FROM ${chalanTable}
+      WHERE order_id = '${orderId}'
+      AND supplier_id = '${user.supplierId}'
+    `);
+
+    if (existingChalan.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Chalan already created for this order",
+        data: {
+          chalan_id: existingChalan.data[0].row_id,
+          is_verified: existingChalan.data[0].is_verified,
+        },
+      });
+    }
+
+    // =========================
+    // BEGIN TRANSACTION
+    // =========================
+
     await client.query("BEGIN");
+
+    // =========================
+    // GENERATE CHALAN ID
+    // =========================
 
     const chalanRowId = libFunc.randomid();
 
-    // 🔥 OTP generate
+    // =========================
+    // GENERATE OTP
+    // =========================
+
     const verification_code = Math.floor(
       100000 + Math.random() * 900000,
     ).toString();
 
-    await db_query.addData(chalanTable, {
-      row_id: chalanRowId,
-      order_id,
-      supplier_id: user.supplierId,
-      dispatch_date,
-      transport_details,
-      verification_code,
-      is_verified: false,
-    });
+    // =========================
+    // CREATE CHALAN
+    // =========================
 
-    // update order
+    await db_query.addData(
+      chalanTable,
+      {
+        row_id: chalanRowId,
+        order_id: orderId,
+        supplier_id: user.supplierId,
+        dispatch_date: dispatch_date || null,
+        transport_details: transport_details.trim().replaceAll("'", "`"),
+        verification_code,
+        is_verified: false,
+      },
+      null,
+      "Chalan",
+    );
+
+    // =========================
+    // UPDATE ORDER
+    // =========================
+
     await db_query.addData(
       orderTable,
-      { order_status: "DISPATCHED" },
-      order_id,
+      {
+        order_status: "DISPATCHED",
+      },
+      orderId,
       "Order",
     );
 
+    // =========================
+    // COMMIT
+    // =========================
+
     await client.query("COMMIT");
 
-    // ==============================
-    // 🔔 NOTIFICATIONS (YAHI ADD KARO)
-    // ==============================
+    // ==================================================
+    // NOTIFICATION → SHOP ADMIN
+    // ==================================================
 
-    const userTable = schema + ".users";
-
-    // order ka shop_id nikalna
-    const orderData = await db_query.customQuery(`
-  SELECT shop_id FROM ${orderTable}
-  WHERE row_id = '${order_id}'
-`);
-
-    const shop_id = orderData.data?.[0]?.shop_id;
-
-    // 🏪 Shop Admins ko notify karo
     const shopAdmins = await db_query.customQuery(`
-  SELECT row_id FROM ${userTable}
-  WHERE role = 'SHOP_ADMIN'
-  AND shop_id = '${shop_id}'
-`);
+      SELECT row_id
+      FROM ${userTable}
+      WHERE role = 'SHOP_ADMIN'
+      AND shop_id = '${order.shop_id}'
+    `);
 
     if (shopAdmins.data?.length) {
-      for (let admin of shopAdmins.data) {
+      for (const admin of shopAdmins.data) {
         await createNotification({
           user_id: admin.row_id,
-          title: "Order Dispatched (OTP)",
-          message: `Order dispatched. OTP: ${verification_code}`,
+          title: "Order Dispatched",
+          message: `Order dispatched successfully. Verification OTP: ${verification_code}`,
           type: "CHALLAN",
           reference_id: chalanRowId,
         });
       }
     }
 
-    // ==============================
-    // 🔔 END
-    // ==============================
+    // ==================================================
+    // RESPONSE
+    // ==================================================
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Chalan created (waiting for verification)",
+      msg: "Chalan created successfully. Waiting for verification.",
       data: {
         chalan_id: chalanRowId,
+        order_id: orderId,
+        verification_required: true,
         otp: verification_code,
       },
     });
-  } catch (err) {
-    await connect_db.query("ROLLBACK");
-    return libFunc.sendResponse(res, { status: 1, msg: err.message });
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.log("Rollback error:", rollbackError);
+    }
+
+    console.log("createChalan error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Something went wrong",
+      error: error.message,
+    });
   }
 }
 
@@ -8616,146 +10298,314 @@ async function verifyChalan(req, res) {
   const client = connect_db;
 
   try {
-    const { chalan_id, otp } = req.data;
+    const user = req.data;
+
+    const { chalan_id, otp } = req.data || {};
+
+    // ==============================
+    // 1. ROLE VALIDATION
+    // ==============================
+
+    if (user.user_role !== "SHOP_ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only shop admin can verify chalan",
+      });
+    }
+
+    if (!user.shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID not found in token",
+      });
+    }
+
+    if (!chalan_id || !otp) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Chalan ID and OTP required",
+      });
+    }
+
+    const chalanId = chalan_id.trim().replaceAll("'", "`");
+
+    const enteredOtp = otp.toString().trim();
 
     await client.query("BEGIN");
 
     // ==============================
-    // 1. GET CHALAN
+    // 2. GET CHALAN + SHOP
     // ==============================
+
     const chalanRes = await client.query(`
-      SELECT * FROM ${schema}.chalans 
-      WHERE row_id = '${chalan_id}'
+      SELECT
+        ch.row_id AS chalan_id,
+        ch.order_id,
+        ch.supplier_id,
+        ch.dispatch_date,
+        ch.verification_code,
+        ch.is_verified,
+
+        o.shop_id,
+        o.order_status
+
+      FROM ${schema}.chalans ch
+
+      INNER JOIN ${schema}.orders o
+        ON o.row_id = ch.order_id
+
+      WHERE ch.row_id = '${chalanId}'
+      AND o.shop_id = '${user.shopId}'
     `);
 
-    // console.log("chalanRes", chalanRes);
-
     if (chalanRes.rows.length === 0) {
-      throw new Error("Invalid chalan");
+      await client.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid chalan or unauthorized shop",
+      });
     }
 
     const chalan = chalanRes.rows[0];
 
-    // console.log("chalan", chalan);
+    // ==============================
+    // 3. ALREADY VERIFIED
+    // ==============================
 
     if (chalan.is_verified) {
-      throw new Error("Already verified");
-    }
+      await client.query("ROLLBACK");
 
-    if (chalan.verification_code !== otp) {
-      throw new Error("Invalid OTP");
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Chalan already verified",
+      });
     }
 
     // ==============================
-    // 2. GET ORDER ITEMS
+    // 4. VERIFY OTP
     // ==============================
+
+    if (chalan.verification_code !== enteredOtp) {
+      await client.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid OTP",
+      });
+    }
+
+    // ==============================
+    // 5. GET ORDER ITEMS
+    // ==============================
+
     const itemsRes = await client.query(`
-      SELECT oi.sweet_id, oi.supplied_quantity, s.shelf_life_days
+      SELECT
+        oi.row_id AS order_item_id,
+        oi.request_id,
+
+        oi.sweet_id,
+        oi.counter_id,
+
+        oi.quantity AS ordered_quantity,
+        oi.supplied_quantity,
+        oi.item_status,
+
+        s.sweet_name,
+        s.shelf_life_days
+
       FROM ${schema}.order_items oi
-      LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+
+      LEFT JOIN ${schema}.sweets s
+        ON s.row_id = oi.sweet_id
+
       WHERE oi.order_id = '${chalan.order_id}'
+      AND oi.supplied_quantity > 0
     `);
 
-    console.log("itemsRes", itemsRes);
     const items = itemsRes.rows;
 
-    // ==============================
-    // 3. GET COUNTER MAPPING
-    // ==============================
-    const counterRes = await client.query(`
-      SELECT sweet_id, counter_id
-      FROM ${schema}.counter_requests
-      WHERE status = 'APPROVED'
-    `);
+    if (items.length === 0) {
+      await client.query("ROLLBACK");
 
-    const counterMap = {};
-    for (let c of counterRes.rows) {
-      if (!counterMap[c.sweet_id]) {
-        counterMap[c.sweet_id] = c.counter_id;
-      }
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "No supplied items found for this order",
+      });
     }
 
     // ==============================
-    // 4. PROCESS INVENTORY
+    // 6. PROCESS INVENTORY
     // ==============================
-    for (let item of items) {
-      const sweet_id = item.sweet_id;
+
+    let inventoryItems = [];
+
+    for (const item of items) {
+      const sweetId = item.sweet_id;
+      const counterId = item.counter_id;
       const qty = Number(item.supplied_quantity || 0);
 
-      if (qty <= 0) continue;
+      if (!counterId) {
+        await client.query("ROLLBACK");
 
-      const counter_id = counterMap[sweet_id];
-      if (!counter_id) continue;
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Counter not found for sweet ${item.sweet_name}`,
+        });
+      }
 
-      // 📅 Expiry calculation
+      if (qty <= 0) {
+        continue;
+      }
+
+      // ==============================
+      // EXPIRY DATE
+      // ==============================
+
       const shelfLife = Number(item.shelf_life_days || 0);
-      const d = new Date(chalan.dispatch_date);
-      d.setDate(d.getDate() + shelfLife);
-      const expiry_date = d.toISOString().split("T")[0];
+
+      const dispatchDate = new Date(chalan.dispatch_date);
+
+      dispatchDate.setDate(dispatchDate.getDate() + shelfLife);
+
+      const expiryDate = dispatchDate.toISOString().split("T")[0];
 
       // ==============================
-      // 🔥 UPSERT INVENTORY (TEXT FIX)
+      // INVENTORY UPSERT
       // ==============================
+
       await client.query(`
-        INSERT INTO ${schema}.inventory 
-        (row_id, counter_id, sweet_id, quantity, expiry_date)
-        VALUES (
-          '${libFunc.randomid()}',
-          '${counter_id}',
-          '${sweet_id}',
-          '${qty}',
-          '${expiry_date}'
+        INSERT INTO ${schema}.inventory
+        (
+          row_id,
+          counter_id,
+          sweet_id,
+          quantity,
+          expiry_date
         )
+        VALUES
+        (
+          '${libFunc.randomid()}',
+          '${counterId}',
+          '${sweetId}',
+          ${qty},
+          '${expiryDate}'
+        )
+
         ON CONFLICT (counter_id, sweet_id)
-        DO UPDATE SET 
-          quantity = (
-            ${schema}.inventory.quantity::NUMERIC + EXCLUDED.quantity::NUMERIC
-          )::TEXT,
-          expiry_date = EXCLUDED.expiry_date
+
+        DO UPDATE SET
+
+          quantity =
+            ${schema}.inventory.quantity::NUMERIC
+            +
+            EXCLUDED.quantity::NUMERIC,
+
+          expiry_date =
+            EXCLUDED.expiry_date,
+
+          up_on = NOW()
       `);
 
       // ==============================
-      // 🧾 STOCK LOG
+      // STOCK TRANSACTION
       // ==============================
+
       await client.query(`
         INSERT INTO ${schema}.stock_transactions
-        (row_id, counter_id, sweet_id, transaction_type, quantity, reference_id, notes)
-        VALUES (
+        (
+          row_id,
+          counter_id,
+          sweet_id,
+          transaction_type,
+          quantity,
+          reference_id,
+          notes
+        )
+        VALUES
+        (
           '${libFunc.randomid()}',
-          '${counter_id}',
-          '${sweet_id}',
+          '${counterId}',
+          '${sweetId}',
           'IN',
-          '${qty}',
-          '${chalan_id}',
-          'Verified stock'
+          ${qty},
+          '${chalanId}',
+          'Chalan verified - stock received'
         )
       `);
+
+      inventoryItems.push({
+        order_item_id: item.order_item_id,
+        sweet_id: sweetId,
+        sweet_name: item.sweet_name,
+        counter_id: counterId,
+        quantity: qty,
+        expiry_date: expiryDate,
+      });
     }
 
     // ==============================
-    // 5. MARK VERIFIED
+    // 7. MARK CHALAN VERIFIED
     // ==============================
+
     await client.query(`
       UPDATE ${schema}.chalans
-      SET is_verified = TRUE,
-          up_on = NOW()
-      WHERE row_id = '${chalan_id}'
+
+      SET
+        is_verified = TRUE,
+        up_on = NOW()
+
+      WHERE row_id = '${chalanId}'
     `);
 
+    // ==============================
+    // 8. UPDATE ORDER
+    // ==============================
+
+    await client.query(`
+      UPDATE ${schema}.orders
+
+      SET
+        order_status = 'DELIVERED',
+        up_on = NOW()
+
+      WHERE row_id = '${chalan.order_id}'
+    `);
+
+    // ==============================
+    // 9. COMMIT
+    // ==============================
+
     await client.query("COMMIT");
+
+    // ==============================
+    // 10. RESPONSE
+    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Chalan verified & inventory updated successfully",
-    });
-  } catch (err) {
-    await client.query("ROLLBACK");
 
-    // console.log("verifyChalan error:", err);
+      data: {
+        chalan_id: chalanId,
+        order_id: chalan.order_id,
+        order_status: "DELIVERED",
+        inventory_items: inventoryItems,
+      },
+    });
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.log("Rollback error:", rollbackError);
+    }
+
+    console.log("verifyChalan error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: err.message || "Something went wrong",
+      msg: "Something went wrong",
+      error: error.message,
     });
   }
 }
@@ -8857,6 +10707,10 @@ async function getShopChalanFullDetails(req, res) {
   try {
     const user = req.data;
 
+    // =========================
+    // ROLE VALIDATION
+    // =========================
+
     if (user.user_role !== "SHOP_ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -8864,147 +10718,221 @@ async function getShopChalanFullDetails(req, res) {
       });
     }
 
-    const shop_id = user.shopId;
-
-    // 🔥 SAFE WRAPPER
-    function safeData(res) {
-      return res && res.status === 0 && Array.isArray(res.data) ? res.data : [];
+    if (!user.shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID not found in token",
+      });
     }
 
-    // ==============================
-    // 📦 1. FETCH CHALANS
-    // ==============================
+    const shopId = user.shopId;
+
+    // =========================
+    // SAFE DATA
+    // =========================
+
+    function safeData(response) {
+      return response && response.status === 0 && Array.isArray(response.data)
+        ? response.data
+        : [];
+    }
+
+    // =========================
+    // 1. FETCH CHALANS
+    // =========================
+
     const chalansRes = await db_query.customQuery(`
-      SELECT 
-        c.row_id AS chalan_id,
-        c.order_id,
-        c.dispatch_date,
-        c.transport_details,
-        c.verification_code,
-        c.is_verified,
-        u.name AS supplier_name
+      SELECT
+        ch.row_id AS chalan_id,
+        ch.order_id,
+        ch.dispatch_date,
+        ch.transport_details,
+        ch.verification_code,
+        ch.is_verified,
 
-      FROM ${schema}.chalans c
-      LEFT JOIN ${schema}.orders o ON o.row_id = c.order_id
-      LEFT JOIN ${schema}.users u ON u.supplier_id = c.supplier_id
+        o.order_status,
 
-      WHERE o.shop_id = '${shop_id}'
-      ORDER BY c.cr_on DESC
+        sup.row_id AS supplier_id,
+        sup.supplier_name
+
+      FROM ${schema}.chalans ch
+
+      INNER JOIN ${schema}.orders o
+        ON o.row_id = ch.order_id
+
+      LEFT JOIN ${schema}.suppliers sup
+        ON sup.row_id = ch.supplier_id
+
+      WHERE o.shop_id = '${shopId.replaceAll("'", "`")}'
+
+      ORDER BY ch.cr_on DESC
     `);
 
     const chalans = safeData(chalansRes);
 
-    console.log("chalans", chalans);
-
     const result = [];
 
-    // ==============================
-    // 🔁 LOOP EACH CHALAN
-    // ==============================
-    for (let ch of chalans) {
-      // ==========================
-      // 📦 2. CHALAN ITEMS
-      // ==========================
+    // =========================
+    // 2. EACH CHALAN
+    // =========================
+
+    for (const ch of chalans) {
+      // =========================
+      // 3. CHALAN ITEMS
+      // =========================
+
       const chalanItemsRes = await db_query.customQuery(`
-        SELECT 
+        SELECT
           ci.sweet_id,
           s.sweet_name,
           ci.dispatched_quantity
+
         FROM ${schema}.chalan_items ci
-        LEFT JOIN ${schema}.sweets s ON s.row_id = ci.sweet_id
+
+        LEFT JOIN ${schema}.sweets s
+          ON s.row_id = ci.sweet_id
+
         WHERE ci.chalan_id = '${ch.chalan_id}'
       `);
 
       const chalanItems = safeData(chalanItemsRes);
 
-      console.log("chalanItems", chalanItems);
+      // =========================
+      // 4. ORDER ITEMS
+      // =========================
 
-      // ==========================
-      // 📦 3. ORDER ITEMS
-      // ==========================
       const orderItemsRes = await db_query.customQuery(`
-        SELECT 
+        SELECT
+          oi.row_id AS order_item_id,
+          oi.request_id,
           oi.sweet_id,
+
           s.sweet_name,
+          s.unit,
+
           oi.quantity AS ordered_qty,
-          oi.supplied_quantity
+          oi.supplied_quantity,
+          oi.item_status,
+          oi.reject_reason,
+
+          oi.counter_id,
+          c.counter_name,
+          c.location
+
         FROM ${schema}.order_items oi
-        LEFT JOIN ${schema}.sweets s ON s.row_id = oi.sweet_id
+
+        LEFT JOIN ${schema}.sweets s
+          ON s.row_id = oi.sweet_id
+
+        LEFT JOIN ${schema}.counters c
+          ON c.row_id = oi.counter_id
+
         WHERE oi.order_id = '${ch.order_id}'
       `);
 
       const orderItems = safeData(orderItemsRes);
 
-      console.log("orderItems", orderItems);
+      // =========================
+      // 5. MERGE
+      // =========================
 
-      // ==========================
-      // 📦 4. REQUESTED ITEMS
-      // ==========================
-      const requestedItemsRes = await db_query.customQuery(`
-        SELECT 
-          sweet_id,
-          SUM(quantity) AS requested_qty
-        FROM ${schema}.counter_requests
-        WHERE status = 'APPROVED'
-        GROUP BY sweet_id
-      `);
-
-      const requestedItems = safeData(requestedItemsRes);
-      console.log("requestedItems", requestedItems);
-
-      // ==========================
-      // 🐞 DEBUG LOG (optional)
-      // ==========================
-      console.log({
-        chalan_id: ch.chalan_id,
-        chalanItems,
-        orderItems,
-        requestedItems,
-      });
-
-      // ==========================
-      // 🔥 MERGE DATA
-      // ==========================
       const finalItems = [];
 
-      for (let oi of orderItems) {
-        const sweet_id = oi.sweet_id;
+      for (const oi of orderItems) {
+        /*
+         * IMPORTANT:
+         * request_id identifies the exact
+         * counter request for this order item.
+         */
 
-        const req = requestedItems.find((r) => r.sweet_id === sweet_id);
-        const chItem = chalanItems.find((c) => c.sweet_id === sweet_id);
+        let requestedQty = 0;
 
-        const requested_qty = req ? Number(req.requested_qty) : 0;
-        const ordered_qty = Number(oi.ordered_qty || 0);
-        const supplied_qty = Number(oi.supplied_quantity || 0);
-        const dispatched_qty = chItem ? Number(chItem.dispatched_quantity) : 0;
+        if (oi.request_id) {
+          const requestRes = await db_query.customQuery(`
+              SELECT quantity
+              FROM ${schema}.counter_requests
+              WHERE row_id = '${oi.request_id}'
+            `);
+
+          const requestData = safeData(requestRes);
+
+          if (requestData.length) {
+            requestedQty = Number(requestData[0].quantity || 0);
+          }
+        }
+
+        // =========================
+        // CHALAN QUANTITY
+        // =========================
+
+        const chItem = chalanItems.find(
+          (item) => item.sweet_id === oi.sweet_id,
+        );
+
+        const dispatchedQty = chItem
+          ? Number(chItem.dispatched_quantity || 0)
+          : 0;
+
+        // =========================
+        // FINAL ITEM
+        // =========================
 
         finalItems.push({
-          sweet_id,
+          order_item_id: oi.order_item_id,
+          request_id: oi.request_id,
+
+          sweet_id: oi.sweet_id,
           sweet_name: oi.sweet_name,
+          unit: oi.unit,
 
-          // requested_qty,
-          ordered_qty,
-          supplied_qty,
-          // dispatched_qty,
+          requested_qty: requestedQty,
 
-          // difference: supplied_qty - requested_qty,
+          ordered_qty: Number(oi.ordered_qty || 0),
+
+          supplied_qty: Number(oi.supplied_quantity || 0),
+
+          dispatched_qty: dispatchedQty,
+
+          item_status: oi.item_status || "PENDING",
+
+          reject_reason: oi.reject_reason,
+
+          counter: {
+            counter_id: oi.counter_id,
+            counter_name: oi.counter_name,
+            location: oi.location,
+          },
         });
       }
 
-      // ==========================
-      // 📦 PUSH RESULT
-      // ==========================
+      // =========================
+      // FINAL CHALAN
+      // =========================
+
       result.push({
         chalan_id: ch.chalan_id,
+
         order_id: ch.order_id,
-        supplier_name: ch.supplier_name,
+        order_status: ch.order_status,
+
+        supplier: {
+          supplier_id: ch.supplier_id,
+          supplier_name: ch.supplier_name,
+        },
+
         dispatch_date: ch.dispatch_date,
         transport_details: ch.transport_details,
+
         otp: ch.verification_code,
         is_verified: ch.is_verified,
+
         items: finalItems,
       });
     }
+
+    // =========================
+    // RESPONSE
+    // =========================
 
     return libFunc.sendResponse(res, {
       status: 0,
@@ -9680,55 +11608,56 @@ async function deleteAPI(req, res) {
 async function deleteNecessaryData() {
   try {
     await db_query.customQuery(`
-      TRUNCATE TABLE 
-      sms.audit_logs,
-      sms.notifications,
-      sms.counter_requests,
-      sms.expiry_logs,
-      sms.returns,
-      sms.chalans,
-      sms.order_items,
-      sms.orders,
-      sms.stock_transactions,
-      sms.inventory
+      TRUNCATE TABLE
+
+        sms.audit_logs,
+
+        sms.notifications,
+
+        sms.counter_requests,
+
+        sms.expiry_logs,
+
+        sms.returns,
+
+        sms.chalans,
+
+        sms.order_items,
+
+        sms.orders,
+
+        sms.stock_transactions,
+
+        sms.inventory
+
       RESTART IDENTITY CASCADE;
     `);
 
-    return "Only transactional data deleted ✅";
+    return "Transactional data deleted successfully";
   } catch (error) {
     console.error("Delete Error:", error);
+
     throw error;
   }
 }
 
 async function deleteAPIforcleandata(req, res) {
   try {
-    // 🔥 Backup first
-    // const backupFile = await backupDatabase();
-
-    // console.log("Backup created:", backupFile);
-
-    // 🔥 Only necessary delete
+    // 🔥 Delete transactional
     await deleteNecessaryData();
 
-    // res.json({
-    //   success: true,
-    //   message: "Transactional data deleted ✅",
-    //   backupFile,
-    // });
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Transactional data deleted ",
+      msg: "Transactional data deleted successfully",
       data: [],
     });
   } catch (err) {
-    console.error(err);
-    // res.status(500).json({
-    //   message: "Delete failed",
-    // });
+    console.error("deleteAPIforcleandata error:", err);
+
     return libFunc.sendResponse(res, {
       status: 1,
       msg: "Delete failed",
+      error: err.message,
       data: [],
     });
   }
@@ -10479,11 +12408,7 @@ async function fetchCounterSweets(req, res) {
     // =====================================
     // Role validation
     // =====================================
-    if (
-      !["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(
-        user.user_role
-      )
-    ) {
+    if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Access denied",
@@ -10535,9 +12460,7 @@ async function fetchCounterSweets(req, res) {
     // Search
     // =====================================
     if (search) {
-      const safeSearch = search
-        .trim()
-        .replaceAll("'", "`");
+      const safeSearch = search.trim().replaceAll("'", "`");
 
       conditions.push(`
         (
@@ -10615,12 +12538,8 @@ async function fetchCounterSweets(req, res) {
     const result = await db_query.customQuery(sql);
 
     return libFunc.sendResponse(res, result);
-
   } catch (error) {
-    console.log(
-      "fetchCounterSweets error:",
-      error
-    );
+    console.log("fetchCounterSweets error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,

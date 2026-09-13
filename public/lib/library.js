@@ -113,6 +113,9 @@ let common_fn = {
   // restore_data: restoreAPI, // delete table and restore
   // de_data: deleteAPI, // hard reset and backup
   de_ness_data: deleteAPIforcleandata,
+
+  reorder_remaining: reorderRemaining,
+  cancel_remaining: cancelRemaining,
 };
 
 const schema = "sms";
@@ -3359,7 +3362,7 @@ async function createFinalOrder(req, res) {
         row_id,
         supplier_name
       FROM ${supplierTable}
-      WHERE row_id = '${supplierId}'
+      WHERE row_id = '${supplierId.replaceAll("'", "`")}'
     `);
 
     if (!supplierCheck.data?.length) {
@@ -3473,7 +3476,7 @@ async function createFinalOrder(req, res) {
     }
 
     // =====================================
-    // CREATE ORDER
+    // CREATE NORMAL ORDER
     // =====================================
 
     const orderRowId = libFunc.randomid();
@@ -3482,9 +3485,23 @@ async function createFinalOrder(req, res) {
       orderTable,
       {
         row_id: orderRowId,
+
         shop_id: finalShopId,
+
         supplier_id: supplierId,
+
         order_status: "PENDING",
+
+        // ================================
+        // REORDER FIELDS
+        // ================================
+
+        order_type: "NORMAL",
+
+        // parent_order_id intentionally omitted
+        // because this is a root/original order
+
+        resolution_status: "OPEN",
       },
       null,
       "Order",
@@ -3504,7 +3521,6 @@ async function createFinalOrder(req, res) {
 
           order_id: orderRowId,
 
-          // IMPORTANT:
           // Exact counter request reference
           request_id: request.row_id,
 
@@ -3513,11 +3529,29 @@ async function createFinalOrder(req, res) {
           // Counter remains attached to item
           counter_id: request.counter_id,
 
+          // Original requested quantity
           quantity: Number(request.quantity),
 
+          // Supplier has not processed yet
           item_status: "PENDING",
 
+          // Supplier supplied quantity
           supplied_quantity: 0,
+
+          // ================================
+          // REORDER FIELDS
+          // ================================
+
+          // parent_order_item_id intentionally omitted
+          // because this is a root/original item
+
+          // Nothing cancelled initially
+          cancelled_quantity: 0,
+
+          // No reorder/cancel action yet
+          remaining_action: "PENDING",
+
+          // remaining_action_on intentionally omitted
         },
         null,
         "Order Item",
@@ -3550,7 +3584,7 @@ async function createFinalOrder(req, res) {
       SELECT
         row_id
       FROM ${schema}.users
-      WHERE supplier_id = '${supplierId}'
+      WHERE supplier_id = '${supplierId.replaceAll("'", "`")}'
     `);
 
     if (supplierUsers.data?.length) {
@@ -3618,6 +3652,12 @@ async function createFinalOrder(req, res) {
 
         supplier_id: supplierId,
 
+        order_type: "NORMAL",
+
+        parent_order_id: null,
+
+        resolution_status: "OPEN",
+
         request_count: uniqueRequestIds.length,
 
         item_count: requests.data.length,
@@ -3634,13 +3674,12 @@ async function createFinalOrder(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 1,
-
       msg: "Something went wrong",
-
       error: error.message,
     });
   }
 }
+
 async function createOrder(req, res) {
   try {
     const orderTable = schema + ".orders";
@@ -3778,40 +3817,133 @@ async function getShopOrders(req, res) {
     const result = await db_query.customQuery(`
       SELECT
 
-        -- Order
+        -- =====================================
+        -- ORDER
+        -- =====================================
+
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
-        -- Supplier
+        -- NEW
+        o.order_type,
+        o.parent_order_id,
+        o.resolution_status,
+
+        -- =====================================
+        -- SUPPLIER
+        -- =====================================
+
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
-        -- Shop
+        -- =====================================
+        -- SHOP
+        -- =====================================
+
         sh.row_id AS shop_id,
         sh.shop_name,
 
-        -- Order Item
+        -- =====================================
+        -- ORDER ITEM
+        -- =====================================
+
         oi.row_id AS order_item_id,
 
-        -- IMPORTANT:
         -- Exact counter request
         oi.request_id,
 
         oi.sweet_id,
+
+        -- Original requested quantity
         oi.quantity,
 
-        -- Supplier fulfillment
+        -- =====================================
+        -- SUPPLIER FULFILLMENT
+        -- =====================================
+
         oi.item_status,
-        oi.supplied_quantity,
+
+        COALESCE(
+          oi.supplied_quantity,
+          0
+        ) AS supplied_quantity,
+
+        COALESCE(
+          oi.cancelled_quantity,
+          0
+        ) AS cancelled_quantity,
+
         oi.reject_reason,
 
-        -- Counter
+        -- =====================================
+        -- REORDER INFORMATION
+        -- =====================================
+
+        oi.parent_order_item_id,
+
+        oi.remaining_action,
+
+        oi.remaining_action_on,
+
+        -- =====================================
+        -- TOTAL QUANTITY SUPPLIED
+        -- FROM ALL REORDER CHILD ITEMS
+        -- =====================================
+
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(child.supplied_quantity, 0)
+            )
+            FROM ${schema}.order_items child
+            WHERE child.parent_order_item_id = oi.row_id
+          ),
+          0
+        ) AS reorder_supplied_quantity,
+
+        -- =====================================
+        -- REMAINING QUANTITY
+        -- =====================================
+
+        (
+          oi.quantity::numeric
+
+          - COALESCE(
+              oi.supplied_quantity,
+              0
+            )::numeric
+
+          - COALESCE(
+              (
+                SELECT SUM(
+                  COALESCE(child.supplied_quantity, 0)
+                )
+                FROM ${schema}.order_items child
+                WHERE child.parent_order_item_id = oi.row_id
+              ),
+              0
+            )::numeric
+
+          - COALESCE(
+              oi.cancelled_quantity,
+              0
+            )::numeric
+
+        ) AS remaining_quantity,
+
+        -- =====================================
+        -- COUNTER
+        -- =====================================
+
         oi.counter_id,
         c.counter_name,
         c.location,
 
-        -- Sweet
+        -- =====================================
+        -- SWEET
+        -- =====================================
+
         s.sweet_name,
         s.unit
 
@@ -3848,6 +3980,10 @@ async function getShopOrders(req, res) {
     const ordersMap = {};
 
     for (const row of result.data || []) {
+      // =====================================
+      // CREATE ORDER
+      // =====================================
+
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
@@ -3855,6 +3991,13 @@ async function getShopOrders(req, res) {
           order_status: row.order_status,
 
           order_date: row.order_date,
+
+          // NEW
+          order_type: row.order_type || "NORMAL",
+
+          parent_order_id: row.parent_order_id || null,
+
+          resolution_status: row.resolution_status || "OPEN",
 
           shop_id: row.shop_id,
 
@@ -3873,6 +4016,32 @@ async function getShopOrders(req, res) {
       // =====================================
 
       if (row.order_item_id) {
+        const requestedQuantity = Number(row.quantity || 0);
+
+        const suppliedQuantity = Number(row.supplied_quantity || 0);
+
+        const reorderSuppliedQuantity = Number(
+          row.reorder_supplied_quantity || 0,
+        );
+
+        const cancelledQuantity = Number(row.cancelled_quantity || 0);
+
+        // =====================================
+        // FINAL REMAINING
+        // =====================================
+
+        const remainingQuantity = Math.max(
+          0,
+          requestedQuantity -
+            suppliedQuantity -
+            reorderSuppliedQuantity -
+            cancelledQuantity,
+        );
+
+        // =====================================
+        // ADD ITEM
+        // =====================================
+
         ordersMap[row.order_id].items.push({
           order_item_id: row.order_item_id,
 
@@ -3885,23 +4054,83 @@ async function getShopOrders(req, res) {
 
           unit: row.unit,
 
-          quantity: row.quantity,
+          // =====================================
+          // QUANTITY INFORMATION
+          // =====================================
 
-          // Counter
+          // Original requested quantity
+          quantity: requestedQuantity,
+
+          // Current order supplied quantity
+          supplied_quantity: suppliedQuantity,
+
+          // All child/reorder supplied quantity
+          reorder_supplied_quantity: reorderSuppliedQuantity,
+
+          // Shop Admin cancelled quantity
+          cancelled_quantity: cancelledQuantity,
+
+          // Final remaining
+          remaining_quantity: remainingQuantity,
+
+          // =====================================
+          // REORDER INFO
+          // =====================================
+
+          parent_order_item_id: row.parent_order_item_id || null,
+
+          remaining_action: row.remaining_action || "PENDING",
+
+          remaining_action_on: row.remaining_action_on || null,
+
+          // =====================================
+          // COUNTER
+          // =====================================
+
           counter_id: row.counter_id,
 
           counter_name: row.counter_name,
 
           location: row.location,
 
-          // Supplier status
-          item_status: row.item_status || "PENDING",
+          // =====================================
+          // SUPPLIER STATUS
+          // =====================================
 
-          supplied_quantity: Number(row.supplied_quantity || 0),
+          item_status: row.item_status || "PENDING",
 
           reject_reason: row.reject_reason,
         });
       }
+    }
+
+    // =====================================
+    // UPDATE RESOLUTION STATUS
+    // =====================================
+    //
+    // Important:
+    // Parent order RESOLVED only when
+    // every original/root item has
+    // remaining = 0.
+    //
+    // =====================================
+
+    for (const order of Object.values(ordersMap)) {
+      // Reorder child order ko parent
+      // resolution calculation nahi karni.
+      //
+      // Parent order hi overall request
+      // resolution maintain karega.
+
+      if (order.order_type === "REORDER") {
+        continue;
+      }
+
+      const hasRemaining = order.items.some(
+        (item) => Number(item.remaining_quantity) > 0,
+      );
+
+      order.resolution_status = hasRemaining ? "OPEN" : "RESOLVED";
     }
 
     // =====================================
@@ -4197,6 +4426,197 @@ async function getShopOrders(req, res) {
 //   }
 // }
 
+// async function getCounterRequests(req, res) {
+//   try {
+//     const user = req.data;
+
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+
+//     let conditions = ["1=1"];
+
+//     // =====================================================
+//     // COUNTER USER → OWN REQUESTS
+//     // =====================================================
+
+//     if (user.user_role === "COUNTER_USER") {
+//       conditions.push(`r.counter_id = '${user.counterId}'`);
+//     }
+
+//     // =====================================================
+//     // SHOP ADMIN → ALL COUNTERS OF SHOP
+//     // =====================================================
+
+//     if (user.user_role === "SHOP_ADMIN") {
+//       conditions.push(`c.shop_id = '${user.shopId}'`);
+//     }
+
+//     // =====================================================
+//     // ADMIN → ALL REQUESTS
+//     // =====================================================
+
+//     const whereClause = `
+//       WHERE ${conditions.join(" AND ")}
+//     `;
+
+//     // =====================================================
+//     // FETCH REQUESTS
+//     // =====================================================
+
+//     const query = `
+//       SELECT
+//         r.row_id,
+
+//         CONCAT(
+//           'REQ-',
+//           r.id
+//         ) AS requested_order,
+
+//         -- Counter requested quantity
+//         r.quantity AS requested_quantity,
+
+//         -- Counter request status
+//         r.status AS shop_status,
+
+//         -- Supplier item status
+//         COALESCE(
+//           oi.item_status,
+//           'PENDING'
+//         ) AS supplier_status,
+
+//         -- Supplier supplied quantity
+//         COALESCE(
+//           oi.supplied_quantity,
+//           0
+//         ) AS supplied_quantity,
+
+//         -- Remaining pending quantity
+//         GREATEST(
+//           r.quantity
+//           -
+//           COALESCE(
+//             oi.supplied_quantity,
+//             0
+//           ),
+//           0
+//         ) AS pending_quantity,
+
+//         -- Full creation date/time
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         -- Group key
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI'
+//         ) AS request_group,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         c.counter_name,
+
+//         -- Sweet
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       -- IMPORTANT:
+//       -- Match order_item with exact counter request.
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.request_id = r.row_id
+
+//       ${whereClause}
+
+//       ORDER BY r.cr_on DESC
+//     `;
+
+//     console.log("getCounterRequests query:", query);
+
+//     const result = await db_query.customQuery(query, "Get Counter Requests");
+
+//     console.log("getCounterRequests result:", result);
+
+//     const requests = result.data || [];
+
+//     // =====================================================
+//     // GROUP REQUESTS
+//     // =====================================================
+
+//     const groupedRequests = {};
+
+//     requests.forEach((item) => {
+//       const groupKey = item.request_group;
+
+//       if (!groupedRequests[groupKey]) {
+//         groupedRequests[groupKey] = {
+//           request_group: groupKey,
+//           cr_on: groupKey,
+
+//           total_requests: 0,
+//           total_requested_quantity: 0,
+//           total_supplied_quantity: 0,
+//           total_pending_quantity: 0,
+
+//           requests: [],
+//         };
+//       }
+
+//       // Request count
+//       groupedRequests[groupKey].total_requests += 1;
+
+//       // Requested quantity
+//       groupedRequests[groupKey].total_requested_quantity += Number(
+//         item.requested_quantity || 0,
+//       );
+
+//       // Supplied quantity
+//       groupedRequests[groupKey].total_supplied_quantity += Number(
+//         item.supplied_quantity || 0,
+//       );
+
+//       // Pending quantity
+//       groupedRequests[groupKey].total_pending_quantity += Number(
+//         item.pending_quantity || 0,
+//       );
+
+//       // Individual request
+//       groupedRequests[groupKey].requests.push(item);
+//     });
+
+//     // =====================================================
+//     // ARRAY RESPONSE
+//     // =====================================================
+
+//     const data = Object.values(groupedRequests);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Counter requests fetched successfully",
+//       data,
+//     });
+//   } catch (error) {
+//     console.log("getCounterRequests error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
 async function getCounterRequests(req, res) {
   try {
     const user = req.data;
@@ -4204,98 +4624,583 @@ async function getCounterRequests(req, res) {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
+    const orderTable = schema + ".orders";
     const orderItemTable = schema + ".order_items";
+    const supplierTable = schema + ".suppliers";
+    const chalanTable = schema + ".chalans";
+
+    // =====================================================
+    // ROLE CONDITIONS
+    // =====================================================
 
     let conditions = ["1=1"];
 
-    // 🟡 COUNTER USER → own requests
+    // COUNTER USER → OWN REQUESTS
     if (user.user_role === "COUNTER_USER") {
+      if (!user.counterId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Counter ID not found",
+        });
+      }
+
       conditions.push(`r.counter_id = '${user.counterId}'`);
     }
 
-    // 🟠 SHOP ADMIN → all counters of shop
+    // SHOP ADMIN → ALL COUNTERS OF SHOP
     if (user.user_role === "SHOP_ADMIN") {
+      if (!user.shopId) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Shop ID not found",
+        });
+      }
+
       conditions.push(`c.shop_id = '${user.shopId}'`);
     }
 
-    // 🔴 ADMIN → all requests
+    // ADMIN → ALL REQUESTS
 
-    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+    const whereClause = `
+      WHERE ${conditions.join(" AND ")}
+    `;
 
-    const result = await db_query.customQuery(`
+    // =====================================================
+    // MAIN QUERY
+    // =====================================================
+
+    const query = `
       SELECT
+
+        /* =================================================
+           REQUEST DETAILS
+        ================================================= */
+
         r.row_id,
 
-        CONCAT('REQ-', r.id) AS requested_order,
+        CONCAT(
+          'REQ-',
+          r.id
+        ) AS requested_order,
 
-        -- Counter requested quantity
-        r.quantity AS requested_quantity,
+        r.quantity::numeric AS requested_quantity,
 
-        -- Shop request status
         r.status AS shop_status,
 
-        -- Supplier item status
-        COALESCE(oi.item_status, 'PENDING') AS supplier_status,
-
-        -- Supplier supplied quantity
-        COALESCE(oi.supplied_quantity, 0) AS supplied_quantity,
-
-        -- Remaining pending quantity
-        GREATEST(
-          r.quantity - COALESCE(oi.supplied_quantity, 0),
-          0
-        ) AS pending_quantity,
-
-        -- Full creation date/time
         TO_CHAR(
           r.cr_on,
           'YYYY-MM-DD HH24:MI:SS'
         ) AS cr_on,
 
-        -- Group key
         TO_CHAR(
           r.cr_on,
           'YYYY-MM-DD HH24:MI'
         ) AS request_group,
 
+
+        /* =================================================
+           COUNTER
+        ================================================= */
+
         c.row_id AS counter_id,
+
         c.counter_name,
 
+
+        /* =================================================
+           SWEET
+        ================================================= */
+
         s.row_id AS sweet_id,
+
         s.sweet_name,
-        s.unit
+
+        s.unit,
+
+
+        /* =================================================
+           ORDER DETAILS
+        ================================================= */
+
+        oi.order_id,
+
+        CASE
+          WHEN o.id IS NOT NULL
+          THEN CONCAT('ORD-', o.id)
+          ELSE NULL
+        END AS order_number,
+
+        o.order_type,
+
+        o.parent_order_id,
+
+        o.order_status,
+
+        o.resolution_status,
+
+
+        /* =================================================
+           SUPPLIER
+        ================================================= */
+
+        sup.row_id AS supplier_id,
+
+        sup.supplier_name,
+
+
+        /* =================================================
+           CURRENT ORDER ITEM STATUS
+        ================================================= */
+
+        COALESCE(
+          oi.item_status,
+          'PENDING'
+        ) AS supplier_status,
+
+        COALESCE(
+          oi.supplied_quantity,
+          0
+        )::numeric AS supplied_quantity,
+
+
+        /* =================================================
+           CANCELLED QUANTITY
+        ================================================= */
+
+        COALESCE(
+          oi.cancelled_quantity,
+          0
+        )::numeric AS cancelled_quantity,
+
+
+        /* =================================================
+           REORDER SUPPLIED QUANTITY
+
+           Original item ke against jitne bhi
+           reorder items hain unka total
+        ================================================= */
+
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(
+                child.supplied_quantity,
+                0
+              )::numeric
+            )
+            FROM ${orderItemTable} child
+            WHERE child.parent_order_item_id = oi.row_id
+          ),
+          0
+        )::numeric AS reorder_supplied_quantity,
+
+
+        /* =================================================
+           TOTAL SUPPLIED
+
+           Original supplied
+           +
+           Reorder supplied
+        ================================================= */
+
+        (
+          COALESCE(
+            oi.supplied_quantity,
+            0
+          )::numeric
+
+          +
+
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(
+                  child.supplied_quantity,
+                  0
+                )::numeric
+              )
+              FROM ${orderItemTable} child
+              WHERE child.parent_order_item_id = oi.row_id
+            ),
+            0
+          )::numeric
+        ) AS total_supplied_quantity,
+
+
+        /* =================================================
+           REMAINING QUANTITY
+
+           Requested
+           - Original supplied
+           - Reorder supplied
+           - Cancelled
+        ================================================= */
+
+        GREATEST(
+
+          r.quantity::numeric
+
+          -
+
+          COALESCE(
+            oi.supplied_quantity,
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(
+                  child.supplied_quantity,
+                  0
+                )::numeric
+              )
+              FROM ${orderItemTable} child
+              WHERE child.parent_order_item_id = oi.row_id
+            ),
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            oi.cancelled_quantity,
+            0
+          )::numeric,
+
+          0
+
+        ) AS remaining_quantity,
+
+
+        /* =================================================
+           REMAINING ACTION
+        ================================================= */
+
+        COALESCE(
+          oi.remaining_action,
+          'PENDING'
+        ) AS remaining_action,
+
+        TO_CHAR(
+          oi.remaining_action_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS remaining_action_on,
+
+
+        /* =================================================
+           CURRENT ORDER CHALLAN
+        ================================================= */
+
+        ch.row_id AS chalan_id,
+
+        CASE
+          WHEN ch.row_id IS NOT NULL
+          THEN TRUE
+          ELSE FALSE
+        END AS challan_created,
+
+        COALESCE(
+          ch.is_verified,
+          FALSE
+        ) AS challan_verified,
+
+        CASE
+
+          WHEN ch.row_id IS NULL
+            THEN 'NOT_CREATED'
+
+          WHEN ch.is_verified = TRUE
+            THEN 'VERIFIED'
+
+          ELSE 'PENDING_VERIFICATION'
+
+        END AS challan_status,
+
+        TO_CHAR(
+          ch.dispatch_date,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS dispatch_date,
+
+
+        /* =================================================
+           REORDER ORDERS
+
+           Original/root item ke against
+           saare reorder orders
+        ================================================= */
+
+        COALESCE(
+
+          (
+            SELECT json_agg(
+
+              json_build_object(
+
+                'order_id',
+                child_order.row_id,
+
+                'order_number',
+                CONCAT(
+                  'ORD-',
+                  child_order.id
+                ),
+
+                'order_type',
+                child_order.order_type,
+
+                'parent_order_id',
+                child_order.parent_order_id,
+
+                'order_status',
+                child_order.order_status,
+
+                'resolution_status',
+                child_order.resolution_status,
+
+                'requested_quantity',
+                child_item.quantity::numeric,
+
+                'supplied_quantity',
+                COALESCE(
+                  child_item.supplied_quantity,
+                  0
+                )::numeric,
+
+                'cancelled_quantity',
+                COALESCE(
+                  child_item.cancelled_quantity,
+                  0
+                )::numeric,
+
+                'remaining_quantity',
+
+                GREATEST(
+
+                  child_item.quantity::numeric
+
+                  -
+
+                  COALESCE(
+                    child_item.supplied_quantity,
+                    0
+                  )::numeric
+
+                  -
+
+                  COALESCE(
+                    child_item.cancelled_quantity,
+                    0
+                  )::numeric,
+
+                  0
+
+                ),
+
+                'item_status',
+                COALESCE(
+                  child_item.item_status,
+                  'PENDING'
+                ),
+
+                'remaining_action',
+                COALESCE(
+                  child_item.remaining_action,
+                  'PENDING'
+                ),
+
+                'chalan_id',
+                child_ch.row_id,
+
+                'challan_status',
+
+                CASE
+
+                  WHEN child_ch.row_id IS NULL
+                    THEN 'NOT_CREATED'
+
+                  WHEN child_ch.is_verified = TRUE
+                    THEN 'VERIFIED'
+
+                  ELSE 'PENDING_VERIFICATION'
+
+                END,
+
+                'dispatch_date',
+                TO_CHAR(
+                  child_ch.dispatch_date,
+                  'YYYY-MM-DD HH24:MI:SS'
+                ),
+
+                'created_at',
+                TO_CHAR(
+                  child_order.cr_on,
+                  'YYYY-MM-DD HH24:MI:SS'
+                )
+
+              )
+
+              ORDER BY child_order.cr_on DESC
+
+            )
+
+            FROM ${orderItemTable} child_item
+
+            INNER JOIN ${orderTable} child_order
+
+              ON child_order.row_id =
+                 child_item.order_id
+
+            LEFT JOIN LATERAL (
+
+              SELECT
+
+                ch2.row_id,
+
+                ch2.is_verified,
+
+                ch2.dispatch_date
+
+              FROM ${chalanTable} ch2
+
+              WHERE ch2.order_id =
+                    child_order.row_id
+
+              ORDER BY ch2.cr_on DESC
+
+              LIMIT 1
+
+            ) child_ch ON TRUE
+
+            WHERE child_item.parent_order_item_id =
+                  oi.row_id
+
+          ),
+
+          '[]'::json
+
+        ) AS reorder_orders,
+
+
+        /* =================================================
+           ORDER DATES
+        ================================================= */
+
+        TO_CHAR(
+          o.cr_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS order_created_at,
+
+        TO_CHAR(
+          o.up_on,
+          'YYYY-MM-DD HH24:MI:SS'
+        ) AS order_updated_at
+
+
+      /* ===================================================
+         TABLES
+      =================================================== */
 
       FROM ${requestTable} r
 
+
+      /* COUNTER */
+
       LEFT JOIN ${counterTable} c
-        ON c.row_id = r.counter_id
+
+        ON c.row_id =
+           r.counter_id
+
+
+      /* SWEET */
 
       LEFT JOIN ${sweetTable} s
-        ON s.row_id = r.sweet_id
 
-      -- 🔹 Select only ONE latest order item
+        ON s.row_id =
+           r.sweet_id
+
+
+      /* ===================================================
+         IMPORTANT
+
+         Exact request → order_item
+
+         Isse previous request ka supplier status
+         new request mein nahi aayega.
+      =================================================== */
+
+      LEFT JOIN ${orderItemTable} oi
+
+        ON oi.request_id =
+           r.row_id
+
+
+      /* ORDER */
+
+      LEFT JOIN ${orderTable} o
+
+        ON o.row_id =
+           oi.order_id
+
+
+      /* SUPPLIER */
+
+      LEFT JOIN ${supplierTable} sup
+
+        ON sup.row_id =
+           o.supplier_id
+
+
+      /* ===================================================
+         LATEST CHALLAN OF CURRENT ORDER
+      =================================================== */
+
       LEFT JOIN LATERAL (
+
         SELECT
-          oi.item_status,
-          oi.supplied_quantity,
-          oi.cr_on
-        FROM ${orderItemTable} oi
-        WHERE oi.counter_id = r.counter_id
-          AND oi.sweet_id = r.sweet_id
-        ORDER BY oi.cr_on DESC
+
+          ch1.row_id,
+
+          ch1.is_verified,
+
+          ch1.dispatch_date
+
+        FROM ${chalanTable} ch1
+
+        WHERE ch1.order_id =
+              o.row_id
+
+        ORDER BY ch1.cr_on DESC
+
         LIMIT 1
-      ) oi ON TRUE
+
+      ) ch ON TRUE
+
 
       ${whereClause}
 
-      ORDER BY r.cr_on DESC
-    `);
 
-    console.log("result", result);
+      ORDER BY r.cr_on DESC
+    `;
+
+    console.log("getCounterRequests query:", query);
+
+    // =====================================================
+    // EXECUTE
+    // =====================================================
+
+    const result = await db_query.customQuery(query, "Get Counter Requests");
+
+    console.log("getCounterRequests result:", result);
 
     const requests = result.data || [];
 
-    // 🔹 Group requests according to request time
+    // =====================================================
+    // GROUP REQUESTS
+    // =====================================================
+
     const groupedRequests = {};
 
     requests.forEach((item) => {
@@ -4304,47 +5209,69 @@ async function getCounterRequests(req, res) {
       if (!groupedRequests[groupKey]) {
         groupedRequests[groupKey] = {
           request_group: groupKey,
+
           cr_on: groupKey,
 
           total_requests: 0,
+
           total_requested_quantity: 0,
+
           total_supplied_quantity: 0,
+
           total_pending_quantity: 0,
 
           requests: [],
         };
       }
 
-      // Total request count
+      // ===================================================
+      // REQUEST COUNT
+      // ===================================================
+
       groupedRequests[groupKey].total_requests += 1;
 
-      // Total requested
+      // ===================================================
+      // REQUESTED
+      // ===================================================
+
       groupedRequests[groupKey].total_requested_quantity += Number(
         item.requested_quantity || 0,
       );
 
-      // Total supplied
+      // ===================================================
+      // TOTAL SUPPLIED
+      // ===================================================
+
       groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.supplied_quantity || 0,
+        item.total_supplied_quantity || 0,
       );
 
-      // Total pending
+      // ===================================================
+      // TOTAL REMAINING
+      // ===================================================
+
       groupedRequests[groupKey].total_pending_quantity += Number(
-        item.pending_quantity || 0,
+        item.remaining_quantity || 0,
       );
 
-      // Individual request
+      // ===================================================
+      // INDIVIDUAL REQUEST
+      // ===================================================
+
       groupedRequests[groupKey].requests.push(item);
     });
 
-    // 🔹 Convert object to array
-    const data = Object.values(groupedRequests);
+    // =====================================================
+    // FINAL DATA
+    // =====================================================
 
-    // console.log("data", data);
+    const data = Object.values(groupedRequests);
 
     return libFunc.sendResponse(res, {
       status: 0,
+
       msg: "Counter requests fetched successfully",
+
       data,
     });
   } catch (error) {
@@ -4352,7 +5279,9 @@ async function getCounterRequests(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 1,
+
       msg: "Something went wrong",
+
       error: error.message,
     });
   }
@@ -5361,7 +6290,9 @@ async function getSupplierOrders(req, res) {
 
     console.log("getSupplierOrders user:", user);
 
-    // Role validation
+    // =========================
+    // ROLE VALIDATION
+    // =========================
     if (!["SUPPLIER", "ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -5418,58 +6349,161 @@ async function getSupplierOrders(req, res) {
     const whereCondition =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
+    // =========================
+    // FETCH ORDERS
+    // =========================
     const result = await db_query.customQuery(`
       SELECT
 
-        -- Order
+        -- =========================
+        -- ORDER
+        -- =========================
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
 
-        -- Supplier
+        o.order_type,
+        o.parent_order_id,
+        o.resolution_status,
+
+        -- =========================
+        -- SUPPLIER
+        -- =========================
         sup.row_id AS supplier_id,
         sup.supplier_name,
 
-        -- Shop
+        -- =========================
+        -- SHOP
+        -- =========================
         sh.row_id AS shop_id,
         sh.shop_name,
         sh.city,
         sh.state,
 
-        -- Order Item
+        -- =========================
+        -- ORDER ITEM
+        -- =========================
         oi.row_id AS order_item_id,
         oi.request_id,
+
         oi.sweet_id,
         oi.quantity,
 
-        -- Item processing
+        -- =========================
+        -- ITEM PROCESSING
+        -- =========================
         oi.item_status,
         oi.supplied_quantity,
         oi.reject_reason,
 
-        -- Counter
+        -- =========================
+        -- REORDER FIELDS
+        -- =========================
+        oi.parent_order_item_id,
+        oi.cancelled_quantity,
+        oi.remaining_action,
+        oi.remaining_action_on,
+
+        -- =========================
+        -- COUNTER
+        -- =========================
         oi.counter_id,
         c.counter_name,
         c.location,
 
-        -- Sweet
+        -- =========================
+        -- SWEET
+        -- =========================
         s.sweet_name,
-        s.unit
+        s.unit,
+
+        -- =========================
+        -- REORDER SUPPLIED QUANTITY
+        -- =========================
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(child.supplied_quantity, 0)
+            )
+            FROM ${itemTable} child
+            WHERE child.parent_order_item_id = oi.row_id
+          ),
+          0
+        ) AS reorder_supplied_quantity,
+
+        -- =========================
+        -- REMAINING QUANTITY
+        -- =========================
+        GREATEST(
+          0,
+
+          -- ORIGINAL QUANTITY
+          COALESCE(
+            NULLIF(TRIM(oi.quantity), '')::numeric,
+            0
+          )
+
+          -
+
+          -- CURRENT ORDER SUPPLIED
+          COALESCE(
+            oi.supplied_quantity,
+            0
+          )
+
+          -
+
+          -- REORDER SUPPLIED
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(child.supplied_quantity, 0)
+              )
+              FROM ${itemTable} child
+              WHERE child.parent_order_item_id = oi.row_id
+            ),
+            0
+          )
+
+          -
+
+          -- CANCELLED QUANTITY
+          COALESCE(
+            oi.cancelled_quantity,
+            0
+          )
+
+        ) AS remaining_quantity
 
       FROM ${orderTable} o
 
+      -- =========================
+      -- SHOP
+      -- =========================
       LEFT JOIN ${shopTable} sh
         ON sh.row_id = o.shop_id
 
+      -- =========================
+      -- SUPPLIER
+      -- =========================
       LEFT JOIN ${supplierTable} sup
         ON sup.row_id = o.supplier_id
 
+      -- =========================
+      -- ORDER ITEMS
+      -- =========================
       LEFT JOIN ${itemTable} oi
         ON oi.order_id = o.row_id
 
+      -- =========================
+      -- SWEET
+      -- =========================
       LEFT JOIN ${sweetTable} s
         ON s.row_id = oi.sweet_id
 
+      -- =========================
+      -- COUNTER
+      -- =========================
       LEFT JOIN ${counterTable} c
         ON c.row_id = oi.counter_id
 
@@ -5480,8 +6514,14 @@ async function getSupplierOrders(req, res) {
         oi.cr_on ASC
     `);
 
+    // =========================
+    // HANDLE DB RESULT
+    // =========================
     const rows = Array.isArray(result) ? result : result.data || [];
 
+    // =========================
+    // NO DATA
+    // =========================
     if (rows.length === 0) {
       return libFunc.sendResponse(res, {
         status: 0,
@@ -5490,20 +6530,37 @@ async function getSupplierOrders(req, res) {
       });
     }
 
+    // =========================
+    // GROUP ORDERS
+    // =========================
     const ordersMap = {};
 
     for (const row of rows) {
+      // =========================
+      // CREATE ORDER
+      // =========================
       if (!ordersMap[row.order_id]) {
         ordersMap[row.order_id] = {
           order_id: row.order_id,
           order_status: row.order_status,
           order_date: row.order_date,
 
+          // REORDER
+          order_type: row.order_type || "NORMAL",
+          parent_order_id: row.parent_order_id || null,
+          resolution_status: row.resolution_status || "OPEN",
+
+          // =========================
+          // SUPPLIER
+          // =========================
           supplier: {
             supplier_id: row.supplier_id,
             supplier_name: row.supplier_name,
           },
 
+          // =========================
+          // SHOP
+          // =========================
           shop: {
             shop_id: row.shop_id,
             shop_name: row.shop_name,
@@ -5515,33 +6572,84 @@ async function getSupplierOrders(req, res) {
         };
       }
 
+      // =========================
+      // ADD ITEM
+      // =========================
       if (row.order_item_id) {
+        const requestedQuantity = Number(row.quantity || 0);
+
+        const suppliedQuantity = Number(row.supplied_quantity || 0);
+
+        const reorderSuppliedQuantity = Number(
+          row.reorder_supplied_quantity || 0,
+        );
+
+        const cancelledQuantity = Number(row.cancelled_quantity || 0);
+
+        const remainingQuantity = Math.max(
+          0,
+          Number(row.remaining_quantity || 0),
+        );
+
         ordersMap[row.order_id].items.push({
-          // Order item
+          // =========================
+          // ORDER ITEM
+          // =========================
           order_item_id: row.order_item_id,
           request_id: row.request_id,
 
-          // Sweet
+          // =========================
+          // REORDER RELATION
+          // =========================
+          parent_order_item_id: row.parent_order_item_id || null,
+
+          // =========================
+          // SWEET
+          // =========================
           sweet_id: row.sweet_id,
           sweet_name: row.sweet_name,
           unit: row.unit,
-          quantity: row.quantity,
 
-          // Counter
+          // =========================
+          // QUANTITY
+          // =========================
+          quantity: requestedQuantity,
+
+          // =========================
+          // COUNTER
+          // =========================
           counter_id: row.counter_id,
           counter_name: row.counter_name,
           location: row.location,
 
-          // Supplier processing
+          // =========================
+          // SUPPLIER PROCESSING
+          // =========================
           item_status: row.item_status || "PENDING",
 
-          supplied_quantity: Number(row.supplied_quantity || 0),
+          supplied_quantity: suppliedQuantity,
 
           reject_reason: row.reject_reason,
+
+          // =========================
+          // REORDER
+          // =========================
+          reorder_supplied_quantity: reorderSuppliedQuantity,
+
+          cancelled_quantity: cancelledQuantity,
+
+          remaining_quantity: remainingQuantity,
+
+          remaining_action: row.remaining_action || "PENDING",
+
+          remaining_action_on: row.remaining_action_on || null,
         });
       }
     }
 
+    // =========================
+    // FINAL DATA
+    // =========================
     const finalData = Object.values(ordersMap);
 
     return libFunc.sendResponse(res, {
@@ -11111,43 +12219,129 @@ async function updateOrderStatusBasedOnItems(order_id) {
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
 
+    const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+    // =====================================================
+    // FETCH ORDER ITEMS
+    // =====================================================
+
     const itemsRes = await db_query.customQuery(`
-      SELECT item_status 
+      SELECT
+        row_id,
+        item_status
       FROM ${itemTable}
-      WHERE order_id = '${order_id}'
+      WHERE order_id = '${safeOrderId}'
     `);
 
     const items = itemsRes.data || [];
 
-    if (!items.length) return;
-
-    let total = items.length;
-    let accepted = 0;
-    let rejected = 0;
-
-    for (let item of items) {
-      if (item.item_status === "ACCEPTED") accepted++;
-      if (item.item_status === "REJECTED") rejected++;
+    if (!items.length) {
+      console.log(`No order items found for order ${order_id}`);
+      return;
     }
+
+    // =====================================================
+    // STATUS COUNTERS
+    // =====================================================
+
+    let accepted = 0;
+    let partial = 0;
+    let rejected = 0;
+    let pending = 0;
+
+    for (const item of items) {
+      const status = item.item_status || "PENDING";
+
+      switch (status) {
+        case "ACCEPTED":
+          accepted++;
+          break;
+
+        case "PARTIAL":
+          partial++;
+          break;
+
+        case "REJECTED":
+          rejected++;
+          break;
+
+        case "PENDING":
+        default:
+          pending++;
+          break;
+      }
+    }
+
+    const total = items.length;
+
+    // =====================================================
+    // DETERMINE ORDER STATUS
+    // =====================================================
 
     let finalStatus = "PENDING";
 
+    // ---------------------------------------------
+    // ALL ITEMS ACCEPTED
+    // ---------------------------------------------
+
     if (accepted === total) {
       finalStatus = "ACCEPTED";
-    } else if (rejected === total) {
+    }
+
+    // ---------------------------------------------
+    // ALL ITEMS REJECTED
+    // ---------------------------------------------
+    else if (rejected === total) {
       finalStatus = "REJECTED";
-    } else if (accepted > 0 && rejected > 0) {
+    }
+
+    // ---------------------------------------------
+    // ANY ITEM STILL PENDING
+    // ---------------------------------------------
+    //
+    // If supplier has not processed all items,
+    // order should remain PENDING unless there is
+    // already a processed/mixed state.
+    //
+    else if (pending === total) {
+      finalStatus = "PENDING";
+    }
+
+    // ---------------------------------------------
+    // PARTIAL / MIXED PROCESSING
+    // ---------------------------------------------
+    //
+    // Examples:
+    //
+    // ACCEPTED + REJECTED
+    // ACCEPTED + PARTIAL
+    // PARTIAL + REJECTED
+    // ACCEPTED + PARTIAL + REJECTED
+    // ACCEPTED + PENDING
+    // PARTIAL + PENDING
+    //
+    else {
       finalStatus = "PARTIAL";
     }
 
+    // =====================================================
+    // UPDATE ORDER
+    // =====================================================
+
     await db_query.addData(
       orderTable,
-      { order_status: finalStatus },
+      {
+        order_status: finalStatus,
+      },
       order_id,
       "Order",
     );
+
+    console.log(`Order ${order_id} status updated to ${finalStatus}`);
   } catch (err) {
     console.error("updateOrderStatusBasedOnItems error:", err);
+
+    throw err;
   }
 }
 
@@ -11161,20 +12355,20 @@ async function updateOrderItemsBySupplier(req, res) {
 
     console.log("updateOrderItemsBySupplier:", req.data);
 
-    // =========================
+    // =====================================================
     // ROLE VALIDATION
-    // =========================
+    // =====================================================
 
-    if (user.user_role !== "SUPPLIER") {
+    if (!user || user.user_role !== "SUPPLIER") {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Only supplier allowed",
       });
     }
 
-    // =========================
+    // =====================================================
     // BASIC VALIDATION
-    // =========================
+    // =====================================================
 
     if (!order_id || !Array.isArray(items) || items.length === 0) {
       return libFunc.sendResponse(res, {
@@ -11190,19 +12384,24 @@ async function updateOrderItemsBySupplier(req, res) {
       });
     }
 
-    const orderId = order_id.trim();
+    const orderId = order_id.trim().replaceAll("'", "`");
 
-    // =========================
+    // =====================================================
     // CHECK ORDER
-    // =========================
+    // =====================================================
 
     const orderCheck = await db_query.customQuery(`
       SELECT
         row_id,
+        shop_id,
         supplier_id,
-        order_status
+        order_status,
+        order_type,
+        parent_order_id,
+        resolution_status
       FROM ${orderTable}
-      WHERE row_id = '${orderId.replaceAll("'", "`")}'
+      WHERE row_id = '${orderId}'
+      LIMIT 1
     `);
 
     if (!orderCheck.data?.length) {
@@ -11214,7 +12413,10 @@ async function updateOrderItemsBySupplier(req, res) {
 
     const order = orderCheck.data[0];
 
-    // Supplier can update only own order
+    // =====================================================
+    // SUPPLIER OWNERSHIP
+    // =====================================================
+
     if (order.supplier_id !== user.supplierId) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -11222,9 +12424,9 @@ async function updateOrderItemsBySupplier(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
     // ORDER STATUS CHECK
-    // =========================
+    // =====================================================
 
     if (!["PENDING", "ACCEPTED", "PARTIAL"].includes(order.order_status)) {
       return libFunc.sendResponse(res, {
@@ -11233,164 +12435,307 @@ async function updateOrderItemsBySupplier(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
+    // RESOLUTION CHECK
+    // =====================================================
+
+    if (order.resolution_status === "RESOLVED") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order is already resolved",
+      });
+    }
+
+    // =====================================================
     // TRANSACTION
-    // =========================
+    // =====================================================
 
     await connect_db.query("BEGIN");
 
-    for (const item of items) {
-      const {
-        order_item_id,
-        supplied_quantity = 0,
-        status,
-        reason = "",
-      } = item;
-
-      // -------------------------
-      // Validate item status
-      // -------------------------
-
-      if (!["ACCEPTED", "REJECTED"].includes(status)) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Invalid item status",
-        });
-      }
-
-      // -------------------------
-      // order_item_id required
-      // -------------------------
-
-      if (!order_item_id) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "order_item_id is required for every item",
-        });
-      }
-
-      const orderItemId = order_item_id.trim().replaceAll("'", "`");
-
-      // -------------------------
-      // Validate supplied quantity
-      // -------------------------
-
-      const suppliedQty = Number(supplied_quantity);
-
-      if (!Number.isFinite(suppliedQty) || suppliedQty < 0) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Invalid supplied quantity",
-        });
-      }
-
-      // REJECTED item should normally have 0 supplied quantity
-      if (status === "REJECTED" && suppliedQty > 0) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Rejected item cannot have supplied quantity",
-        });
-      }
-
-      // ACCEPTED item should have supplied quantity > 0
-      if (status === "ACCEPTED" && suppliedQty <= 0) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: "Accepted item must have supplied quantity",
-        });
-      }
-
-      // -------------------------
-      // Check order item
-      // -------------------------
-
-      const itemCheck = await db_query.customQuery(`
-        SELECT
-          oi.row_id,
-          oi.order_id,
-          oi.quantity,
-          oi.item_status
-        FROM ${orderItemTable} oi
-        WHERE oi.row_id = '${orderItemId}'
-        AND oi.order_id = '${orderId.replaceAll("'", "`")}'
-      `);
-
-      if (!itemCheck.data?.length) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: `Invalid order item: ${order_item_id}`,
-        });
-      }
-
-      const orderItem = itemCheck.data[0];
-
-      // -------------------------
-      // Supplied quantity cannot
-      // exceed requested quantity
-      // -------------------------
-
-      if (suppliedQty > Number(orderItem.quantity)) {
-        await connect_db.query("ROLLBACK");
-
-        return libFunc.sendResponse(res, {
-          status: 1,
-          msg: `Supplied quantity cannot exceed requested quantity for item ${order_item_id}`,
-        });
-      }
-
-      // -------------------------
-      // Update item
-      // -------------------------
-
-      const safeReason = reason ? reason.trim().replaceAll("'", "`") : "";
-
-      await db_query.customQuery(`
-        UPDATE ${orderItemTable}
-        SET
-          item_status = '${status}',
-          supplied_quantity = ${suppliedQty},
-          reject_reason = '${safeReason}',
-          up_on = now()
-        WHERE row_id = '${orderItemId}'
-        AND order_id = '${orderId.replaceAll("'", "`")}'
-      `);
-    }
-
-    // =========================
-    // UPDATE ORDER STATUS
-    // =========================
-
-    await updateOrderStatusBasedOnItems(orderId);
-
-    // =========================
-    // COMMIT
-    // =========================
-
-    await connect_db.query("COMMIT");
-
-    return libFunc.sendResponse(res, {
-      status: 0,
-      msg: "Order items updated successfully",
-    });
-  } catch (error) {
     try {
-      await connect_db.query("ROLLBACK");
-    } catch (rollbackError) {
-      console.log("Rollback error:", rollbackError);
-    }
+      // ===================================================
+      // DUPLICATE ITEM CHECK
+      // ===================================================
 
+      const itemIds = items.map((item) => item.order_item_id).filter(Boolean);
+
+      const uniqueItemIds = [...new Set(itemIds)];
+
+      if (uniqueItemIds.length !== itemIds.length) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Duplicate order item found",
+        });
+      }
+
+      // ===================================================
+      // PROCESS ITEMS
+      // ===================================================
+
+      for (const item of items) {
+        const {
+          order_item_id,
+          supplied_quantity = 0,
+          status,
+          // reason = "",
+        } = item;
+
+        // ===============================================
+        // ITEM STATUS VALIDATION
+        // ===============================================
+
+        if (!["ACCEPTED", "PARTIAL", "REJECTED"].includes(status)) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "Invalid item status. Use ACCEPTED, PARTIAL or REJECTED",
+          });
+        }
+
+        // ===============================================
+        // ORDER ITEM ID
+        // ===============================================
+
+        if (!order_item_id) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "order_item_id is required for every item",
+          });
+        }
+
+        const orderItemId = order_item_id.trim().replaceAll("'", "`");
+
+        // ===============================================
+        // SUPPLIED QUANTITY
+        // ===============================================
+
+        const suppliedQty = Number(supplied_quantity);
+
+        if (!Number.isFinite(suppliedQty) || suppliedQty < 0) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "Invalid supplied quantity",
+          });
+        }
+
+        // ===============================================
+        // CHECK ORDER ITEM
+        // ===============================================
+
+        const itemCheck = await db_query.customQuery(`
+            SELECT
+              oi.row_id,
+              oi.order_id,
+              oi.quantity,
+              oi.supplied_quantity,
+              oi.cancelled_quantity,
+              oi.item_status,
+              oi.parent_order_item_id
+            FROM ${orderItemTable} oi
+            WHERE oi.row_id = '${orderItemId}'
+            AND oi.order_id = '${orderId}'
+            LIMIT 1
+          `);
+
+        if (!itemCheck.data?.length) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: `Invalid order item: ${order_item_id}`,
+          });
+        }
+
+        const orderItem = itemCheck.data[0];
+
+        // ===============================================
+        // REQUESTED QUANTITY
+        // ===============================================
+
+        const requestedQty = Number(orderItem.quantity || 0);
+
+        // ===============================================
+        // CANCELLED QUANTITY
+        // ===============================================
+
+        const cancelledQty = Number(orderItem.cancelled_quantity || 0);
+
+        // ===============================================
+        // SUPPLIED QUANTITY CANNOT EXCEED REQUEST
+        // ===============================================
+
+        if (suppliedQty > requestedQty) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: `Supplied quantity cannot exceed requested quantity for item ${order_item_id}`,
+          });
+        }
+
+        // ===============================================
+        // CANCELLED ITEM CANNOT BE SUPPLIED
+        // ===============================================
+
+        if (cancelledQty > 0 && status !== "REJECTED") {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "Cancelled item cannot be supplied",
+          });
+        }
+
+        // ===============================================
+        // REJECTED
+        // ===============================================
+
+        if (status === "REJECTED" && suppliedQty > 0) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: "Rejected item cannot have supplied quantity",
+          });
+        }
+
+        // ===============================================
+        // REJECT REASON
+        // ===============================================
+
+        // if (status === "REJECTED" && !String(reason).trim()) {
+        //   await connect_db.query("ROLLBACK");
+
+        //   return libFunc.sendResponse(res, {
+        //     status: 1,
+        //     msg: "Reject reason is required for rejected item",
+        //   });
+        // }
+
+        // ===============================================
+        // ACCEPTED = FULL SUPPLY
+        // ===============================================
+
+        if (status === "ACCEPTED" && suppliedQty !== requestedQty) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: `Accepted item must have full supplied quantity (${requestedQty})`,
+          });
+        }
+
+        // ===============================================
+        // PARTIAL
+        // ===============================================
+
+        if (status === "PARTIAL") {
+          if (suppliedQty <= 0) {
+            await connect_db.query("ROLLBACK");
+
+            return libFunc.sendResponse(res, {
+              status: 1,
+              msg: "Partial item must have supplied quantity greater than 0",
+            });
+          }
+
+          if (suppliedQty >= requestedQty) {
+            await connect_db.query("ROLLBACK");
+
+            return libFunc.sendResponse(res, {
+              status: 1,
+              msg: "Partial supplied quantity must be less than requested quantity",
+            });
+          }
+        }
+
+        // ===============================================
+        // SAFE REASON
+        // ===============================================
+
+        // const safeReason = String(reason || "")
+        //   .trim()
+        //   .replaceAll("'", "`");
+
+        // ===============================================
+        // UPDATE ORDER ITEM
+        // ===============================================
+
+        await db_query.customQuery(`
+          UPDATE ${orderItemTable}
+          SET
+            item_status = '${status}',
+            supplied_quantity = ${suppliedQty},
+            up_on = NOW()
+          WHERE row_id = '${orderItemId}'
+          AND order_id = '${orderId}'
+        `);
+      }
+
+      // ===================================================
+      // UPDATE CURRENT ORDER STATUS
+      // ===================================================
+
+      await updateOrderStatusBasedOnItems(orderId);
+
+      // ===================================================
+      // UPDATE ROOT ORDER RESOLUTION
+      // ===================================================
+      //
+      // NORMAL:
+      //   root order = current order
+      //
+      // REORDER:
+      //   root order = parent_order_id
+      //
+      // Reorder child supplied quantity must be counted
+      // against original/root item.
+      // ===================================================
+
+      let rootOrderId = orderId;
+
+      if (order.order_type === "REORDER" && order.parent_order_id) {
+        rootOrderId = order.parent_order_id;
+      }
+
+      await updateOrderResolution(rootOrderId);
+
+      // ===================================================
+      // COMMIT
+      // ===================================================
+
+      await connect_db.query("COMMIT");
+
+      // ===================================================
+      // RESPONSE
+      // ===================================================
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Order items updated successfully",
+        data: {
+          order_id: orderId,
+          order_type: order.order_type || "NORMAL",
+          root_order_id: rootOrderId,
+        },
+      });
+    } catch (transactionError) {
+      try {
+        await connect_db.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.log("Rollback error:", rollbackError);
+      }
+
+      throw transactionError;
+    }
+  } catch (error) {
     console.log("updateOrderItemsBySupplier error:", error);
 
     return libFunc.sendResponse(res, {
@@ -11484,11 +12829,11 @@ async function createChalan(req, res) {
 
     const user = req.data;
 
-    // =========================
+    // =====================================================
     // ROLE VALIDATION
-    // =========================
+    // =====================================================
 
-    if (user.user_role !== "SUPPLIER") {
+    if (!user || user.user_role !== "SUPPLIER") {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Only supplier allowed",
@@ -11502,9 +12847,9 @@ async function createChalan(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
     // BASIC VALIDATION
-    // =========================
+    // =====================================================
 
     if (!order_id) {
       return libFunc.sendResponse(res, {
@@ -11515,19 +12860,23 @@ async function createChalan(req, res) {
 
     const orderId = order_id.trim().replaceAll("'", "`");
 
-    // =========================
+    // =====================================================
     // GET ORDER
-    // =========================
+    // =====================================================
 
     const orderData = await db_query.customQuery(`
-      SELECT
-        row_id,
-        supplier_id,
-        shop_id,
-        order_status
-      FROM ${orderTable}
-      WHERE row_id = '${orderId}'
-    `);
+        SELECT
+          row_id,
+          supplier_id,
+          shop_id,
+          order_status,
+          order_type,
+          parent_order_id,
+          resolution_status
+        FROM ${orderTable}
+        WHERE row_id = '${orderId}'
+        LIMIT 1
+      `);
 
     if (!orderData.data?.length) {
       return libFunc.sendResponse(res, {
@@ -11538,9 +12887,9 @@ async function createChalan(req, res) {
 
     const order = orderData.data[0];
 
-    // =========================
+    // =====================================================
     // SUPPLIER OWNERSHIP
-    // =========================
+    // =====================================================
 
     if (order.supplier_id !== user.supplierId) {
       return libFunc.sendResponse(res, {
@@ -11549,9 +12898,20 @@ async function createChalan(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
+    // RESOLUTION CHECK
+    // =====================================================
+
+    // if (order.resolution_status === "RESOLVED") {
+    //   return libFunc.sendResponse(res, {
+    //     status: 1,
+    //     msg: "Order is already resolved",
+    //   });
+    // }
+
+    // =====================================================
     // ORDER STATUS
-    // =========================
+    // =====================================================
 
     if (!["ACCEPTED", "PARTIAL"].includes(order.order_status)) {
       return libFunc.sendResponse(res, {
@@ -11560,18 +12920,30 @@ async function createChalan(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
     // CHECK EXISTING CHALAN
-    // =========================
+    // =====================================================
+    //
+    // This is per ORDER.
+    //
+    // NORMAL order:
+    //   normal order can have one challan
+    //
+    // REORDER order:
+    //   reorder child order can have its own challan
+    //
+    // Therefore we check order_id, NOT parent_order_id.
+    // =====================================================
 
     const existingChalan = await db_query.customQuery(`
-      SELECT
-        row_id,
-        is_verified
-      FROM ${chalanTable}
-      WHERE order_id = '${orderId}'
-      AND supplier_id = '${user.supplierId}'
-    `);
+        SELECT
+          row_id,
+          is_verified
+        FROM ${chalanTable}
+        WHERE order_id = '${orderId}'
+        AND supplier_id = '${user.supplierId}'
+        LIMIT 1
+      `);
 
     if (existingChalan.data?.length) {
       return libFunc.sendResponse(res, {
@@ -11584,29 +12956,59 @@ async function createChalan(req, res) {
       });
     }
 
-    // =========================
+    // =====================================================
+    // CHECK ORDER ITEMS
+    // =====================================================
+    //
+    // At least one item must have supplied quantity > 0.
+    //
+    // Rejected-only order should not generate challan.
+    // =====================================================
+
+    const itemCheck = await db_query.customQuery(`
+        SELECT
+          row_id,
+          item_status,
+          quantity,
+          supplied_quantity
+        FROM ${schema}.order_items
+        WHERE order_id = '${orderId}'
+        AND COALESCE(
+          supplied_quantity,
+          0
+        )::numeric > 0
+      `);
+
+    if (!itemCheck.data?.length) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Chalan cannot be created because no quantity is available for dispatch",
+      });
+    }
+
+    // =====================================================
     // BEGIN TRANSACTION
-    // =========================
+    // =====================================================
 
     await client.query("BEGIN");
 
-    // =========================
+    // =====================================================
     // GENERATE CHALAN ID
-    // =========================
+    // =====================================================
 
     const chalanRowId = libFunc.randomid();
 
-    // =========================
-    // GENERATE OTP
-    // =========================
+    // =====================================================
+    // GENERATE VERIFICATION OTP
+    // =====================================================
 
     const verification_code = Math.floor(
       100000 + Math.random() * 900000,
     ).toString();
 
-    // =========================
+    // =====================================================
     // CREATE CHALAN
-    // =========================
+    // =====================================================
 
     await db_query.addData(
       chalanTable,
@@ -11615,7 +13017,9 @@ async function createChalan(req, res) {
         order_id: orderId,
         supplier_id: user.supplierId,
         dispatch_date: dispatch_date || null,
-        transport_details: transport_details.trim().replaceAll("'", "`"),
+        transport_details: String(transport_details || "")
+          .trim()
+          .replaceAll("'", "`"),
         verification_code,
         is_verified: false,
       },
@@ -11623,9 +13027,9 @@ async function createChalan(req, res) {
       "Chalan",
     );
 
-    // =========================
-    // UPDATE ORDER
-    // =========================
+    // =====================================================
+    // UPDATE ORDER STATUS
+    // =====================================================
 
     await db_query.addData(
       orderTable,
@@ -11636,50 +13040,70 @@ async function createChalan(req, res) {
       "Order",
     );
 
-    // =========================
+    // =====================================================
     // COMMIT
-    // =========================
+    // =====================================================
 
     await client.query("COMMIT");
 
-    // ==================================================
+    // =====================================================
     // NOTIFICATION → SHOP ADMIN
-    // ==================================================
+    // =====================================================
 
     const shopAdmins = await db_query.customQuery(`
-      SELECT row_id
-      FROM ${userTable}
-      WHERE role = 'SHOP_ADMIN'
-      AND shop_id = '${order.shop_id}'
-    `);
+        SELECT
+          row_id
+        FROM ${userTable}
+        WHERE role = 'SHOP_ADMIN'
+        AND shop_id = '${order.shop_id}'
+      `);
 
     if (shopAdmins.data?.length) {
       for (const admin of shopAdmins.data) {
         await createNotification({
           user_id: admin.row_id,
-          title: "Order Dispatched",
-          message: `Order dispatched successfully. Verification OTP: ${verification_code}`,
+          title:
+            order.order_type === "REORDER"
+              ? "Reorder Dispatched"
+              : "Order Dispatched",
+
+          message:
+            order.order_type === "REORDER"
+              ? `Reorder dispatched successfully. Verification OTP: ${verification_code}`
+              : `Order dispatched successfully. Verification OTP: ${verification_code}`,
+
           type: "CHALLAN",
           reference_id: chalanRowId,
         });
       }
     }
 
-    // ==================================================
+    // =====================================================
     // RESPONSE
-    // ==================================================
+    // =====================================================
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Chalan created successfully. Waiting for verification.",
+
       data: {
         chalan_id: chalanRowId,
         order_id: orderId,
+
+        order_type: order.order_type || "NORMAL",
+
+        parent_order_id: order.parent_order_id || null,
+
         verification_required: true,
+
         otp: verification_code,
       },
     });
   } catch (error) {
+    // =====================================================
+    // ROLLBACK
+    // =====================================================
+
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
@@ -11704,11 +13128,11 @@ async function verifyChalan(req, res) {
 
     const { chalan_id, otp } = req.data || {};
 
-    // ==============================
+    // =====================================================
     // 1. ROLE VALIDATION
-    // ==============================
+    // =====================================================
 
-    if (user.user_role !== "SHOP_ADMIN") {
+    if (!user || user.user_role !== "SHOP_ADMIN") {
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Only shop admin can verify chalan",
@@ -11733,11 +13157,15 @@ async function verifyChalan(req, res) {
 
     const enteredOtp = otp.toString().trim();
 
+    // =====================================================
+    // BEGIN TRANSACTION
+    // =====================================================
+
     await client.query("BEGIN");
 
-    // ==============================
-    // 2. GET CHALAN + SHOP
-    // ==============================
+    // =====================================================
+    // 2. GET CHALAN + ORDER
+    // =====================================================
 
     const chalanRes = await client.query(`
       SELECT
@@ -11749,7 +13177,10 @@ async function verifyChalan(req, res) {
         ch.is_verified,
 
         o.shop_id,
-        o.order_status
+        o.order_status,
+        o.order_type,
+        o.parent_order_id,
+        o.resolution_status
 
       FROM ${schema}.chalans ch
 
@@ -11758,6 +13189,8 @@ async function verifyChalan(req, res) {
 
       WHERE ch.row_id = '${chalanId}'
       AND o.shop_id = '${user.shopId}'
+
+      FOR UPDATE
     `);
 
     if (chalanRes.rows.length === 0) {
@@ -11771,9 +13204,9 @@ async function verifyChalan(req, res) {
 
     const chalan = chalanRes.rows[0];
 
-    // ==============================
+    // =====================================================
     // 3. ALREADY VERIFIED
-    // ==============================
+    // =====================================================
 
     if (chalan.is_verified) {
       await client.query("ROLLBACK");
@@ -11784,9 +13217,9 @@ async function verifyChalan(req, res) {
       });
     }
 
-    // ==============================
-    // 4. VERIFY OTP
-    // ==============================
+    // =====================================================
+    // 4. OTP VERIFY
+    // =====================================================
 
     if (chalan.verification_code !== enteredOtp) {
       await client.query("ROLLBACK");
@@ -11797,9 +13230,22 @@ async function verifyChalan(req, res) {
       });
     }
 
-    // ==============================
-    // 5. GET ORDER ITEMS
-    // ==============================
+    // =====================================================
+    // 5. ORDER STATUS VALIDATION
+    // =====================================================
+
+    if (!["DISPATCHED", "ACCEPTED", "PARTIAL"].includes(chalan.order_status)) {
+      await client.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: `Chalan cannot be verified when order status is ${chalan.order_status}`,
+      });
+    }
+
+    // =====================================================
+    // 6. GET ORDER ITEMS
+    // =====================================================
 
     const itemsRes = await client.query(`
       SELECT
@@ -11810,7 +13256,12 @@ async function verifyChalan(req, res) {
         oi.counter_id,
 
         oi.quantity AS ordered_quantity,
-        oi.supplied_quantity,
+
+        COALESCE(
+          oi.supplied_quantity,
+          0
+        )::numeric AS supplied_quantity,
+
         oi.item_status,
 
         s.sweet_name,
@@ -11822,7 +13273,11 @@ async function verifyChalan(req, res) {
         ON s.row_id = oi.sweet_id
 
       WHERE oi.order_id = '${chalan.order_id}'
-      AND oi.supplied_quantity > 0
+
+      AND COALESCE(
+        oi.supplied_quantity,
+        0
+      )::numeric > 0
     `);
 
     const items = itemsRes.rows;
@@ -11836,16 +13291,21 @@ async function verifyChalan(req, res) {
       });
     }
 
-    // ==============================
-    // 6. PROCESS INVENTORY
-    // ==============================
+    // =====================================================
+    // 7. PROCESS INVENTORY
+    // =====================================================
 
-    let inventoryItems = [];
+    const inventoryItems = [];
 
     for (const item of items) {
       const sweetId = item.sweet_id;
       const counterId = item.counter_id;
+
       const qty = Number(item.supplied_quantity || 0);
+
+      // ================================================
+      // COUNTER VALIDATION
+      // ================================================
 
       if (!counterId) {
         await client.query("ROLLBACK");
@@ -11860,21 +13320,32 @@ async function verifyChalan(req, res) {
         continue;
       }
 
-      // ==============================
+      // ================================================
       // EXPIRY DATE
-      // ==============================
+      // ================================================
 
       const shelfLife = Number(item.shelf_life_days || 0);
 
-      const dispatchDate = new Date(chalan.dispatch_date);
+      const dispatchDate = chalan.dispatch_date
+        ? new Date(chalan.dispatch_date)
+        : new Date();
+
+      if (Number.isNaN(dispatchDate.getTime())) {
+        await client.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Invalid dispatch date for chalan ${chalanId}`,
+        });
+      }
 
       dispatchDate.setDate(dispatchDate.getDate() + shelfLife);
 
       const expiryDate = dispatchDate.toISOString().split("T")[0];
 
-      // ==============================
+      // ================================================
       // INVENTORY UPSERT
-      // ==============================
+      // ================================================
 
       await client.query(`
         INSERT INTO ${schema}.inventory
@@ -11894,14 +13365,20 @@ async function verifyChalan(req, res) {
           '${expiryDate}'
         )
 
-        ON CONFLICT (counter_id, sweet_id)
+        ON CONFLICT (
+          counter_id,
+          sweet_id
+        )
 
         DO UPDATE SET
 
           quantity =
-            ${schema}.inventory.quantity::NUMERIC
+            COALESCE(
+              ${schema}.inventory.quantity::numeric,
+              0
+            )
             +
-            EXCLUDED.quantity::NUMERIC,
+            EXCLUDED.quantity::numeric,
 
           expiry_date =
             EXCLUDED.expiry_date,
@@ -11909,9 +13386,9 @@ async function verifyChalan(req, res) {
           up_on = NOW()
       `);
 
-      // ==============================
+      // ================================================
       // STOCK TRANSACTION
-      // ==============================
+      // ================================================
 
       await client.query(`
         INSERT INTO ${schema}.stock_transactions
@@ -11938,64 +13415,110 @@ async function verifyChalan(req, res) {
 
       inventoryItems.push({
         order_item_id: item.order_item_id,
+
         sweet_id: sweetId,
+
         sweet_name: item.sweet_name,
+
         counter_id: counterId,
+
         quantity: qty,
+
         expiry_date: expiryDate,
       });
     }
 
-    // ==============================
-    // 7. MARK CHALAN VERIFIED
-    // ==============================
+    // =====================================================
+    // 8. MARK CHALAN VERIFIED
+    // =====================================================
 
     await client.query(`
       UPDATE ${schema}.chalans
-
       SET
         is_verified = TRUE,
         up_on = NOW()
-
       WHERE row_id = '${chalanId}'
     `);
 
-    // ==============================
-    // 8. UPDATE ORDER
-    // ==============================
+    // =====================================================
+    // 9. CURRENT ORDER → DELIVERED
+    // =====================================================
 
     await client.query(`
       UPDATE ${schema}.orders
-
       SET
         order_status = 'DELIVERED',
         up_on = NOW()
-
       WHERE row_id = '${chalan.order_id}'
     `);
 
-    // ==============================
-    // 9. COMMIT
-    // ==============================
+    // =====================================================
+    // 10. UPDATE ROOT ORDER RESOLUTION
+    // =====================================================
+    //
+    // NORMAL:
+    //   rootOrderId = current order
+    //
+    // REORDER:
+    //   rootOrderId = parent_order_id
+    //
+    // This recalculates:
+    //
+    // requested
+    // - root supplied
+    // - all reorder supplied
+    // - cancelled
+    //
+    // and sets OPEN / RESOLVED.
+    // =====================================================
+
+    let rootOrderId = chalan.order_id;
+
+    if (chalan.order_type === "REORDER" && chalan.parent_order_id) {
+      rootOrderId = chalan.parent_order_id;
+    }
+
+    await updateOrderResolution(rootOrderId);
+
+    // =====================================================
+    // 11. COMMIT
+    // =====================================================
 
     await client.query("COMMIT");
 
-    // ==============================
-    // 10. RESPONSE
-    // ==============================
+    // =====================================================
+    // 12. RESPONSE
+    // =====================================================
 
     return libFunc.sendResponse(res, {
       status: 0,
+
       msg: "Chalan verified & inventory updated successfully",
 
       data: {
         chalan_id: chalanId,
+
         order_id: chalan.order_id,
+
+        order_type: chalan.order_type || "NORMAL",
+
+        parent_order_id: chalan.parent_order_id || null,
+
+        root_order_id: rootOrderId,
+
         order_status: "DELIVERED",
+
+        resolution_status:
+          chalan.order_type === "REORDER" ? "UPDATED_ON_ROOT_ORDER" : "UPDATED",
+
         inventory_items: inventoryItems,
       },
     });
   } catch (error) {
+    // =====================================================
+    // ROLLBACK
+    // =====================================================
+
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
@@ -15860,5 +17383,1904 @@ async function downloadDepartmentSlipPDF(req, res) {
     if (!res.headersSent) {
       return res.status(500).send("Error generating department slip");
     }
+  }
+}
+
+async function getRemainingOrderItems(orderId) {
+  try {
+    const query = `
+      SELECT
+        root.row_id AS order_item_id,
+        root.order_id,
+        root.sweet_id,
+        root.counter_id,
+
+        root.quantity::numeric AS requested_quantity,
+
+        COALESCE(
+          root.supplied_quantity,
+          0
+        )::numeric AS original_supplied_quantity,
+
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(child.supplied_quantity, 0)
+            )
+            FROM sms.order_items child
+            WHERE child.parent_order_item_id = root.row_id
+          ),
+          0
+        )::numeric AS reorder_supplied_quantity,
+
+        COALESCE(
+          root.cancelled_quantity,
+          0
+        )::numeric AS cancelled_quantity,
+
+        (
+          root.quantity::numeric
+          -
+          COALESCE(root.supplied_quantity, 0)::numeric
+          -
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(child.supplied_quantity, 0)
+              )
+              FROM sms.order_items child
+              WHERE child.parent_order_item_id = root.row_id
+            ),
+            0
+          )::numeric
+          -
+          COALESCE(root.cancelled_quantity, 0)::numeric
+        ) AS remaining_quantity
+
+      FROM sms.order_items root
+
+      WHERE root.order_id = '${orderId}'
+      AND root.parent_order_item_id IS NULL
+
+      ORDER BY root.cr_on ASC
+    `;
+
+    const result = await db_query.customQuery(
+      query,
+      "Get Remaining Order Items",
+    );
+
+    return result.data || [];
+  } catch (error) {
+    console.error("getRemainingOrderItems error:", error);
+    throw error;
+  }
+}
+
+// async function reorderRemaining(req, res) {
+//   try {
+//     const user = req.data;
+
+//     // =============================================
+//     // ROLE VALIDATION
+//     // =============================================
+
+//     if (!user || user.user_role !== "SHOP_ADMIN") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Only SHOP_ADMIN can reorder remaining quantity",
+//         data: [],
+//       });
+//     }
+
+//     const { order_id, items } = req.data || {};
+
+//     // =============================================
+//     // BASIC VALIDATION
+//     // =============================================
+
+//     if (!order_id) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order ID required",
+//         data: [],
+//       });
+//     }
+
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Items required",
+//         data: [],
+//       });
+//     }
+
+//     if (!user.shopId) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Shop ID not found in token",
+//         data: [],
+//       });
+//     }
+
+//     const shopId = user.shopId;
+
+//     const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+//     // =============================================
+//     // UNIQUE ITEM IDS
+//     // =============================================
+
+//     const itemIds = [
+//       ...new Set(
+//         items
+//           .map((x) => x.order_item_id)
+//           .filter(Boolean)
+//           .map((id) => id.trim()),
+//       ),
+//     ];
+
+//     if (itemIds.length === 0) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Valid order item IDs required",
+//         data: [],
+//       });
+//     }
+
+//     const itemIdString = itemIds
+//       .map((id) => `'${id.replaceAll("'", "`")}'`)
+//       .join(",");
+
+//     // =============================================
+//     // BEGIN TRANSACTION
+//     // =============================================
+
+//     await connect_db.query("BEGIN");
+
+//     // =============================================
+//     // CHECK PARENT ORDER
+//     // =============================================
+
+//     const orderQuery = `
+//       SELECT
+//         row_id,
+//         shop_id,
+//         supplier_id,
+//         order_status,
+//         order_type,
+//         parent_order_id,
+//         resolution_status
+//       FROM sms.orders
+//       WHERE row_id = '${safeOrderId}'
+//       AND shop_id = '${shopId.replaceAll("'", "`")}'
+//       LIMIT 1
+//       FOR UPDATE
+//     `;
+
+//     const orderResult = await db_query.customQuery(
+//       orderQuery,
+//       "Check Parent Order",
+//     );
+
+//     if (!orderResult.data?.length) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order not found",
+//         data: [],
+//       });
+//     }
+
+//     const parentOrder = orderResult.data[0];
+
+//     // =============================================
+//     // REORDER ONLY FOR NORMAL / REORDER ORDER
+//     // =============================================
+
+//     if (!["NORMAL", "REORDER"].includes(parentOrder.order_type || "NORMAL")) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Invalid order type for reorder",
+//         data: [],
+//       });
+//     }
+
+//     // =============================================
+//     // ORDER STATUS VALIDATION
+//     // =============================================
+
+//     if (
+//       !["DELIVERED", "DISPATCHED", "ACCEPTED", "PARTIAL"].includes(
+//         parentOrder.order_status,
+//       )
+//     ) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Re-order is not allowed for current order status",
+//         data: [],
+//       });
+//     }
+
+//     // =============================================
+//     // RESOLUTION CHECK
+//     // =============================================
+
+//     if (parentOrder.resolution_status === "RESOLVED") {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Order is already resolved. No remaining quantity available",
+//         data: [],
+//       });
+//     }
+
+//     // =============================================
+//     // FETCH ROOT ITEMS
+//     // =============================================
+
+//     const remainingQuery = `
+//       SELECT
+//         root.row_id AS order_item_id,
+//         root.sweet_id,
+//         root.counter_id,
+//         root.quantity,
+//         root.supplied_quantity,
+//         root.cancelled_quantity,
+
+//         GREATEST(
+//           0,
+//           root.quantity::numeric
+//           - COALESCE(root.supplied_quantity, 0)::numeric
+//           - COALESCE(
+//               (
+//                 SELECT SUM(
+//                   COALESCE(child.supplied_quantity, 0)::numeric
+//                 )
+//                 FROM sms.order_items child
+//                 WHERE child.parent_order_item_id = root.row_id
+//               ),
+//               0
+//             )
+//           - COALESCE(root.cancelled_quantity, 0)::numeric
+//         ) AS remaining_quantity
+
+//       FROM sms.order_items root
+
+//       WHERE root.row_id IN (${itemIdString})
+
+//       AND root.order_id = '${safeOrderId}'
+
+//       AND root.parent_order_item_id IS NULL
+
+//       FOR UPDATE
+//     `;
+
+//     const remainingResult = await db_query.customQuery(
+//       remainingQuery,
+//       "Calculate Remaining",
+//     );
+
+//     // =============================================
+//     // CHECK ALL REQUESTED ITEMS ARE VALID ROOT ITEMS
+//     // =============================================
+
+//     if (
+//       !remainingResult.data ||
+//       remainingResult.data.length !== itemIds.length
+//     ) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Some order items are invalid or are not root order items",
+//         data: [],
+//       });
+//     }
+
+//     // =============================================
+//     // ONLY ITEMS WITH REMAINING QUANTITY
+//     // =============================================
+
+//     const validItems = (remainingResult.data || []).filter(
+//       (item) => Number(item.remaining_quantity) > 0,
+//     );
+
+//     if (validItems.length === 0) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "No remaining quantity available",
+//         data: [],
+//       });
+//     }
+
+//     // =============================================
+//     // CREATE REORDER ORDER
+//     // =============================================
+
+//     const reorderOrderId =
+//       Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+
+//     const createOrderQuery = `
+//       INSERT INTO sms.orders (
+//         row_id,
+//         shop_id,
+//         supplier_id,
+//         order_status,
+//         order_date,
+//         parent_order_id,
+//         order_type,
+//         resolution_status
+//       )
+//       VALUES (
+//         '${reorderOrderId}',
+//         '${parentOrder.shop_id}',
+//         '${parentOrder.supplier_id}',
+//         'PENDING',
+//         NOW(),
+//         '${safeOrderId}',
+//         'REORDER',
+//         'OPEN'
+//       )
+//     `;
+
+//     await db_query.customQuery(createOrderQuery, "Create Reorder Order");
+
+//     // =============================================
+//     // CREATE REORDER ITEMS
+//     // =============================================
+
+//     for (const item of validItems) {
+//       const reorderItemId =
+//         Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+
+//       const quantity = Number(item.remaining_quantity);
+
+//       await db_query.customQuery(
+//         `
+//         INSERT INTO sms.order_items (
+//           row_id,
+//           order_id,
+//           request_id,
+//           sweet_id,
+//           quantity,
+//           counter_id,
+//           supplied_quantity,
+//           cancelled_quantity,
+//           item_status,
+//           parent_order_item_id,
+//           remaining_action,
+//           remaining_action_on
+//         )
+//         VALUES (
+//           '${reorderItemId}',
+//           '${reorderOrderId}',
+//           NULL,
+//           '${item.sweet_id}',
+//           ${quantity},
+//           '${item.counter_id}',
+//           0,
+//           0,
+//           'PENDING',
+//           '${item.order_item_id}',
+//           'PENDING',
+//           NULL
+//         )
+//         `,
+//         "Create Reorder Item",
+//       );
+
+//       // =========================================
+//       // MARK ROOT ITEM AS REORDERED
+//       // =========================================
+
+//       await db_query.customQuery(`
+//         UPDATE sms.order_items
+//         SET
+//           remaining_action = 'REORDERED',
+//           remaining_action_on = NOW(),
+//           up_on = NOW()
+//         WHERE row_id = '${item.order_item_id}'
+//       `);
+//     }
+
+//     // =============================================
+//     // PARENT ORDER REMAINS OPEN
+//     // =============================================
+
+//     await db_query.customQuery(`
+//       UPDATE sms.orders
+//       SET
+//         resolution_status = 'OPEN',
+//         up_on = NOW()
+//       WHERE row_id = '${safeOrderId}'
+//     `);
+
+//     // =============================================
+//     // COMMIT
+//     // =============================================
+
+//     await connect_db.query("COMMIT");
+
+//     // =============================================
+//     // NOTIFY SUPPLIER
+//     // =============================================
+
+//     const supplierUsers = await db_query.customQuery(`
+//       SELECT
+//         row_id
+//       FROM sms.users
+//       WHERE supplier_id = '${parentOrder.supplier_id}'
+//     `);
+
+//     if (supplierUsers.data?.length) {
+//       for (const supplierUser of supplierUsers.data) {
+//         await createNotification({
+//           user_id: supplierUser.row_id,
+
+//           title: "Re-order Received",
+
+//           message: `Re-order created with ${validItems.length} item(s)`,
+
+//           type: "ORDER",
+
+//           reference_id: reorderOrderId,
+//         });
+//       }
+//     }
+
+//     // =============================================
+//     // RESPONSE
+//     // =============================================
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+
+//       msg: "Remaining quantity reordered successfully",
+
+//       data: {
+//         parent_order_id: order_id,
+
+//         reorder_order_id: reorderOrderId,
+
+//         order_type: "REORDER",
+
+//         resolution_status: "OPEN",
+
+//         items: validItems.map((item) => ({
+//           order_item_id: item.order_item_id,
+//           sweet_id: item.sweet_id,
+//           counter_id: item.counter_id,
+//           remaining_quantity: Number(item.remaining_quantity),
+//         })),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("reorderRemaining error:", error);
+
+//     try {
+//       await connect_db.query("ROLLBACK");
+//     } catch (rollbackError) {
+//       console.log("Rollback error:", rollbackError);
+//     }
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Failed to reorder remaining quantity",
+//       data: [],
+//       error: error.message,
+//     });
+//   }
+// }
+
+async function reorderRemaining(req, res) {
+  try {
+    const user = req.data;
+
+    // =====================================================
+    // ROLE VALIDATION
+    // =====================================================
+
+    if (!user || user.user_role !== "SHOP_ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only SHOP_ADMIN can reorder remaining quantity",
+        data: [],
+      });
+    }
+
+    const { order_id, items } = req.data || {};
+
+    // =====================================================
+    // BASIC VALIDATION
+    // =====================================================
+
+    if (!order_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order ID required",
+        data: [],
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Items required",
+        data: [],
+      });
+    }
+
+    if (!user.shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID not found in token",
+        data: [],
+      });
+    }
+
+    const shopId = user.shopId;
+
+    const safeOrderId = String(order_id).trim().replaceAll("'", "`");
+
+    const safeShopId = String(shopId).trim().replaceAll("'", "`");
+
+    // =====================================================
+    // UNIQUE ITEM IDS
+    // =====================================================
+
+    const itemIds = [
+      ...new Set(
+        items
+          .map((x) => x.order_item_id)
+          .filter(Boolean)
+          .map((id) => String(id).trim()),
+      ),
+    ];
+
+    if (itemIds.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Valid order item IDs required",
+        data: [],
+      });
+    }
+
+    const itemIdString = itemIds
+      .map((id) => `'${id.replaceAll("'", "`")}'`)
+      .join(",");
+
+    // =====================================================
+    // BEGIN TRANSACTION
+    // =====================================================
+
+    await connect_db.query("BEGIN");
+
+    // =====================================================
+    // GET SELECTED ORDER
+    //
+    // If selected order is REORDER,
+    // parent_order_id will point to root order.
+    // =====================================================
+
+    const orderQuery = `
+      SELECT
+        row_id,
+        shop_id,
+        supplier_id,
+        order_status,
+        order_type,
+        parent_order_id,
+        resolution_status
+      FROM sms.orders
+      WHERE row_id = '${safeOrderId}'
+        AND shop_id = '${safeShopId}'
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    const orderResult = await db_query.customQuery(
+      orderQuery,
+      "Check Reorder Source Order",
+    );
+
+    if (!orderResult.data?.length) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order not found",
+        data: [],
+      });
+    }
+
+    const selectedOrder = orderResult.data[0];
+
+    // =====================================================
+    // VALID ORDER TYPE
+    // =====================================================
+
+    if (!["NORMAL", "REORDER"].includes(selectedOrder.order_type || "NORMAL")) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid order type for reorder",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // FIND ROOT ORDER
+    //
+    // NORMAL:
+    // rootOrderId = selected order
+    //
+    // REORDER:
+    // rootOrderId = original parent order
+    // =====================================================
+
+    let rootOrderId = selectedOrder.row_id;
+
+    if (
+      selectedOrder.order_type === "REORDER" &&
+      selectedOrder.parent_order_id
+    ) {
+      rootOrderId = selectedOrder.parent_order_id;
+    }
+
+    rootOrderId = String(rootOrderId).trim().replaceAll("'", "`");
+
+    // =====================================================
+    // FETCH ROOT ORDER
+    // =====================================================
+
+    const rootOrderQuery = `
+      SELECT
+        row_id,
+        shop_id,
+        supplier_id,
+        order_status,
+        order_type,
+        parent_order_id,
+        resolution_status
+      FROM sms.orders
+      WHERE row_id = '${rootOrderId}'
+        AND shop_id = '${safeShopId}'
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    const rootOrderResult = await db_query.customQuery(
+      rootOrderQuery,
+      "Check Root Order",
+    );
+
+    if (!rootOrderResult.data?.length) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Root order not found",
+        data: [],
+      });
+    }
+
+    const rootOrder = rootOrderResult.data[0];
+
+    // =====================================================
+    // ROOT ORDER MUST NOT BE RESOLVED
+    // =====================================================
+
+    if (rootOrder.resolution_status === "RESOLVED") {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order is already resolved. No remaining quantity available",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // ORDER STATUS VALIDATION
+    //
+    // Reorder can happen after:
+    //
+    // ACCEPTED
+    // PARTIAL
+    // DISPATCHED
+    // DELIVERED
+    // =====================================================
+
+    if (
+      !["DELIVERED", "DISPATCHED", "ACCEPTED", "PARTIAL"].includes(
+        selectedOrder.order_status,
+      )
+    ) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Re-order is not allowed for current order status",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // RESOLVE REQUESTED ITEM IDS TO ROOT ITEMS
+    //
+    // User can send:
+    //
+    // 1. Original/root order_item_id
+    //
+    // OR
+    //
+    // 2. Reorder child order_item_id
+    //
+    // In both cases we find the ROOT item.
+    // =====================================================
+
+    const resolveRootItemsQuery = `
+      SELECT
+        child.row_id AS requested_item_id,
+
+        CASE
+          WHEN child.parent_order_item_id IS NULL
+            THEN child.row_id
+
+          ELSE child.parent_order_item_id
+        END AS root_order_item_id
+
+      FROM sms.order_items child
+
+      WHERE child.row_id IN (${itemIdString})
+
+      OR child.parent_order_item_id IN (${itemIdString})
+    `;
+
+    const resolveRootItemsResult = await db_query.customQuery(
+      resolveRootItemsQuery,
+      "Resolve Root Order Items",
+    );
+
+    const resolvedRows = resolveRootItemsResult.data || [];
+
+    // =====================================================
+    // CREATE ROOT ITEM ID MAP
+    // =====================================================
+
+    const rootItemIds = [
+      ...new Set(
+        resolvedRows.map((item) => item.root_order_item_id).filter(Boolean),
+      ),
+    ];
+
+    if (rootItemIds.length === 0) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "No valid root order items found",
+        data: [],
+      });
+    }
+
+    const rootItemIdString = rootItemIds
+      .map((id) => `'${String(id).replaceAll("'", "`")}'`)
+      .join(",");
+
+    // =====================================================
+    // FETCH ROOT ITEMS + CALCULATE ACTUAL REMAINING
+    //
+    // Remaining:
+    //
+    // Root Requested
+    // - Root Supplied
+    // - All Reorder Supplied
+    // - Cancelled
+    //
+    // IMPORTANT:
+    // quantity is TEXT in order_items,
+    // therefore ::numeric is required.
+    // =====================================================
+
+    const remainingQuery = `
+      SELECT
+
+        root.row_id AS order_item_id,
+
+        root.sweet_id,
+
+        root.counter_id,
+
+        root.quantity,
+
+        root.supplied_quantity,
+
+        root.cancelled_quantity,
+
+        root.remaining_action,
+
+        root.remaining_action_on,
+
+
+        /* ================================================
+           REORDER SUPPLIED
+        ================================================= */
+
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(
+                child.supplied_quantity,
+                0
+              )::numeric
+            )
+
+            FROM sms.order_items child
+
+            WHERE child.parent_order_item_id =
+                  root.row_id
+          ),
+          0
+        )::numeric AS reorder_supplied_quantity,
+
+
+        /* ================================================
+           ACTUAL REMAINING
+        ================================================= */
+
+        GREATEST(
+
+          root.quantity::numeric
+
+          -
+
+          COALESCE(
+            root.supplied_quantity,
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(
+                  child.supplied_quantity,
+                  0
+                )::numeric
+              )
+
+              FROM sms.order_items child
+
+              WHERE child.parent_order_item_id =
+                    root.row_id
+            ),
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            root.cancelled_quantity,
+            0
+          )::numeric,
+
+          0
+
+        ) AS remaining_quantity
+
+
+      FROM sms.order_items root
+
+      WHERE root.row_id IN (
+        ${rootItemIdString}
+      )
+
+      AND root.order_id = '${rootOrderId}'
+
+      AND root.parent_order_item_id IS NULL
+
+      FOR UPDATE
+    `;
+
+    const remainingResult = await db_query.customQuery(
+      remainingQuery,
+      "Calculate Root Remaining Quantity",
+    );
+
+    const rootItems = remainingResult.data || [];
+
+    // =====================================================
+    // CHECK ALL ITEMS ARE VALID
+    // =====================================================
+
+    if (rootItems.length !== rootItemIds.length) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Some order items are invalid or are not root order items",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // ONLY ITEMS WITH REMAINING QUANTITY
+    // =====================================================
+
+    const validItems = (remainingResult.data || []).filter(
+      (item) => Number(item.remaining_quantity) > 0,
+    );
+
+    if (validItems.length === 0) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "No remaining quantity available",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // ROOT ITEM IDS
+    // =====================================================
+
+    const validRootItemIds = validItems.map(
+      (item) => `'${String(item.order_item_id).replaceAll("'", "`")}'`,
+    );
+
+    // =====================================================
+    // CHECK ACTIVE REORDER
+    //
+    // PENDING / ACCEPTED
+    // → BLOCK
+    //
+    // PARTIAL
+    // → ALLOW next reorder
+    //
+    // REJECTED
+    // → ALLOW
+    //
+    // DELIVERED
+    // → ALLOW if remaining > 0
+    // =====================================================
+
+    const activeReorderQuery = `
+  SELECT
+
+    child.parent_order_item_id
+      AS root_order_item_id,
+
+    child.order_id
+      AS reorder_order_id,
+
+    child.row_id
+      AS reorder_order_item_id,
+
+    child.quantity::numeric
+      AS reorder_quantity,
+
+    COALESCE(
+      child.supplied_quantity,
+      0
+    )::numeric AS supplied_quantity,
+
+    COALESCE(
+      child.cancelled_quantity,
+      0
+    )::numeric AS cancelled_quantity,
+
+    GREATEST(
+      child.quantity::numeric
+      -
+      COALESCE(
+        child.supplied_quantity,
+        0
+      )::numeric
+      -
+      COALESCE(
+        child.cancelled_quantity,
+        0
+      )::numeric,
+      0
+    ) AS reorder_remaining_quantity,
+
+    child.item_status,
+
+    reorder.order_status,
+
+    reorder.resolution_status,
+
+    reorder.order_type,
+
+    reorder.parent_order_id
+
+  FROM sms.order_items child
+
+  INNER JOIN sms.orders reorder
+    ON reorder.row_id = child.order_id
+
+  WHERE child.parent_order_item_id IN (
+    ${validRootItemIds.join(",")}
+  )
+
+  AND reorder.order_type = 'REORDER'
+
+  AND GREATEST(
+    child.quantity::numeric
+    -
+    COALESCE(
+      child.supplied_quantity,
+      0
+    )::numeric
+    -
+    COALESCE(
+      child.cancelled_quantity,
+      0
+    )::numeric,
+    0
+  ) > 0
+
+  AND child.item_status IN (
+    'PENDING',
+    'ACCEPTED'
+  )
+
+  ORDER BY reorder.cr_on DESC
+
+  LIMIT 1
+`;
+
+    const activeReorderResult = await db_query.customQuery(
+      activeReorderQuery,
+      "Check Active Reorder",
+    );
+
+    const activeReorders = activeReorderResult.data || [];
+
+    // =====================================================
+    // BLOCK DUPLICATE / ACTIVE REORDER
+    // =====================================================
+
+    if (activeReorders.length > 0) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+
+        msg: "Re-order is already in progress for one or more items. Please wait until the current re-order is processed.",
+
+        data: activeReorders.map((item) => ({
+          root_order_item_id: item.root_order_item_id,
+
+          reorder_order_id: item.reorder_order_id,
+
+          reorder_order_item_id: item.reorder_order_item_id,
+
+          reorder_quantity: Number(item.reorder_quantity || 0),
+
+          supplied_quantity: Number(item.supplied_quantity || 0),
+
+          cancelled_quantity: Number(item.cancelled_quantity || 0),
+
+          remaining_quantity: Number(item.reorder_remaining_quantity || 0),
+
+          item_status: item.item_status,
+
+          order_status: item.order_status,
+
+          resolution_status: item.resolution_status,
+
+          order_type: item.order_type,
+
+          parent_order_id: item.parent_order_id,
+        })),
+      });
+    }
+
+    // =====================================================
+    // CREATE REORDER ORDER
+    // =====================================================
+
+    const reorderOrderId =
+      Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+
+    const createOrderQuery = `
+      INSERT INTO sms.orders (
+
+        row_id,
+
+        shop_id,
+
+        supplier_id,
+
+        order_status,
+
+        order_date,
+
+        parent_order_id,
+
+        order_type,
+
+        resolution_status
+
+      )
+
+      VALUES (
+
+        '${reorderOrderId}',
+
+        '${rootOrder.shop_id}',
+
+        '${rootOrder.supplier_id}',
+
+        'PENDING',
+
+        NOW(),
+
+        '${rootOrderId}',
+
+        'REORDER',
+
+        'OPEN'
+
+      )
+    `;
+
+    await db_query.customQuery(createOrderQuery, "Create Reorder Order");
+
+    // =====================================================
+    // CREATE REORDER ITEMS
+    // =====================================================
+
+    const createdItems = [];
+
+    for (const item of validItems) {
+      const reorderItemId =
+        Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+
+      const quantity = Number(item.remaining_quantity);
+
+      // ===================================================
+      // SAFETY
+      // ===================================================
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        continue;
+      }
+
+      // ===================================================
+      // CREATE REORDER ITEM
+      // ===================================================
+
+      await db_query.customQuery(
+        `
+          INSERT INTO sms.order_items (
+
+            row_id,
+
+            order_id,
+
+            request_id,
+
+            sweet_id,
+
+            quantity,
+
+            counter_id,
+
+            supplied_quantity,
+
+            cancelled_quantity,
+
+            item_status,
+
+            parent_order_item_id,
+
+            remaining_action,
+
+            remaining_action_on
+
+          )
+
+          VALUES (
+
+            '${reorderItemId}',
+
+            '${reorderOrderId}',
+
+            NULL,
+
+            '${item.sweet_id}',
+
+            ${quantity},
+
+            '${item.counter_id}',
+
+            0,
+
+            0,
+
+            'PENDING',
+
+            '${item.order_item_id}',
+
+            'PENDING',
+
+            NULL
+
+          )
+        `,
+        "Create Reorder Item",
+      );
+
+      // ===================================================
+      // MARK ROOT ITEM
+      // ===================================================
+
+      await db_query.customQuery(
+        `
+          UPDATE sms.order_items
+
+          SET
+
+            remaining_action = 'REORDERED',
+
+            remaining_action_on = NOW(),
+
+            up_on = NOW()
+
+          WHERE row_id =
+                '${item.order_item_id}'
+        `,
+        "Mark Root Item Reordered",
+      );
+
+      // ===================================================
+      // RESPONSE ITEM
+      // ===================================================
+
+      createdItems.push({
+        root_order_item_id: item.order_item_id,
+
+        reorder_order_item_id: reorderItemId,
+
+        sweet_id: item.sweet_id,
+
+        counter_id: item.counter_id,
+
+        reorder_quantity: quantity,
+
+        previous_supplied_quantity: Number(item.supplied_quantity || 0),
+
+        previous_reorder_supplied_quantity: Number(
+          item.reorder_supplied_quantity || 0,
+        ),
+
+        remaining_quantity: quantity,
+      });
+    }
+
+    // =====================================================
+    // SAFETY: NO ITEM CREATED
+    // =====================================================
+
+    if (createdItems.length === 0) {
+      await connect_db.query("ROLLBACK");
+
+      return libFunc.sendResponse(res, {
+        status: 1,
+
+        msg: "No valid remaining items available for reorder",
+
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // ROOT ORDER REMAINS OPEN
+    //
+    // Because business resolution is across
+    // original + reorder orders.
+    // =====================================================
+
+    await db_query.customQuery(
+      `
+        UPDATE sms.orders
+
+        SET
+
+          resolution_status = 'OPEN',
+
+          up_on = NOW()
+
+        WHERE row_id =
+              '${rootOrderId}'
+      `,
+      "Keep Root Order Open",
+    );
+
+    // =====================================================
+    // COMMIT
+    // =====================================================
+
+    await connect_db.query("COMMIT");
+
+    // =====================================================
+    // NOTIFY SUPPLIER
+    // =====================================================
+
+    try {
+      const supplierUsers = await db_query.customQuery(
+        `
+            SELECT
+              row_id
+
+            FROM sms.users
+
+            WHERE supplier_id =
+                  '${rootOrder.supplier_id}'
+          `,
+        "Get Supplier Users",
+      );
+
+      if (supplierUsers.data?.length) {
+        for (const supplierUser of supplierUsers.data) {
+          await createNotification({
+            user_id: supplierUser.row_id,
+
+            title: "Re-order Received",
+
+            message: `Re-order ${reorderOrderId} created with ${createdItems.length} item(s)`,
+
+            type: "ORDER",
+
+            reference_id: reorderOrderId,
+
+            reference_type: "ORDER",
+
+            priority: "NORMAL",
+          });
+        }
+      }
+    } catch (notificationError) {
+      // Notification failure should not
+      // make successful reorder fail.
+
+      console.log("Reorder notification error:", notificationError);
+    }
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    return libFunc.sendResponse(res, {
+      status: 0,
+
+      msg: "Remaining quantity reordered successfully",
+
+      data: {
+        root_order_id: rootOrderId,
+
+        requested_from_order_id: order_id,
+
+        reorder_order_id: reorderOrderId,
+
+        order_type: "REORDER",
+
+        parent_order_id: rootOrderId,
+
+        resolution_status: "OPEN",
+
+        items: createdItems,
+      },
+    });
+  } catch (error) {
+    console.error("reorderRemaining error:", error);
+
+    // =====================================================
+    // ROLLBACK
+    // =====================================================
+
+    try {
+      await connect_db.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.log("Rollback error:", rollbackError);
+    }
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+
+      msg: "Failed to reorder remaining quantity",
+
+      data: [],
+
+      error: error.message,
+    });
+  }
+}
+// {
+//   "order_id": "ORDER-001",
+//   "items": [
+//     {
+//       "order_item_id": "OI-001"
+//     },
+//     {
+//       "order_item_id": "OI-002"
+//     }
+//   ]
+// }
+
+async function cancelRemaining(req, res) {
+  try {
+    const user = req.data;
+
+    // =====================================================
+    // ROLE CHECK
+    // =====================================================
+
+    if (!user || user.user_role !== "SHOP_ADMIN") {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Only SHOP_ADMIN can cancel remaining quantity",
+        data: [],
+      });
+    }
+
+    const { order_id, items } = req.data;
+
+    if (!order_id) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Order ID required",
+        data: [],
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Items required",
+        data: [],
+      });
+    }
+
+    const shopId = user.shopId;
+
+    if (!shopId) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Shop ID not found",
+        data: [],
+      });
+    }
+
+    // =====================================================
+    // UNIQUE ITEM IDS
+    // =====================================================
+
+    const itemIds = [
+      ...new Set(items.map((x) => x.order_item_id).filter((id) => id)),
+    ];
+
+    if (itemIds.length === 0) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Valid order item IDs required",
+        data: [],
+      });
+    }
+
+    const itemIdString = itemIds.map((id) => `'${id}'`).join(",");
+
+    // =====================================================
+    // BEGIN TRANSACTION
+    // =====================================================
+
+    await db_query.customQuery("BEGIN", "Begin Cancel Remaining");
+
+    try {
+      // ===================================================
+      // CHECK PARENT ORDER
+      // ===================================================
+
+      const orderQuery = `
+        SELECT
+          row_id,
+          shop_id,
+          supplier_id,
+          order_status,
+          order_type,
+          resolution_status
+        FROM sms.orders
+        WHERE row_id = '${order_id}'
+        AND shop_id = '${shopId}'
+        LIMIT 1
+        FOR UPDATE
+      `;
+
+      const orderResult = await db_query.customQuery(
+        orderQuery,
+        "Check Cancel Order",
+      );
+
+      if (!orderResult.data || orderResult.data.length === 0) {
+        throw new Error("ORDER_NOT_FOUND");
+      }
+
+      const order = orderResult.data[0];
+
+      // ===================================================
+      // ALREADY RESOLVED CHECK
+      // ===================================================
+
+      if (order.resolution_status === "RESOLVED") {
+        throw new Error("ORDER_ALREADY_RESOLVED");
+      }
+
+      // ===================================================
+      // ORDER STATUS CHECK
+      // ===================================================
+      //
+      // Cancellation is allowed only after supplier has
+      // processed the order.
+      //
+      // PENDING is intentionally not allowed.
+      //
+
+      const allowedStatuses = [
+        "ACCEPTED",
+        "PARTIAL",
+        "DISPATCHED",
+        "DELIVERED",
+      ];
+
+      if (!allowedStatuses.includes(order.order_status)) {
+        throw new Error("INVALID_ORDER_STATUS");
+      }
+
+      // ===================================================
+      // GET ROOT ITEMS + LOCK
+      // ===================================================
+
+      const itemQuery = `
+        SELECT
+          root.row_id AS order_item_id,
+          root.sweet_id,
+          root.counter_id,
+          root.quantity,
+
+          COALESCE(
+            root.supplied_quantity,
+            0
+          )::numeric AS supplied_quantity,
+
+          COALESCE(
+            root.cancelled_quantity,
+            0
+          )::numeric AS cancelled_quantity,
+
+          GREATEST(
+            0,
+
+            root.quantity::numeric
+
+            -
+
+            COALESCE(
+              root.supplied_quantity,
+              0
+            )::numeric
+
+            -
+
+            COALESCE(
+              (
+                SELECT SUM(
+                  COALESCE(
+                    child.supplied_quantity,
+                    0
+                  )::numeric
+                )
+                FROM sms.order_items child
+                WHERE child.parent_order_item_id = root.row_id
+              ),
+              0
+            )::numeric
+
+            -
+
+            COALESCE(
+              root.cancelled_quantity,
+              0
+            )::numeric
+
+          ) AS remaining_quantity
+
+        FROM sms.order_items root
+
+        JOIN sms.orders o
+          ON o.row_id = root.order_id
+
+        WHERE root.row_id IN (${itemIdString})
+
+        AND root.order_id = '${order_id}'
+
+        AND root.parent_order_item_id IS NULL
+
+        AND o.shop_id = '${shopId}'
+
+        FOR UPDATE
+      `;
+
+      const itemResult = await db_query.customQuery(
+        itemQuery,
+        "Get Remaining For Cancel",
+      );
+
+      const foundItems = itemResult.data || [];
+
+      // ===================================================
+      // CHECK ALL REQUESTED ITEMS EXIST
+      // ===================================================
+
+      if (foundItems.length !== itemIds.length) {
+        throw new Error("INVALID_ORDER_ITEMS");
+      }
+
+      // ===================================================
+      // ONLY ITEMS WITH REMAINING QUANTITY
+      // ===================================================
+
+      const validItems = foundItems.filter(
+        (item) => Number(item.remaining_quantity) > 0,
+      );
+
+      if (validItems.length === 0) {
+        throw new Error("NO_REMAINING_QUANTITY");
+      }
+
+      // ===================================================
+      // CANCEL EXACT REMAINING QUANTITY
+      // ===================================================
+
+      for (const item of validItems) {
+        const remaining = Number(item.remaining_quantity);
+
+        const updateQuery = `
+          UPDATE sms.order_items
+
+          SET
+            cancelled_quantity =
+              COALESCE(
+                cancelled_quantity,
+                0
+              ) + ${remaining},
+
+            remaining_action = 'CANCELLED',
+
+            remaining_action_on = NOW(),
+
+            up_on = NOW()
+
+          WHERE row_id = '${item.order_item_id}'
+          AND order_id = '${order_id}'
+          AND parent_order_item_id IS NULL
+        `;
+
+        await db_query.customQuery(updateQuery, "Cancel Remaining Item");
+      }
+
+      // ===================================================
+      // UPDATE ORDER RESOLUTION
+      // ===================================================
+
+      await updateOrderResolution(order_id);
+
+      // ===================================================
+      // COMMIT
+      // ===================================================
+
+      await db_query.customQuery("COMMIT", "Commit Cancel Remaining");
+
+      // ===================================================
+      // RESPONSE
+      // ===================================================
+
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Remaining quantity cancelled successfully",
+        data: validItems.map((item) => ({
+          order_item_id: item.order_item_id,
+          sweet_id: item.sweet_id,
+          counter_id: item.counter_id,
+          cancelled_quantity: Number(item.remaining_quantity),
+          remaining_quantity: 0,
+          remaining_action: "CANCELLED",
+        })),
+      });
+    } catch (error) {
+      // ===================================================
+      // ROLLBACK
+      // ===================================================
+
+      await db_query.customQuery("ROLLBACK", "Rollback Cancel Remaining");
+
+      // ===================================================
+      // BUSINESS ERRORS
+      // ===================================================
+
+      if (error.message === "ORDER_NOT_FOUND") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Order not found",
+          data: [],
+        });
+      }
+
+      if (error.message === "ORDER_ALREADY_RESOLVED") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Order is already resolved",
+          data: [],
+        });
+      }
+
+      if (error.message === "INVALID_ORDER_STATUS") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Remaining quantity cannot be cancelled while order is pending",
+          data: [],
+        });
+      }
+
+      if (error.message === "INVALID_ORDER_ITEMS") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "One or more order items are invalid",
+          data: [],
+        });
+      }
+
+      if (error.message === "NO_REMAINING_QUANTITY") {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "No remaining quantity available for cancellation",
+          data: [],
+        });
+      }
+
+      throw error;
+    }
+  } catch (error) {
+    console.error("cancelRemaining error:", error);
+
+    return libFunc.sendResponse(res, {
+      status: 1,
+      msg: "Failed to cancel remaining quantity",
+      data: [],
+    });
+  }
+}
+
+// {
+//   "order_id": "ORDER-001",
+//   "items": [
+//     {
+//       "order_item_id": "OI-002"
+//     }
+//   ]
+// }
+
+async function updateOrderResolution(orderId) {
+  try {
+    // =====================================================
+    // GET ROOT ORDER ITEMS
+    // =====================================================
+
+    const query = `
+      SELECT
+        root.row_id,
+
+        GREATEST(
+          0,
+
+          root.quantity::numeric
+
+          -
+
+          COALESCE(
+            root.supplied_quantity,
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            (
+              SELECT SUM(
+                COALESCE(
+                  child.supplied_quantity,
+                  0
+                )::numeric
+              )
+              FROM sms.order_items child
+              WHERE child.parent_order_item_id = root.row_id
+            ),
+            0
+          )::numeric
+
+          -
+
+          COALESCE(
+            root.cancelled_quantity,
+            0
+          )::numeric
+
+        ) AS remaining_quantity
+
+      FROM sms.order_items root
+
+      WHERE root.order_id = '${orderId}'
+
+      AND root.parent_order_item_id IS NULL
+    `;
+
+    const result = await db_query.customQuery(query, "Check Order Resolution");
+
+    const items = result.data || [];
+
+    // =====================================================
+    // NO ITEMS
+    // =====================================================
+
+    if (items.length === 0) {
+      console.log(`No root items found for order: ${orderId}`);
+
+      return;
+    }
+
+    // =====================================================
+    // CHECK REMAINING
+    // =====================================================
+
+    const remainingExists = items.some(
+      (item) => Number(item.remaining_quantity) > 0,
+    );
+
+    // =====================================================
+    // UPDATE ORDER RESOLUTION
+    // =====================================================
+
+    const resolutionStatus = remainingExists ? "OPEN" : "RESOLVED";
+
+    await db_query.customQuery(
+      `
+        UPDATE sms.orders
+        SET
+          resolution_status = '${resolutionStatus}',
+          up_on = NOW()
+        WHERE row_id = '${orderId}'
+      `,
+      `Update Order Resolution - ${resolutionStatus}`,
+    );
+
+    console.log(`Order ${orderId} resolution updated to ${resolutionStatus}`);
+  } catch (error) {
+    console.error("updateOrderResolution error:", error);
+
+    throw error;
   }
 }

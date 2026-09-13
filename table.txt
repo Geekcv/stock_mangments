@@ -363,3 +363,28 @@ ADD COLUMN shop_id TEXT NOT NULL;
 ALTER TABLE sms.order_items
 ADD COLUMN request_id TEXT
 REFERENCES sms.counter_requests(row_id);
+
+
+ALTER TABLE sms.orders
+ADD COLUMN IF NOT EXISTS parent_order_id TEXT
+REFERENCES sms.orders(row_id);
+
+ALTER TABLE sms.orders
+ADD COLUMN IF NOT EXISTS order_type TEXT DEFAULT 'NORMAL';
+
+ALTER TABLE sms.orders
+ADD COLUMN IF NOT EXISTS resolution_status TEXT DEFAULT 'OPEN';
+
+
+ALTER TABLE sms.order_items
+ADD COLUMN IF NOT EXISTS parent_order_item_id TEXT
+REFERENCES sms.order_items(row_id);
+
+ALTER TABLE sms.order_items
+ADD COLUMN IF NOT EXISTS cancelled_quantity NUMERIC DEFAULT 0;
+
+ALTER TABLE sms.order_items
+ADD COLUMN IF NOT EXISTS remaining_action TEXT DEFAULT 'PENDING';
+
+ALTER TABLE sms.order_items
+ADD COLUMN IF NOT EXISTS remaining_action_on TIMESTAMP;

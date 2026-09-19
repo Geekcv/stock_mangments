@@ -9441,12 +9441,6 @@ async function downloadOrderRequestPDF(req, res) {
     const counterTable = schema + ".counters";
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
-
-    /*
-     * IMPORTANT:
-     * If supplier table exists in your project,
-     * keep this table.
-     */
     const supplierTable = schema + ".suppliers";
 
     // =====================================================
@@ -9623,21 +9617,17 @@ async function downloadOrderRequestPDF(req, res) {
     const order = data[0];
 
     // =====================================================
-    // DISPLAY ORDER ID
+    // ORDER DISPLAY ID
     // =====================================================
 
     const orderDisplayId =
       `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
 
     // =====================================================
-    // BASE UPLOAD PATH
+    // PATHS
     // =====================================================
 
     const BASE_UPLOAD_PATH = "/home/uploads";
-
-    // =====================================================
-    // PDF FOLDER
-    // =====================================================
 
     const folder = path.join(
       BASE_UPLOAD_PATH,
@@ -9664,13 +9654,13 @@ async function downloadOrderRequestPDF(req, res) {
 
     if (!hasLogo) {
       console.log(
-        "Order PDF logo not found:",
+        "Order request logo not found:",
         LOGO_PATH
       );
     }
 
     // =====================================================
-    // FILE NAME
+    // FILE
     // =====================================================
 
     const fileName =
@@ -9682,24 +9672,23 @@ async function downloadOrderRequestPDF(req, res) {
     );
 
     // =====================================================
-    // A5 SETTINGS
+    // A5
     // =====================================================
 
     const PAGE_WIDTH = 419.53;
     const PAGE_HEIGHT = 595.28;
 
-    const MARGIN = 24;
+    const MARGIN = 22;
 
     const CONTENT_WIDTH =
       PAGE_WIDTH - MARGIN * 2;
 
     // =====================================================
-    // PDF DOCUMENT
+    // PDF
     // =====================================================
 
     const doc = new PDFDocument({
       size: "A5",
-
       layout: "portrait",
 
       margins: {
@@ -9718,19 +9707,24 @@ async function downloadOrderRequestPDF(req, res) {
     doc.pipe(writeStream);
 
     // =====================================================
-    // COLORS
+    // BRAND COLORS
     // =====================================================
 
-    const BLACK = "#111111";
-    const DARK = "#222222";
-    const GREY = "#666666";
-    const LIGHT_GREY = "#EEEEEE";
-    const BORDER = "#D0D0D0";
-    const ROW_GREY = "#FAFAFA";
-    const TOTAL_GREY = "#E8E8E8";
+    const BRAND_DARK = "#4A2C1F";
+    const BRAND = "#6B4030";
+    const BRAND_LIGHT = "#F4EBDD";
+    const GOLD = "#B68A3A";
+
+    const BLACK = "#171717";
+    const DARK_GREY = "#4F4F4F";
+    const GREY = "#777777";
+
+    const BORDER = "#D8D1CA";
+    const LIGHT = "#FAF8F5";
+    const WHITE = "#FFFFFF";
 
     // =====================================================
-    // HELPER
+    // DATE FORMAT
     // =====================================================
 
     function formatDate(date) {
@@ -9755,46 +9749,7 @@ async function downloadOrderRequestPDF(req, res) {
     }
 
     // =====================================================
-    // DRAW FOOTER
-    // =====================================================
-
-    function drawFooter() {
-      const footerY =
-        PAGE_HEIGHT - 24;
-
-      doc
-        .font("Helvetica")
-        .fontSize(6)
-        .fillColor(GREY)
-        .text(
-          "System generated order request",
-          MARGIN,
-          footerY,
-          {
-            width: CONTENT_WIDTH,
-            align: "center",
-          }
-        );
-
-      doc
-        .font("Helvetica")
-        .fontSize(5.5)
-        .fillColor("#999999")
-        .text(
-          `Generated: ${formatDate(new Date())}`,
-          MARGIN,
-          footerY + 9,
-          {
-            width: CONTENT_WIDTH,
-            align: "center",
-          }
-        );
-
-      doc.fillColor(BLACK);
-    }
-
-    // =====================================================
-    // DRAW ROUND LOGO
+    // ROUND LOGO
     // =====================================================
 
     function drawRoundLogo(
@@ -9809,9 +9764,18 @@ async function downloadOrderRequestPDF(req, res) {
       try {
         doc.save();
 
-        /*
-         * Circular clipping
-         */
+        // Outer gold circle
+        doc
+          .circle(
+            x + size / 2,
+            y + size / 2,
+            size / 2 + 2
+          )
+          .fillColor(BRAND_LIGHT)
+          .fill();
+
+        // Circular clipping
+        doc.save();
 
         doc
           .circle(
@@ -9833,21 +9797,18 @@ async function downloadOrderRequestPDF(req, res) {
 
         doc.restore();
 
-        /*
-         * Circular border
-         */
-
+        // Gold border
         doc
-          .save()
           .circle(
             x + size / 2,
             y + size / 2,
-            size / 2
+            size / 2 + 1
           )
-          .lineWidth(0.8)
-          .strokeColor("#BBBBBB")
-          .stroke()
-          .restore();
+          .lineWidth(1.2)
+          .strokeColor(GOLD)
+          .stroke();
+
+        doc.restore();
 
       } catch (error) {
         console.log(
@@ -9858,48 +9819,228 @@ async function downloadOrderRequestPDF(req, res) {
     }
 
     // =====================================================
+    // DECORATIVE TOP-RIGHT SHAPE
+    // =====================================================
+
+    function drawTopDecoration() {
+      /*
+       * A5 top-right branded shape.
+       * This gives the PDF a premium business identity.
+       */
+
+      const shapeWidth = 125;
+      const shapeHeight = 82;
+
+      const x =
+        PAGE_WIDTH - shapeWidth;
+
+      const y = 0;
+
+      doc.save();
+
+      doc
+        .fillColor(BRAND_DARK);
+
+      doc
+        .moveTo(
+          x + 35,
+          y
+        )
+        .lineTo(
+          PAGE_WIDTH,
+          y
+        )
+        .lineTo(
+          PAGE_WIDTH,
+          y + shapeHeight
+        )
+        .bezierCurveTo(
+          PAGE_WIDTH - 25,
+          y + 75,
+          PAGE_WIDTH - 65,
+          y + 72,
+          x,
+          y + 52
+        )
+        .bezierCurveTo(
+          x + 18,
+          y + 28,
+          x + 30,
+          y + 14,
+          x + 35,
+          y
+        )
+        .fill();
+
+      // Gold accent curve
+      doc
+        .save()
+        .strokeColor(GOLD)
+        .lineWidth(2);
+
+      doc
+        .moveTo(
+          x + 8,
+          y + 58
+        )
+        .bezierCurveTo(
+          x + 35,
+          y + 70,
+          x + 65,
+          y + 72,
+          PAGE_WIDTH,
+          y + 55
+        )
+        .stroke();
+
+      doc.restore();
+
+      // Small decorative text
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(5.5)
+        .fillColor("#F7EAD2")
+        .text(
+          "BUSINESS ORDER",
+          x + 45,
+          y + 27,
+          {
+            width: 65,
+            align: "center",
+          }
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(4.5)
+        .fillColor("#E9D7BE")
+        .text(
+          "PURE • FRESH • TRUSTED",
+          x + 35,
+          y + 39,
+          {
+            width: 80,
+            align: "center",
+          }
+        );
+
+      doc.restore();
+    }
+
+    // =====================================================
+    // FOOTER
+    // =====================================================
+
+    function drawFooter() {
+      const footerY =
+        PAGE_HEIGHT - 25;
+
+      // Small gold line
+      doc
+        .moveTo(
+          MARGIN,
+          footerY - 5
+        )
+        .lineTo(
+          PAGE_WIDTH - MARGIN,
+          footerY - 5
+        )
+        .lineWidth(0.6)
+        .strokeColor(GOLD)
+        .stroke();
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.8)
+        .fillColor(GREY)
+        .text(
+          "System generated order request",
+          MARGIN,
+          footerY + 1,
+          {
+            width: CONTENT_WIDTH,
+            align: "center",
+          }
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.2)
+        .fillColor("#999999")
+        .text(
+          `Generated on ${formatDate(new Date())}`,
+          MARGIN,
+          footerY + 10,
+          {
+            width: CONTENT_WIDTH,
+            align: "center",
+          }
+        );
+    }
+
+    // =====================================================
     // BUSINESS HEADER
     // =====================================================
 
     function drawBusinessHeader(
       continuation = false
     ) {
-      const headerY = doc.y;
+      const startY =
+        continuation
+          ? MARGIN
+          : 24;
 
-      const logoSize = 52;
+      // Top decoration
+      drawTopDecoration();
 
       // ===================================================
-      // LOGO
+      // ROUND LOGO
       // ===================================================
+
+      const logoSize = 58;
 
       drawRoundLogo(
         MARGIN,
-        headerY,
+        startY + 4,
         logoSize
       );
 
       // ===================================================
-      // BUSINESS INFORMATION
+      // BUSINESS DETAILS
       // ===================================================
 
       const businessX =
-        MARGIN + 65;
+        MARGIN + 70;
 
       const businessWidth =
-        CONTENT_WIDTH - 65;
+        CONTENT_WIDTH - 70;
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(14)
-        .fillColor(BLACK)
+        .fontSize(15)
+        .fillColor(BRAND_DARK)
         .text(
           order.shop_name ||
             "JODHPUR SWEETS",
           businessX,
-          headerY + 2,
+          startY + 5,
           {
-            width: businessWidth,
+            width: businessWidth - 80,
             ellipsis: true,
+          }
+        );
+
+      // Tagline
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(5.5)
+        .fillColor(GOLD)
+        .text(
+          "PURE TASTE • HAPPY MOMENTS",
+          businessX,
+          startY + 23,
+          {
+            width: businessWidth - 80,
           }
         );
 
@@ -9913,94 +10054,208 @@ async function downloadOrderRequestPDF(req, res) {
 
       doc
         .font("Helvetica")
-        .fontSize(7)
-        .fillColor(GREY)
+        .fontSize(6.4)
+        .fillColor(DARK_GREY)
         .text(
           address || "-",
           businessX,
-          headerY + 21,
+          startY + 34,
           {
-            width: businessWidth,
+            width: businessWidth - 80,
             ellipsis: true,
           }
         );
 
-      doc.text(
-        `Phone: ${order.shop_phone || "-"}`,
-        businessX,
-        headerY + 34,
-        {
-          width: businessWidth,
-          ellipsis: true,
-        }
-      );
-
       doc
         .font("Helvetica")
-        .fontSize(6.5)
-        .fillColor("#888888")
+        .fontSize(6.4)
+        .fillColor(DARK_GREY)
         .text(
-          "Business Order Management",
+          `Phone: ${order.shop_phone || "-"}`,
           businessX,
-          headerY + 46,
+          startY + 45,
           {
-            width: businessWidth,
+            width: businessWidth - 80,
+            ellipsis: true,
           }
         );
 
-      doc.y =
-        headerY + logoSize + 9;
+      // ===================================================
+      // HEADER BOTTOM LINE
+      // ===================================================
 
-      // ===================================================
-      // LINE
-      // ===================================================
+      const lineY =
+        startY + logoSize + 12;
 
       doc
         .moveTo(
           MARGIN,
-          doc.y
+          lineY
         )
         .lineTo(
           PAGE_WIDTH - MARGIN,
-          doc.y
+          lineY
         )
         .lineWidth(0.8)
-        .strokeColor(DARK)
+        .strokeColor(BRAND)
         .stroke();
 
-      doc.moveDown(0.45);
+      // Small gold dot
+      doc
+        .circle(
+          MARGIN,
+          lineY,
+          2
+        )
+        .fillColor(GOLD)
+        .fill();
+
+      doc.y =
+        lineY + 10;
 
       // ===================================================
-      // TITLE
+      // TITLE BAR
       // ===================================================
 
+      const titleY = doc.y;
+
+      doc
+        .roundedRect(
+          MARGIN,
+          titleY,
+          CONTENT_WIDTH,
+          49,
+          7
+        )
+        .fillColor(BRAND_LIGHT)
+        .fill();
+
+      // Left vertical accent
+      doc
+        .roundedRect(
+          MARGIN,
+          titleY,
+          5,
+          49,
+          3
+        )
+        .fillColor(BRAND)
+        .fill();
+
+      // Order icon-like square
+      doc
+        .roundedRect(
+          MARGIN + 13,
+          titleY + 12,
+          25,
+          25,
+          5
+        )
+        .fillColor(BRAND)
+        .fill();
+
+      // Simple cart/order symbol
       doc
         .font("Helvetica-Bold")
         .fontSize(13)
-        .fillColor(BLACK)
+        .fillColor(WHITE)
         .text(
-          continuation
-            ? "ORDER REQUEST - CONTINUED"
-            : "ORDER REQUEST",
-          MARGIN,
-          doc.y,
+          "≡",
+          MARGIN + 19,
+          titleY + 14,
           {
-            width: CONTENT_WIDTH,
+            width: 14,
             align: "center",
           }
         );
 
-      doc.moveDown(0.45);
+      // Title
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(BLACK)
+        .text(
+          continuation
+            ? "ORDER REQUEST — CONTINUED"
+            : "ORDER REQUEST",
+          MARGIN + 50,
+          titleY + 8,
+          {
+            width: 190,
+          }
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.8)
+        .fillColor(BRAND)
+        .text(
+          "MATERIAL / SWEET ITEMS REQUEST",
+          MARGIN + 51,
+          titleY + 28,
+          {
+            width: 190,
+          }
+        );
+
+      // ===================================================
+      // ORDER NUMBER ON RIGHT
+      // ===================================================
+
+      const orderBoxX =
+        PAGE_WIDTH - MARGIN - 105;
+
+      doc
+        .moveTo(
+          orderBoxX - 8,
+          titleY + 8
+        )
+        .lineTo(
+          orderBoxX - 8,
+          titleY + 41
+        )
+        .lineWidth(0.5)
+        .strokeColor("#CBBDAF")
+        .stroke();
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.5)
+        .fillColor(GREY)
+        .text(
+          "ORDER NO.",
+          orderBoxX,
+          titleY + 8,
+          {
+            width: 96,
+          }
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9.5)
+        .fillColor(BRAND_DARK)
+        .text(
+          orderDisplayId,
+          orderBoxX,
+          titleY + 20,
+          {
+            width: 96,
+          }
+        );
+
+      doc.y =
+        titleY + 49 + 9;
     }
 
     // =====================================================
-    // ORDER INFORMATION
+    // ORDER INFO CARDS
     // =====================================================
 
     function drawOrderInformation() {
       const y = doc.y;
 
-      const boxHeight = 60;
+      const boxHeight = 49;
 
       // Outer box
       doc
@@ -10009,117 +10264,188 @@ async function downloadOrderRequestPDF(req, res) {
           y,
           CONTENT_WIDTH,
           boxHeight,
-          4
+          5
         )
         .lineWidth(0.6)
         .strokeColor(BORDER)
         .stroke();
 
-      // Vertical separator
-      const separatorX =
-        MARGIN +
-        CONTENT_WIDTH * 0.50;
+      // Widths
+      const col1 = 84;
+      const col2 = 84;
+      const col3 = 84;
+      const col4 =
+        CONTENT_WIDTH -
+        col1 -
+        col2 -
+        col3;
 
-      doc
-        .moveTo(
-          separatorX,
-          y
-        )
-        .lineTo(
-          separatorX,
-          y + 38
-        )
-        .lineWidth(0.4)
-        .strokeColor(BORDER)
-        .stroke();
+      const positions = [
+        MARGIN,
+        MARGIN + col1,
+        MARGIN + col1 + col2,
+        MARGIN + col1 + col2 + col3,
+      ];
 
-      // ===================================================
-      // LEFT
-      // ===================================================
+      const widths = [
+        col1,
+        col2,
+        col3,
+        col4,
+      ];
 
-      const leftX =
-        MARGIN + 9;
+      // Vertical separators
+      for (let i = 1; i < positions.length; i++) {
+        doc
+          .moveTo(
+            positions[i],
+            y + 8
+          )
+          .lineTo(
+            positions[i],
+            y + boxHeight - 8
+          )
+          .lineWidth(0.4)
+          .strokeColor(BORDER)
+          .stroke();
+      }
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(GREY)
-        .text(
-          "ORDER INFORMATION",
-          leftX,
-          y + 7
-        );
-
-      doc
-        .font("Helvetica")
-        .fontSize(7.5)
-        .fillColor(BLACK)
-        .text(
-          `Order No: ${orderDisplayId}`,
-          leftX,
-          y + 20
-        );
-
-      doc.text(
-        `Date: ${formatDate(order.order_date)}`,
-        leftX,
-        y + 34
-      );
-
-      // ===================================================
-      // RIGHT
-      // ===================================================
-
-      const rightX =
-        separatorX + 10;
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(GREY)
-        .text(
-          "ORDER STATUS",
-          rightX,
-          y + 7
-        );
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7.5)
-        .fillColor(BLACK)
-        .text(
-          order.order_status || "-",
-          rightX,
-          y + 20,
-          {
-            width: CONTENT_WIDTH * 0.45,
-            ellipsis: true,
-          }
-        );
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(GREY)
-        .text(
-          "SUPPLIER",
-          rightX,
-          y + 34
-        );
+      // -----------------------------------------------
+      // ORDER DATE
+      // -----------------------------------------------
 
       doc
         .font("Helvetica")
+        .fontSize(5.4)
+        .fillColor(GREY)
+        .text(
+          "ORDER DATE",
+          positions[0] + 8,
+          y + 8
+        );
+
+      doc
+        .font("Helvetica-Bold")
         .fontSize(7)
         .fillColor(BLACK)
         .text(
-          order.supplier_name || "-",
-          rightX + 43,
-          y + 33,
+          formatDate(order.order_date),
+          positions[0] + 8,
+          y + 22,
           {
-            width:
-              CONTENT_WIDTH * 0.45 - 43,
+            width: widths[0] - 15,
             ellipsis: true,
           }
+        );
+
+      // -----------------------------------------------
+      // STATUS
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.4)
+        .fillColor(GREY)
+        .text(
+          "STATUS",
+          positions[1] + 8,
+          y + 8
+        );
+
+      // Status badge
+      const status =
+        String(
+          order.order_status || "-"
+        ).toUpperCase();
+
+      doc
+        .roundedRect(
+          positions[1] + 7,
+          y + 20,
+          widths[1] - 15,
+          17,
+          8
+        )
+        .fillColor(
+          status === "APPROVED"
+            ? "#E6F4EA"
+            : status === "REJECTED"
+              ? "#FDECEC"
+              : "#F7EBD5"
+        )
+        .fill();
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(5.8)
+        .fillColor(
+          status === "APPROVED"
+            ? "#2E6B3E"
+            : status === "REJECTED"
+              ? "#A33A3A"
+              : BRAND_DARK
+        )
+        .text(
+          status,
+          positions[1] + 7,
+          y + 25,
+          {
+            width: widths[1] - 15,
+            align: "center",
+            ellipsis: true,
+          }
+        );
+
+      // -----------------------------------------------
+      // SUPPLIER
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.4)
+        .fillColor(GREY)
+        .text(
+          "SUPPLIER",
+          positions[2] + 8,
+          y + 8
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.7)
+        .fillColor(BLACK)
+        .text(
+          order.supplier_name || "-",
+          positions[2] + 8,
+          y + 22,
+          {
+            width: widths[2] - 15,
+            ellipsis: true,
+          }
+        );
+
+      // -----------------------------------------------
+      // ITEMS
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.4)
+        .fillColor(GREY)
+        .text(
+          "ITEMS",
+          positions[3] + 8,
+          y + 8
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .fillColor(BLACK)
+        .text(
+          String(data.length),
+          positions[3] + 8,
+          y + 22
         );
 
       doc.y =
@@ -10130,19 +10456,25 @@ async function downloadOrderRequestPDF(req, res) {
     // TABLE SETTINGS
     // =====================================================
 
-    const rowHeight = 24;
+    /*
+     * Full A5 printable width.
+     *
+     * Total:
+     * 58 + 55 + 55 + 110 + 40 + 53 = 371
+     */
+
+    const rowHeight = 23;
 
     const colWidths = {
-      counter: 60,
+      counter: 58,
       category: 55,
-      department: 58,
-      sweet: 105,
-      qty: 38,
-      unit: 38,
+      department: 55,
+      sweet: 110,
+      qty: 40,
+      unit: 53,
     };
 
-    // Verify total
-    const calculatedWidth =
+    const tableWidth =
       colWidths.counter +
       colWidths.category +
       colWidths.department +
@@ -10159,94 +10491,67 @@ async function downloadOrderRequestPDF(req, res) {
 
       let x = MARGIN;
 
-      // Background
+      // Header background
       doc
         .rect(
           MARGIN,
           y,
-          calculatedWidth,
+          tableWidth,
           rowHeight
         )
-        .fill(LIGHT_GREY);
+        .fillColor(BRAND_DARK)
+        .fill();
 
-      doc
-        .fillColor(BLACK)
-        .font("Helvetica-Bold")
-        .fontSize(6.2);
+      const headers = [
+        [
+          "COUNTER",
+          colWidths.counter,
+          "left",
+        ],
+        [
+          "CATEGORY",
+          colWidths.category,
+          "left",
+        ],
+        [
+          "DEPARTMENT",
+          colWidths.department,
+          "left",
+        ],
+        [
+          "SWEET / ITEM",
+          colWidths.sweet,
+          "left",
+        ],
+        [
+          "QTY",
+          colWidths.qty,
+          "center",
+        ],
+        [
+          "UNIT",
+          colWidths.unit,
+          "center",
+        ],
+      ];
 
-      // Counter
-      doc.text(
-        "COUNTER",
-        x + 3,
-        y + 8,
-        {
-          width:
-            colWidths.counter - 6,
-        }
-      );
+      headers.forEach(
+        ([label, width, align]) => {
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(5.8)
+            .fillColor(WHITE)
+            .text(
+              label,
+              x + 4,
+              y + 8,
+              {
+                width: width - 8,
+                align,
+              }
+            );
 
-      x += colWidths.counter;
-
-      // Category
-      doc.text(
-        "CATEGORY",
-        x + 3,
-        y + 8,
-        {
-          width:
-            colWidths.category - 6,
-        }
-      );
-
-      x += colWidths.category;
-
-      // Department
-      doc.text(
-        "DEPARTMENT",
-        x + 3,
-        y + 8,
-        {
-          width:
-            colWidths.department - 6,
-        }
-      );
-
-      x += colWidths.department;
-
-      // Sweet
-      doc.text(
-        "SWEET",
-        x + 3,
-        y + 8,
-        {
-          width:
-            colWidths.sweet - 6,
-        }
-      );
-
-      x += colWidths.sweet;
-
-      // Qty
-      doc.text(
-        "QTY",
-        x,
-        y + 8,
-        {
-          width: colWidths.qty,
-          align: "center",
-        }
-      );
-
-      x += colWidths.qty;
-
-      // Unit
-      doc.text(
-        "UNIT",
-        x,
-        y + 8,
-        {
-          width: colWidths.unit,
-          align: "center",
+          x += width;
         }
       );
 
@@ -10255,11 +10560,11 @@ async function downloadOrderRequestPDF(req, res) {
         .rect(
           MARGIN,
           y,
-          calculatedWidth,
+          tableWidth,
           rowHeight
         )
-        .lineWidth(0.5)
-        .strokeColor(BORDER)
+        .lineWidth(0.4)
+        .strokeColor(BRAND_DARK)
         .stroke();
 
       doc.y =
@@ -10281,99 +10586,99 @@ async function downloadOrderRequestPDF(req, res) {
       const qty =
         Number(item.quantity || 0);
 
-      // Alternate row background
+      // Alternating row
       if (index % 2 === 0) {
         doc
           .rect(
             MARGIN,
             y,
-            calculatedWidth,
+            tableWidth,
             rowHeight
           )
-          .fill(ROW_GREY);
+          .fillColor(LIGHT)
+          .fill();
       }
 
-      doc
-        .fillColor(BLACK)
-        .font("Helvetica")
-        .fontSize(6.3);
-
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Counter
-      // -----------------------------------------------
+      // -------------------------------------------------
 
-      doc.text(
-        item.counter_name || "-",
-        x + 3,
-        y + 8,
-        {
-          width:
-            colWidths.counter - 6,
-          ellipsis: true,
-        }
-      );
+      doc
+        .font("Helvetica")
+        .fontSize(6.1)
+        .fillColor(BLACK)
+        .text(
+          item.counter_name || "-",
+          x + 4,
+          y + 8,
+          {
+            width:
+              colWidths.counter - 8,
+            ellipsis: true,
+          }
+        );
 
       x += colWidths.counter;
 
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Category
-      // -----------------------------------------------
+      // -------------------------------------------------
 
       doc.text(
         item.category_name || "-",
-        x + 3,
+        x + 4,
         y + 8,
         {
           width:
-            colWidths.category - 6,
+            colWidths.category - 8,
           ellipsis: true,
         }
       );
 
       x += colWidths.category;
 
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Department
-      // -----------------------------------------------
+      // -------------------------------------------------
 
       doc.text(
         item.department_name || "-",
-        x + 3,
+        x + 4,
         y + 8,
         {
           width:
-            colWidths.department - 6,
+            colWidths.department - 8,
           ellipsis: true,
         }
       );
 
       x += colWidths.department;
 
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Sweet
-      // -----------------------------------------------
+      // -------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
         .text(
           item.sweet_name || "-",
-          x + 3,
+          x + 4,
           y + 8,
           {
             width:
-              colWidths.sweet - 6,
+              colWidths.sweet - 8,
             ellipsis: true,
           }
         );
 
       x += colWidths.sweet;
 
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Quantity
-      // -----------------------------------------------
+      // -------------------------------------------------
 
       doc
-        .font("Helvetica")
+        .font("Helvetica-Bold")
         .text(
           String(qty),
           x,
@@ -10386,33 +10691,59 @@ async function downloadOrderRequestPDF(req, res) {
 
       x += colWidths.qty;
 
-      // -----------------------------------------------
+      // -------------------------------------------------
       // Unit
-      // -----------------------------------------------
+      // -------------------------------------------------
 
-      doc.text(
-        item.unit || "-",
-        x,
-        y + 8,
-        {
-          width: colWidths.unit,
-          align: "center",
-          ellipsis: true,
+      doc
+        .font("Helvetica")
+        .text(
+          item.unit || "-",
+          x,
+          y + 8,
+          {
+            width: colWidths.unit,
+            align: "center",
+            ellipsis: true,
+          }
+        );
+
+      // -------------------------------------------------
+      // Cell vertical lines
+      // -------------------------------------------------
+
+      let cellX = MARGIN;
+
+      Object.values(colWidths).forEach(
+        (width, columnIndex) => {
+          if (columnIndex > 0) {
+            doc
+              .moveTo(
+                cellX,
+                y
+              )
+              .lineTo(
+                cellX,
+                y + rowHeight
+              )
+              .lineWidth(0.25)
+              .strokeColor(BORDER)
+              .stroke();
+          }
+
+          cellX += width;
         }
       );
 
-      // -----------------------------------------------
       // Row border
-      // -----------------------------------------------
-
       doc
         .rect(
           MARGIN,
           y,
-          calculatedWidth,
+          tableWidth,
           rowHeight
         )
-        .lineWidth(0.35)
+        .lineWidth(0.3)
         .strokeColor(BORDER)
         .stroke();
 
@@ -10421,7 +10752,7 @@ async function downloadOrderRequestPDF(req, res) {
     }
 
     // =====================================================
-    // TOTAL
+    // TOTAL SECTION
     // =====================================================
 
     function drawTotal(
@@ -10430,74 +10761,182 @@ async function downloadOrderRequestPDF(req, res) {
     ) {
       const y = doc.y;
 
-      const height = 32;
+      const height = 42;
 
       doc
-        .rect(
+        .roundedRect(
           MARGIN,
           y,
-          calculatedWidth,
-          height
+          tableWidth,
+          height,
+          6
         )
-        .fill(TOTAL_GREY);
+        .fillColor(BRAND_LIGHT)
+        .fill();
 
       doc
-        .rect(
+        .roundedRect(
           MARGIN,
           y,
-          calculatedWidth,
-          height
+          tableWidth,
+          height,
+          6
+        )
+        .lineWidth(0.5)
+        .strokeColor("#D8C6AD")
+        .stroke();
+
+      // -----------------------------------------------
+      // TOTAL ITEMS
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.5)
+        .fillColor(GREY)
+        .text(
+          "TOTAL ITEMS",
+          MARGIN + 12,
+          y + 8
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(11)
+        .fillColor(BRAND_DARK)
+        .text(
+          String(totalItems),
+          MARGIN + 12,
+          y + 20
+        );
+
+      // Divider
+      const dividerX =
+        MARGIN + 105;
+
+      doc
+        .moveTo(
+          dividerX,
+          y + 8
+        )
+        .lineTo(
+          dividerX,
+          y + height - 8
+        )
+        .lineWidth(0.5)
+        .strokeColor("#D1BEA4")
+        .stroke();
+
+      // -----------------------------------------------
+      // TOTAL QUANTITY
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.5)
+        .fillColor(GREY)
+        .text(
+          "TOTAL QUANTITY",
+          dividerX + 15,
+          y + 8
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(11)
+        .fillColor(BRAND_DARK)
+        .text(
+          String(totalQuantity),
+          dividerX + 15,
+          y + 20
+        );
+
+      // Right decoration
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(5.2)
+        .fillColor(GOLD)
+        .text(
+          "ORDER SUMMARY",
+          PAGE_WIDTH - MARGIN - 95,
+          y + 10,
+          {
+            width: 80,
+            align: "right",
+          }
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(4.8)
+        .fillColor(GREY)
+        .text(
+          "Quality • Accuracy • Trust",
+          PAGE_WIDTH - MARGIN - 105,
+          y + 20,
+          {
+            width: 90,
+            align: "right",
+          }
+        );
+
+      doc.y =
+        y + height + 11;
+    }
+
+    // =====================================================
+    // REMARKS
+    // =====================================================
+
+    function drawRemarks() {
+      const y = doc.y;
+
+      const height = 42;
+
+      doc
+        .roundedRect(
+          MARGIN,
+          y,
+          tableWidth,
+          height,
+          5
         )
         .lineWidth(0.5)
         .strokeColor(BORDER)
         .stroke();
 
       doc
+        .font("Helvetica-Bold")
+        .fontSize(6)
+        .fillColor(BRAND_DARK)
+        .text(
+          "REMARKS",
+          MARGIN + 10,
+          y + 8
+        );
+
+      doc
         .font("Helvetica")
         .fontSize(6.5)
         .fillColor(GREY)
         .text(
-          `Total Items: ${totalItems}`,
-          MARGIN + 8,
-          y + 6
-        );
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor(BLACK)
-        .text(
-          "TOTAL QUANTITY",
-          MARGIN + 8,
-          y + 17
-        );
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .fillColor(BLACK)
-        .text(
-          String(totalQuantity),
-          PAGE_WIDTH - MARGIN - 58,
-          y + 10,
-          {
-            width: 48,
-            align: "right",
-          }
+          "-",
+          MARGIN + 10,
+          y + 22
         );
 
       doc.y =
-        y + height + 14;
+        y + height + 10;
     }
 
     // =====================================================
-    // APPROVAL / SIGNATURE SECTION
+    // APPROVAL SECTION
     // =====================================================
 
     function drawApprovalSection() {
       const y = doc.y;
 
-      // Separator
+      // Top separator
       doc
         .moveTo(
           MARGIN,
@@ -10507,133 +10946,97 @@ async function downloadOrderRequestPDF(req, res) {
           PAGE_WIDTH - MARGIN,
           y
         )
-        .lineWidth(0.5)
-        .strokeColor(BORDER)
+        .lineWidth(0.6)
+        .strokeColor(GOLD)
         .stroke();
 
-      doc.moveDown(0.8);
+      doc.moveDown(10);
 
       const colWidth =
         CONTENT_WIDTH / 3;
 
-      // Titles
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(DARK);
-
-      doc.text(
+      const labels = [
         "PREPARED BY",
-        MARGIN,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
-        }
-      );
-
-      doc.text(
         "CHECKED BY",
-        MARGIN + colWidth,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
-        }
-      );
-
-      doc.text(
         "RECEIVED BY",
-        MARGIN + colWidth * 2,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
+      ];
+
+      labels.forEach(
+        (label, index) => {
+          const x =
+            MARGIN +
+            index * colWidth;
+
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(6)
+            .fillColor(BRAND_DARK)
+            .text(
+              label,
+              x,
+              doc.y,
+              {
+                width: colWidth,
+                align: "center",
+              }
+            );
         }
       );
 
-      doc.moveDown(1.7);
+      doc.moveDown(25);
 
       // Signature lines
-      doc
-        .strokeColor("#AAAAAA")
-        .lineWidth(0.4);
+      labels.forEach(
+        (_, index) => {
+          const x =
+            MARGIN +
+            index * colWidth;
 
-      doc
-        .moveTo(
-          MARGIN + 15,
-          doc.y
-        )
-        .lineTo(
-          MARGIN + colWidth - 15,
-          doc.y
-        )
-        .stroke();
+          doc
+            .moveTo(
+              x + 18,
+              doc.y
+            )
+            .lineTo(
+              x + colWidth - 18,
+              doc.y
+            )
+            .lineWidth(0.5)
+            .strokeColor("#999999")
+            .stroke();
+        }
+      );
 
-      doc
-        .moveTo(
-          MARGIN + colWidth + 15,
-          doc.y
-        )
-        .lineTo(
-          MARGIN + colWidth * 2 - 15,
-          doc.y
-        )
-        .stroke();
+      doc.moveDown(4);
 
-      doc
-        .moveTo(
-          MARGIN + colWidth * 2 + 15,
-          doc.y
-        )
-        .lineTo(
-          PAGE_WIDTH - MARGIN - 15,
-          doc.y
-        )
-        .stroke();
+      labels.forEach(
+        (_, index) => {
+          const x =
+            MARGIN +
+            index * colWidth;
 
-      doc.moveDown(0.35);
+          doc
+            .font("Helvetica")
+            .fontSize(5)
+            .fillColor(GREY)
+            .text(
+              "Name & Signature",
+              x,
+              doc.y,
+              {
+                width: colWidth,
+                align: "center",
+              }
+            );
+        }
+      );
+
+      doc.moveDown(10);
 
       doc
         .font("Helvetica")
         .fontSize(5.5)
-        .fillColor("#888888");
-
-      doc.text(
-        "Signature",
-        MARGIN,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
-        }
-      );
-
-      doc.text(
-        "Signature",
-        MARGIN + colWidth,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
-        }
-      );
-
-      doc.text(
-        "Signature",
-        MARGIN + colWidth * 2,
-        doc.y,
-        {
-          width: colWidth,
-          align: "center",
-        }
-      );
-
-      doc.moveDown(0.8);
-
-      doc
-        .fontSize(5.8)
-        .fillColor("#888888")
+        .fillColor("#999999")
         .text(
           "This is a system-generated order request document.",
           MARGIN,
@@ -10670,22 +11073,21 @@ async function downloadOrderRequestPDF(req, res) {
       grandTotal += qty;
 
       /*
-       * Keep enough space at bottom.
+       * Keep item rows together.
        *
-       * 24 = item row
-       * 40 = safety space
+       * A5 bottom area reserved for:
+       * total + footer.
        */
 
       if (
         doc.y >
-        PAGE_HEIGHT - 75
+        PAGE_HEIGHT - 78
       ) {
-        // Footer current page
         drawFooter();
 
-        // New A5 page
         doc.addPage({
           size: "A5",
+          layout: "portrait",
 
           margins: {
             top: MARGIN,
@@ -10713,22 +11115,18 @@ async function downloadOrderRequestPDF(req, res) {
     });
 
     // =====================================================
-    // TOTAL
+    // TOTAL PAGE CHECK
     // =====================================================
-
-    /*
-     * If total doesn't fit,
-     * move it to a new page.
-     */
 
     if (
       doc.y >
-      PAGE_HEIGHT - 110
+      PAGE_HEIGHT - 125
     ) {
       drawFooter();
 
       doc.addPage({
         size: "A5",
+        layout: "portrait",
 
         margins: {
           top: MARGIN,
@@ -10743,13 +11141,17 @@ async function downloadOrderRequestPDF(req, res) {
       drawOrderInformation();
     }
 
+    // =====================================================
+    // TOTAL
+    // =====================================================
+
     drawTotal(
       grandTotal,
       data.length
     );
 
     // =====================================================
-    // APPROVAL SECTION
+    // REMARKS
     // =====================================================
 
     if (
@@ -10760,6 +11162,34 @@ async function downloadOrderRequestPDF(req, res) {
 
       doc.addPage({
         size: "A5",
+        layout: "portrait",
+
+        margins: {
+          top: MARGIN,
+          bottom: MARGIN,
+          left: MARGIN,
+          right: MARGIN,
+        },
+      });
+
+      drawBusinessHeader(true);
+    }
+
+    drawRemarks();
+
+    // =====================================================
+    // APPROVAL / SIGNATURE
+    // =====================================================
+
+    if (
+      doc.y >
+      PAGE_HEIGHT - 100
+    ) {
+      drawFooter();
+
+      doc.addPage({
+        size: "A5",
+        layout: "portrait",
 
         margins: {
           top: MARGIN,

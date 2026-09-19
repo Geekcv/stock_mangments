@@ -9034,6 +9034,393 @@ async function downloadChalanPDF(req, res) {
 //   }
 // }
 
+// async function downloadOrderRequestPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+//     // =====================================================
+//     // FETCH ORDER DATA
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         -- Sweet
+//         sw.row_id AS sweet_id,
+//         COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
+//         COALESCE(sw.unit, '-') AS unit,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+//         c.location AS counter_location,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         COALESCE(cat.category_name, 'Others') AS category_name,
+
+//         -- Department
+//         d.row_id AS department_id,
+//         COALESCE(d.department_name, 'Others') AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     if (data.length === 0) {
+//       return res.status(404).send("No order found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     // const BASE_UPLOAD_PATH = "./public/uploads";
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `OrderRequest_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     const doc = new PDFDocument({
+//       margin: 30,
+//       size: "A4",
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // =====================================================
+//     // HEADER
+//     // =====================================================
+
+//     doc.fontSize(17).font("Helvetica-Bold").text("ORDER REQUEST", {
+//       align: "center",
+//     });
+
+//     doc.moveDown(0.4);
+
+//     doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
+
+//     doc.moveDown(0.5);
+
+//     // =====================================================
+//     // ORDER INFORMATION
+//     // =====================================================
+
+//     doc.fontSize(9).font("Helvetica");
+
+//     doc.text(`Order ID: ${orderDisplayId}`, {
+//       continued: true,
+//     });
+
+//     doc.text(`Status: ${order.order_status || "-"}`, {
+//       align: "right",
+//     });
+
+//     doc.text(
+//       `Order Date: ${
+//         order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
+//       }`,
+//     );
+
+//     doc.moveDown(0.5);
+
+//     // =====================================================
+//     // SHOP
+//     // =====================================================
+
+//     doc.fontSize(10).font("Helvetica-Bold").text("Shop Details");
+
+//     doc.fontSize(8).font("Helvetica");
+
+//     doc.text(`Shop: ${order.shop_name || "-"}`, {
+//       continued: true,
+//     });
+
+//     doc.text(`Phone: ${order.shop_phone || "-"}`, {
+//       align: "right",
+//     });
+
+//     doc.text(
+//       `Address: ${order.shop_address || "-"}, ${
+//         order.city || "-"
+//       }, ${order.state || "-"}`,
+//     );
+
+//     doc.moveDown(0.6);
+
+//     // =====================================================
+//     // TABLE
+//     // =====================================================
+
+//     const startX = 30;
+//     let y = doc.y;
+
+//     const rowHeight = 18;
+
+//     const colWidths = {
+//       counter: 105,
+//       category: 105,
+//       department: 105,
+//       sweet: 135,
+//       qty: 40,
+//       unit: 45,
+//     };
+
+//     const totalWidth = 535;
+
+//     // =====================================================
+//     // TABLE HEADER
+//     // =====================================================
+
+//     doc.rect(startX, y, totalWidth, rowHeight).fill("#e5e5e5");
+
+//     doc.fillColor("#000").fontSize(7).font("Helvetica-Bold");
+
+//     let x = startX;
+
+//     doc.text("Counter", x + 3, y + 5, {
+//       width: colWidths.counter,
+//     });
+
+//     x += colWidths.counter;
+
+//     doc.text("Category", x + 3, y + 5, {
+//       width: colWidths.category,
+//     });
+
+//     x += colWidths.category;
+
+//     doc.text("Department", x + 3, y + 5, {
+//       width: colWidths.department,
+//     });
+
+//     x += colWidths.department;
+
+//     doc.text("Sweet", x + 3, y + 5, {
+//       width: colWidths.sweet,
+//     });
+
+//     x += colWidths.sweet;
+
+//     doc.text("Qty", x, y + 5, {
+//       width: colWidths.qty,
+//       align: "center",
+//     });
+
+//     x += colWidths.qty;
+
+//     doc.text("Unit", x, y + 5, {
+//       width: colWidths.unit,
+//       align: "center",
+//     });
+
+//     y += rowHeight;
+
+//     // =====================================================
+//     // ITEMS
+//     // =====================================================
+
+//     let grandTotal = 0;
+
+//     data.forEach((item, index) => {
+//       const qty = Number(item.quantity || 0);
+
+//       grandTotal += qty;
+
+//       // Keep single page
+//       if (y > 760) {
+//         return;
+//       }
+
+//       if (index % 2 === 0) {
+//         doc.rect(startX, y, totalWidth, rowHeight).fill("#fafafa");
+//       }
+
+//       doc.fillColor("#000").fontSize(7).font("Helvetica");
+
+//       let x = startX;
+
+//       doc.text(item.counter_name || "-", x + 3, y + 5, {
+//         width: colWidths.counter - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.counter;
+
+//       doc.text(item.category_name || "-", x + 3, y + 5, {
+//         width: colWidths.category - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.category;
+
+//       doc.text(item.department_name || "-", x + 3, y + 5, {
+//         width: colWidths.department - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.department;
+
+//       doc.text(item.sweet_name || "-", x + 3, y + 5, {
+//         width: colWidths.sweet - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.sweet;
+
+//       doc.text(qty.toString(), x, y + 5, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       x += colWidths.qty;
+
+//       doc.text(item.unit || "-", x, y + 5, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       y += rowHeight;
+//     });
+
+//     // =====================================================
+//     // TOTAL
+//     // =====================================================
+
+//     doc.rect(startX, y, totalWidth, rowHeight).fill("#e8f8f5");
+
+//     doc.fillColor("#000").fontSize(8).font("Helvetica-Bold");
+
+//     doc.text("TOTAL", startX + 5, y + 5, {
+//       width: 420,
+//     });
+
+//     doc.text(grandTotal.toString(), startX + 420, y + 5, {
+//       width: 60,
+//       align: "center",
+//     });
+
+//     doc.moveDown(2);
+
+//     // =====================================================
+//     // FOOTER
+//     // =====================================================
+
+//     doc
+//       .fontSize(8)
+//       .font("Helvetica")
+//       .fillColor("gray")
+//       .text("System generated order request.", {
+//         align: "center",
+//       });
+
+//     doc.fillColor("#000");
+
+//     // =====================================================
+//     // END
+//     // =====================================================
+
+//     doc.end();
+
+//     const fileUrl = `/uploads/OrderRequests/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Order request PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadOrderRequestPDF error:", error);
+
+//     return res.status(500).send("Error generating order request PDF");
+//   }
+// }
+
+// new 
 async function downloadOrderRequestPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -9042,6 +9429,10 @@ async function downloadOrderRequestPDF(req, res) {
       return res.status(400).send("Order ID required");
     }
 
+    // =====================================================
+    // TABLES
+    // =====================================================
+
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const shopTable = schema + ".shops";
@@ -9049,53 +9440,72 @@ async function downloadOrderRequestPDF(req, res) {
     const counterTable = schema + ".counters";
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
-
-    const safeOrderId = order_id.trim().replaceAll("'", "`");
+    const supplierTable = schema + ".suppliers";
 
     // =====================================================
     // FETCH ORDER DATA
     // =====================================================
 
-    const result = await db_query.customQuery(`
+    const result = await db_query.customQuery(
+      `
       SELECT
 
-        -- Order
+        -- =========================
+        -- ORDER
+        -- =========================
         o.id AS order_serial_id,
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
         o.supplier_id,
 
-        -- Shop
+        -- =========================
+        -- SHOP
+        -- =========================
         sh.row_id AS shop_id,
-        sh.shop_name,
-        sh.address AS shop_address,
-        sh.city,
-        sh.state,
-        sh.phone AS shop_phone,
+        COALESCE(sh.shop_name, '-') AS shop_name,
+        COALESCE(sh.address, '-') AS shop_address,
+        COALESCE(sh.city, '-') AS city,
+        COALESCE(sh.state, '-') AS state,
+        COALESCE(sh.phone, '-') AS shop_phone,
 
-        -- Order Item
+        -- =========================
+        -- SUPPLIER
+        -- =========================
+        COALESCE(sup.supplier_name, '-') AS supplier_name,
+
+        -- =========================
+        -- ORDER ITEM
+        -- =========================
         oi.row_id AS order_item_id,
         oi.request_id,
         oi.quantity,
         oi.item_status,
         oi.counter_id,
 
-        -- Sweet
+        -- =========================
+        -- SWEET
+        -- =========================
         sw.row_id AS sweet_id,
         COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
         COALESCE(sw.unit, '-') AS unit,
 
-        -- Counter
-        c.row_id AS counter_id,
+        -- =========================
+        -- COUNTER
+        -- =========================
+        c.row_id AS counter_row_id,
         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
-        c.location AS counter_location,
+        COALESCE(c.location, '-') AS counter_location,
 
-        -- Category
+        -- =========================
+        -- CATEGORY
+        -- =========================
         cat.row_id AS category_id,
         COALESCE(cat.category_name, 'Others') AS category_name,
 
-        -- Department
+        -- =========================
+        -- DEPARTMENT
+        -- =========================
         d.row_id AS department_id,
         COALESCE(d.department_name, 'Others') AS department_name
 
@@ -9103,6 +9513,9 @@ async function downloadOrderRequestPDF(req, res) {
 
       LEFT JOIN ${shopTable} sh
         ON sh.row_id = o.shop_id
+
+      LEFT JOIN ${supplierTable} sup
+        ON sup.row_id = o.supplier_id
 
       LEFT JOIN ${itemTable} oi
         ON oi.order_id = o.row_id
@@ -9119,13 +9532,15 @@ async function downloadOrderRequestPDF(req, res) {
       LEFT JOIN ${departmentTable} d
         ON d.row_id = cat.department_id
 
-      WHERE o.row_id = '${safeOrderId}'
+      WHERE o.row_id = '${String(order_id).trim().replaceAll("'", "''")}'
 
       ORDER BY
         c.counter_name ASC,
+        d.department_name ASC,
         cat.category_name ASC,
         sw.sweet_name ASC
-    `);
+      `,
+    );
 
     const data = result.data || [];
 
@@ -9136,7 +9551,7 @@ async function downloadOrderRequestPDF(req, res) {
     const order = data[0];
 
     // =====================================================
-    // DISPLAY ORDER ID
+    // ORDER DISPLAY ID
     // =====================================================
 
     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
@@ -9145,13 +9560,15 @@ async function downloadOrderRequestPDF(req, res) {
     )}`;
 
     // =====================================================
-    // FILE SETUP
+    // PATH SETUP
     // =====================================================
 
-    // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
 
-    const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+    const folder = path.join(
+      BASE_UPLOAD_PATH,
+      "OrderRequests",
+    );
 
     if (!fs.existsSync(folder)) {
       fs.mkdirSync(folder, {
@@ -9159,144 +9576,493 @@ async function downloadOrderRequestPDF(req, res) {
       });
     }
 
-    const fileName = `OrderRequest_${Date.now()}.pdf`;
+    // =====================================================
+    // LOGO
+    // =====================================================
+
+    const logoPath = path.join(
+      BASE_UPLOAD_PATH,
+      "ShopMedia",
+      "1789809020026_logo.jpg",
+    );
+
+    const hasLogo = fs.existsSync(logoPath);
+
+    // =====================================================
+    // PDF FILE
+    // =====================================================
+
+    const fileName = `OrderRequest_${orderDisplayId}_${Date.now()}.pdf`;
 
     const filePath = path.join(folder, fileName);
 
+    // =====================================================
+    // A5 PDF
+    // =====================================================
+
     const doc = new PDFDocument({
-      margin: 30,
-      size: "A4",
+      size: "A5",
+      layout: "portrait",
+
+      // A5 = 148 x 210 mm
+      // PDF points ≈ 419.5 x 595.3
+      margins: {
+        top: 22,
+        bottom: 25,
+        left: 22,
+        right: 22,
+      },
+
+      autoFirstPage: true,
     });
 
-    doc.pipe(fs.createWriteStream(filePath));
+    const writeStream = fs.createWriteStream(filePath);
+
+    doc.pipe(writeStream);
 
     // =====================================================
-    // HEADER
+    // COLORS
     // =====================================================
 
-    doc.fontSize(17).font("Helvetica-Bold").text("ORDER REQUEST", {
-      align: "center",
-    });
-
-    doc.moveDown(0.4);
-
-    doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
-
-    doc.moveDown(0.5);
+    const PRIMARY = "#222222";
+    const SECONDARY = "#666666";
+    const BORDER = "#D9D9D9";
+    const LIGHT_BG = "#F5F5F5";
+    const HEADER_BG = "#EFEFEF";
+    const TOTAL_BG = "#EAF6F2";
 
     // =====================================================
-    // ORDER INFORMATION
+    // PAGE DIMENSIONS
     // =====================================================
 
-    doc.fontSize(9).font("Helvetica");
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
 
-    doc.text(`Order ID: ${orderDisplayId}`, {
-      continued: true,
-    });
+    const left = 22;
+    const right = pageWidth - 22;
+    const contentWidth = right - left;
 
-    doc.text(`Status: ${order.order_status || "-"}`, {
-      align: "right",
-    });
+    // =====================================================
+    // HELPER FUNCTIONS
+    // =====================================================
+
+    function formatDate(date) {
+      if (!date) return "-";
+
+      const d = new Date(date);
+
+      if (isNaN(d.getTime())) {
+        return "-";
+      }
+
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+
+    function drawLine(y, color = BORDER, width = 0.6) {
+      doc
+        .save()
+        .strokeColor(color)
+        .lineWidth(width)
+        .moveTo(left, y)
+        .lineTo(right, y)
+        .stroke()
+        .restore();
+    }
+
+    function drawCell(x, y, width, height) {
+      doc
+        .save()
+        .strokeColor(BORDER)
+        .lineWidth(0.5)
+        .rect(x, y, width, height)
+        .stroke()
+        .restore();
+    }
+
+    function checkPageSpace(requiredHeight) {
+      if (
+        doc.y + requiredHeight >
+        pageHeight - 45
+      ) {
+        drawFooter();
+        doc.addPage();
+        drawPageHeader();
+      }
+    }
+
+    // =====================================================
+    // FOOTER
+    // =====================================================
+
+    function drawFooter() {
+      const footerY = pageHeight - 25;
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(SECONDARY)
+        .text(
+          "System generated order request",
+          left,
+          footerY,
+          {
+            width: contentWidth,
+            align: "center",
+          },
+        );
+
+      doc
+        .fontSize(6)
+        .fillColor("#999999")
+        .text(
+          `Generated on ${formatDate(new Date())}`,
+          left,
+          footerY + 9,
+          {
+            width: contentWidth,
+            align: "center",
+          },
+        );
+    }
+
+    // =====================================================
+    // PAGE HEADER
+    // =====================================================
+
+    function drawPageHeader() {
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(SECONDARY)
+        .text(
+          orderDisplayId,
+          left,
+          12,
+          {
+            width: contentWidth / 2,
+          },
+        );
+
+      doc
+        .text(
+          "ORDER REQUEST",
+          left + contentWidth / 2,
+          12,
+          {
+            width: contentWidth / 2,
+            align: "right",
+          },
+        );
+
+      doc.y = 25;
+    }
+
+    // =====================================================
+    // MAIN HEADER
+    // =====================================================
+
+    let headerY = doc.y;
+
+    // Logo
+    if (hasLogo) {
+      try {
+        doc.image(
+          logoPath,
+          left,
+          headerY,
+          {
+            fit: [65, 55],
+            align: "left",
+            valign: "center",
+          },
+        );
+      } catch (logoError) {
+        console.log(
+          "Logo loading failed:",
+          logoError,
+        );
+      }
+    }
+
+    const shopTextX = hasLogo
+      ? left + 75
+      : left;
+
+    const shopTextWidth = hasLogo
+      ? contentWidth - 75
+      : contentWidth;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(15)
+      .fillColor(PRIMARY)
+      .text(
+        order.shop_name || "SHOP",
+        shopTextX,
+        headerY + 3,
+        {
+          width: shopTextWidth,
+        },
+      );
+
+    doc
+      .font("Helvetica")
+      .fontSize(7.5)
+      .fillColor(SECONDARY)
+      .text(
+        `${order.shop_address || ""}`,
+        shopTextX,
+        headerY + 23,
+        {
+          width: shopTextWidth,
+        },
+      );
 
     doc.text(
-      `Order Date: ${
-        order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
+      `${order.city || ""}${
+        order.state
+          ? `, ${order.state}`
+          : ""
       }`,
+      shopTextX,
+      headerY + 34,
+      {
+        width: shopTextWidth,
+      },
     );
+
+    doc.text(
+      `Phone: ${order.shop_phone || "-"}`,
+      shopTextX,
+      headerY + 45,
+      {
+        width: shopTextWidth,
+      },
+    );
+
+    doc.y = headerY + 65;
+
+    drawLine(doc.y);
 
     doc.moveDown(0.5);
 
     // =====================================================
-    // SHOP
+    // TITLE
     // =====================================================
 
-    doc.fontSize(10).font("Helvetica-Bold").text("Shop Details");
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(13)
+      .fillColor(PRIMARY)
+      .text(
+        "ORDER REQUEST",
+        left,
+        doc.y,
+        {
+          width: contentWidth,
+          align: "center",
+        },
+      );
 
-    doc.fontSize(8).font("Helvetica");
-
-    doc.text(`Shop: ${order.shop_name || "-"}`, {
-      continued: true,
-    });
-
-    doc.text(`Phone: ${order.shop_phone || "-"}`, {
-      align: "right",
-    });
-
-    doc.text(
-      `Address: ${order.shop_address || "-"}, ${
-        order.city || "-"
-      }, ${order.state || "-"}`,
-    );
-
-    doc.moveDown(0.6);
+    doc.moveDown(0.45);
 
     // =====================================================
-    // TABLE
+    // ORDER INFO BOX
     // =====================================================
 
-    const startX = 30;
-    let y = doc.y;
+    const infoY = doc.y;
+    const infoHeight = 53;
 
-    const rowHeight = 18;
+    doc
+      .save()
+      .fillColor(LIGHT_BG)
+      .roundedRect(
+        left,
+        infoY,
+        contentWidth,
+        infoHeight,
+        4,
+      )
+      .fill()
+      .restore();
+
+    const halfWidth = contentWidth / 2;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .fillColor(PRIMARY)
+      .text(
+        "ORDER ID",
+        left + 8,
+        infoY + 8,
+      );
+
+    doc
+      .font("Helvetica")
+      .fontSize(8.5)
+      .text(
+        orderDisplayId,
+        left + 8,
+        infoY + 20,
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .text(
+        "ORDER DATE",
+        left + halfWidth,
+        infoY + 8,
+      );
+
+    doc
+      .font("Helvetica")
+      .fontSize(8.5)
+      .text(
+        formatDate(order.order_date),
+        left + halfWidth,
+        infoY + 20,
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .text(
+        "STATUS",
+        left + 8,
+        infoY + 35,
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7.5)
+      .fillColor(PRIMARY)
+      .text(
+        order.order_status || "-",
+        left + 8,
+        infoY + 44,
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .fillColor(PRIMARY)
+      .text(
+        "SUPPLIER",
+        left + halfWidth,
+        infoY + 35,
+      );
+
+    doc
+      .font("Helvetica")
+      .fontSize(7.5)
+      .text(
+        order.supplier_name || "-",
+        left + halfWidth,
+        infoY + 44,
+        {
+          width: halfWidth - 10,
+          ellipsis: true,
+        },
+      );
+
+    doc.y = infoY + infoHeight + 12;
+
+    // =====================================================
+    // TABLE CONFIGURATION
+    // =====================================================
+
+    const tableX = left;
 
     const colWidths = {
-      counter: 105,
-      category: 105,
-      department: 105,
-      sweet: 135,
-      qty: 40,
-      unit: 45,
+      no: 22,
+      counter: 68,
+      category: 62,
+      sweet: 105,
+      qty: 38,
+      unit: 42,
     };
 
-    const totalWidth = 535;
+    const tableWidth =
+      colWidths.no +
+      colWidths.counter +
+      colWidths.category +
+      colWidths.sweet +
+      colWidths.qty +
+      colWidths.unit;
 
     // =====================================================
-    // TABLE HEADER
+    // DRAW TABLE HEADER
     // =====================================================
 
-    doc.rect(startX, y, totalWidth, rowHeight).fill("#e5e5e5");
+    function drawTableHeader() {
+      const tableY = doc.y;
+      const rowHeight = 22;
 
-    doc.fillColor("#000").fontSize(7).font("Helvetica-Bold");
+      doc
+        .save()
+        .fillColor(HEADER_BG)
+        .rect(
+          tableX,
+          tableY,
+          tableWidth,
+          rowHeight,
+        )
+        .fill()
+        .restore();
 
-    let x = startX;
+      let x = tableX;
 
-    doc.text("Counter", x + 3, y + 5, {
-      width: colWidths.counter,
-    });
+      const headers = [
+        ["#", colWidths.no],
+        ["Counter", colWidths.counter],
+        ["Category", colWidths.category],
+        ["Sweet", colWidths.sweet],
+        ["Qty", colWidths.qty],
+        ["Unit", colWidths.unit],
+      ];
 
-    x += colWidths.counter;
+      headers.forEach(([label, width]) => {
+        drawCell(
+          x,
+          tableY,
+          width,
+          rowHeight,
+        );
 
-    doc.text("Category", x + 3, y + 5, {
-      width: colWidths.category,
-    });
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(6.5)
+          .fillColor(PRIMARY)
+          .text(
+            label,
+            x + 2,
+            tableY + 7,
+            {
+              width: width - 4,
+              align:
+                label === "#" ||
+                label === "Qty" ||
+                label === "Unit"
+                  ? "center"
+                  : "left",
+            },
+          );
 
-    x += colWidths.category;
+        x += width;
+      });
 
-    doc.text("Department", x + 3, y + 5, {
-      width: colWidths.department,
-    });
+      doc.y = tableY + rowHeight;
 
-    x += colWidths.department;
+      return rowHeight;
+    }
 
-    doc.text("Sweet", x + 3, y + 5, {
-      width: colWidths.sweet,
-    });
-
-    x += colWidths.sweet;
-
-    doc.text("Qty", x, y + 5, {
-      width: colWidths.qty,
-      align: "center",
-    });
-
-    x += colWidths.qty;
-
-    doc.text("Unit", x, y + 5, {
-      width: colWidths.unit,
-      align: "center",
-    });
-
-    y += rowHeight;
+    drawTableHeader();
 
     // =====================================================
     // ITEMS
@@ -9305,118 +10071,263 @@ async function downloadOrderRequestPDF(req, res) {
     let grandTotal = 0;
 
     data.forEach((item, index) => {
-      const qty = Number(item.quantity || 0);
+      const qty = Number(
+        item.quantity || 0,
+      );
 
       grandTotal += qty;
 
-      // Keep single page
-      if (y > 760) {
-        return;
+      const rowHeight = 27;
+
+      checkPageSpace(rowHeight + 10);
+
+      // Re-draw header after page break
+      if (
+        doc.y === 25 ||
+        doc.y < 40
+      ) {
+        drawTableHeader();
       }
+
+      const rowY = doc.y;
 
       if (index % 2 === 0) {
-        doc.rect(startX, y, totalWidth, rowHeight).fill("#fafafa");
+        doc
+          .save()
+          .fillColor("#FAFAFA")
+          .rect(
+            tableX,
+            rowY,
+            tableWidth,
+            rowHeight,
+          )
+          .fill()
+          .restore();
       }
 
-      doc.fillColor("#000").fontSize(7).font("Helvetica");
+      let x = tableX;
 
-      let x = startX;
+      const cells = [
+        {
+          value: String(index + 1),
+          width: colWidths.no,
+          align: "center",
+        },
+        {
+          value: item.counter_name || "-",
+          width: colWidths.counter,
+          align: "left",
+        },
+        {
+          value: item.category_name || "-",
+          width: colWidths.category,
+          align: "left",
+        },
+        {
+          value: item.sweet_name || "-",
+          width: colWidths.sweet,
+          align: "left",
+        },
+        {
+          value: qty.toString(),
+          width: colWidths.qty,
+          align: "center",
+        },
+        {
+          value: item.unit || "-",
+          width: colWidths.unit,
+          align: "center",
+        },
+      ];
 
-      doc.text(item.counter_name || "-", x + 3, y + 5, {
-        width: colWidths.counter - 6,
-        ellipsis: true,
+      cells.forEach((cell) => {
+        drawCell(
+          x,
+          rowY,
+          cell.width,
+          rowHeight,
+        );
+
+        doc
+          .font(
+            cell.value ===
+              item.sweet_name
+              ? "Helvetica-Bold"
+              : "Helvetica",
+          )
+          .fontSize(6.7)
+          .fillColor(PRIMARY)
+          .text(
+            cell.value,
+            x + 3,
+            rowY + 9,
+            {
+              width: cell.width - 6,
+              align: cell.align,
+              ellipsis: true,
+            },
+          );
+
+        x += cell.width;
       });
 
-      x += colWidths.counter;
-
-      doc.text(item.category_name || "-", x + 3, y + 5, {
-        width: colWidths.category - 6,
-        ellipsis: true,
-      });
-
-      x += colWidths.category;
-
-      doc.text(item.department_name || "-", x + 3, y + 5, {
-        width: colWidths.department - 6,
-        ellipsis: true,
-      });
-
-      x += colWidths.department;
-
-      doc.text(item.sweet_name || "-", x + 3, y + 5, {
-        width: colWidths.sweet - 6,
-        ellipsis: true,
-      });
-
-      x += colWidths.sweet;
-
-      doc.text(qty.toString(), x, y + 5, {
-        width: colWidths.qty,
-        align: "center",
-      });
-
-      x += colWidths.qty;
-
-      doc.text(item.unit || "-", x, y + 5, {
-        width: colWidths.unit,
-        align: "center",
-      });
-
-      y += rowHeight;
+      doc.y = rowY + rowHeight;
     });
 
     // =====================================================
     // TOTAL
     // =====================================================
 
-    doc.rect(startX, y, totalWidth, rowHeight).fill("#e8f8f5");
+    checkPageSpace(35);
 
-    doc.fillColor("#000").fontSize(8).font("Helvetica-Bold");
+    const totalY = doc.y;
+    const totalHeight = 25;
 
-    doc.text("TOTAL", startX + 5, y + 5, {
-      width: 420,
-    });
+    doc
+      .save()
+      .fillColor(TOTAL_BG)
+      .rect(
+        tableX,
+        totalY,
+        tableWidth,
+        totalHeight,
+      )
+      .fill()
+      .restore();
 
-    doc.text(grandTotal.toString(), startX + 420, y + 5, {
-      width: 60,
-      align: "center",
-    });
+    drawCell(
+      tableX,
+      totalY,
+      tableWidth,
+      totalHeight,
+    );
 
-    doc.moveDown(2);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text(
+        "TOTAL QUANTITY",
+        tableX + 8,
+        totalY + 8,
+        {
+          width: 300,
+        },
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(
+        grandTotal.toString(),
+        tableX + tableWidth - 80,
+        totalY + 7,
+        {
+          width: 40,
+          align: "center",
+        },
+      );
+
+    doc.y = totalY + totalHeight + 12;
+
+    // =====================================================
+    // NOTES / SUMMARY
+    // =====================================================
+
+    checkPageSpace(45);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text("Order Summary");
+
+    doc.moveDown(0.3);
+
+    doc
+      .font("Helvetica")
+      .fontSize(7)
+      .fillColor(SECONDARY)
+      .text(
+        `Total Items: ${data.length}`,
+        {
+          width: contentWidth,
+        },
+      );
+
+    doc.text(
+      `Total Quantity: ${grandTotal}`,
+      {
+        width: contentWidth,
+      },
+    );
+
+    doc.moveDown(0.8);
+
+    drawLine(doc.y);
+
+    doc.moveDown(0.6);
+
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor(SECONDARY)
+      .text(
+        "This document is system generated and does not require a signature.",
+        {
+          width: contentWidth,
+          align: "center",
+        },
+      );
 
     // =====================================================
     // FOOTER
     // =====================================================
 
-    doc
-      .fontSize(8)
-      .font("Helvetica")
-      .fillColor("gray")
-      .text("System generated order request.", {
-        align: "center",
-      });
-
-    doc.fillColor("#000");
+    drawFooter();
 
     // =====================================================
-    // END
+    // FINISH PDF
     // =====================================================
 
     doc.end();
 
-    const fileUrl = `/uploads/OrderRequests/${fileName}`;
+    // =====================================================
+    // WAIT FOR FILE TO FINISH WRITING
+    // =====================================================
 
-    const serverUrl = "https://api.joswee.cloud";
+    await new Promise((resolve, reject) => {
+      writeStream.on("finish", resolve);
+      writeStream.on("error", reject);
+    });
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    const fileUrl =
+      `/uploads/OrderRequests/${fileName}`;
+
+    const serverUrl =
+      "https://api.joswee.cloud";
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Order request PDF generated successfully",
+      msg: "Order request A5 PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
-  } catch (error) {
-    console.log("downloadOrderRequestPDF error:", error);
 
-    return res.status(500).send("Error generating order request PDF");
+  } catch (error) {
+    console.log(
+      "downloadOrderRequestPDF error:",
+      error,
+    );
+
+    return res
+      .status(500)
+      .send(
+        "Error generating order request PDF",
+      );
   }
 }
 

@@ -388,3 +388,13 @@ ADD COLUMN IF NOT EXISTS remaining_action TEXT DEFAULT 'PENDING';
 
 ALTER TABLE sms.order_items
 ADD COLUMN IF NOT EXISTS remaining_action_on TIMESTAMP;
+
+
+
+// testing 
+SELECT * FROM sms.counter_requests
+ORDER BY row_id ASC 
+
+
+ALTER TABLE sms.order_items
+ADD COLUMN unit TEXT;

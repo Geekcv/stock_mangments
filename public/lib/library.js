@@ -9445,7 +9445,7 @@ async function downloadOrderRequestPDF(req, res) {
     const departmentTable = schema + ".departments";
 
     // =====================================================
-    // ORDER ID
+    // SAFE ORDER ID
     // =====================================================
 
     const safeOrderId = String(order_id)
@@ -9589,7 +9589,7 @@ async function downloadOrderRequestPDF(req, res) {
       `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
 
     // =====================================================
-    // FILE SETUP
+    // PATH
     // =====================================================
 
     const BASE_UPLOAD_PATH = "/home/uploads";
@@ -9672,7 +9672,7 @@ async function downloadOrderRequestPDF(req, res) {
     doc.pipe(writeStream);
 
     // =====================================================
-    // DESIGN COLORS
+    // COLORS
     // =====================================================
 
     const BRAND_DARK = "#4A2C1F";
@@ -9702,12 +9702,7 @@ async function downloadOrderRequestPDF(req, res) {
       }
 
       return d.toLocaleDateString(
-        "en-IN",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
+        "en-IN"
       );
     }
 
@@ -9715,29 +9710,23 @@ async function downloadOrderRequestPDF(req, res) {
     // ROUND LOGO
     // =====================================================
 
-    function drawRoundLogo(
-      x,
-      y,
-      size
-    ) {
+    function drawRoundLogo(x, y, size) {
       if (!hasLogo) {
         return;
       }
 
       try {
-        // Outer light circle
+        // Outer circle
         doc
-          .save()
           .circle(
             x + size / 2,
             y + size / 2,
             size / 2 + 3
           )
           .fillColor(BRAND_LIGHT)
-          .fill()
-          .restore();
+          .fill();
 
-        // Clip image into circle
+        // Clip image to circle
         doc.save();
 
         doc
@@ -9760,9 +9749,8 @@ async function downloadOrderRequestPDF(req, res) {
 
         doc.restore();
 
-        // Gold border
+        // Border
         doc
-          .save()
           .circle(
             x + size / 2,
             y + size / 2,
@@ -9770,8 +9758,7 @@ async function downloadOrderRequestPDF(req, res) {
           )
           .lineWidth(1)
           .strokeColor(GOLD)
-          .stroke()
-          .restore();
+          .stroke();
 
       } catch (error) {
         console.log(
@@ -9794,9 +9781,7 @@ async function downloadOrderRequestPDF(req, res) {
 
       const y = 0;
 
-      // Dark curved block
-      doc.save();
-
+      // Dark curved shape
       doc
         .moveTo(
           x + 32,
@@ -9829,11 +9814,8 @@ async function downloadOrderRequestPDF(req, res) {
         .fillColor(BRAND_DARK)
         .fill();
 
-      doc.restore();
-
-      // Gold curved line
+      // Gold curve
       doc
-        .save()
         .moveTo(
           x + 8,
           y + 56
@@ -9848,10 +9830,9 @@ async function downloadOrderRequestPDF(req, res) {
         )
         .lineWidth(1.8)
         .strokeColor(GOLD)
-        .stroke()
-        .restore();
+        .stroke();
 
-      // Small text
+      // Decorative text
       doc
         .font("Helvetica-Bold")
         .fontSize(5)
@@ -9863,6 +9844,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: 70,
             align: "center",
+            lineBreak: false,
           }
         );
     }
@@ -9870,26 +9852,35 @@ async function downloadOrderRequestPDF(req, res) {
     // =====================================================
     // FOOTER
     // =====================================================
+    //
+    // IMPORTANT:
+    // Footer is drawn using absolute coordinates and
+    // lineBreak:false so PDFKit will NOT create another page.
+    //
+    // =====================================================
 
     function drawFooter() {
-      const footerY =
+      const footerLineY =
+        PAGE_HEIGHT - 30;
+
+      const footerTextY =
         PAGE_HEIGHT - 22;
 
-      // Gold separator
+      // Separator
       doc
         .moveTo(
           MARGIN,
-          footerY - 5
+          footerLineY
         )
         .lineTo(
           PAGE_WIDTH - MARGIN,
-          footerY - 5
+          footerLineY
         )
         .lineWidth(0.6)
         .strokeColor(GOLD)
         .stroke();
 
-      // Existing footer content ONLY
+      // Existing footer text only
       doc
         .font("Helvetica")
         .fontSize(6.5)
@@ -9897,10 +9888,11 @@ async function downloadOrderRequestPDF(req, res) {
         .text(
           "System generated order request.",
           MARGIN,
-          footerY + 1,
+          footerTextY,
           {
             width: CONTENT_WIDTH,
             align: "center",
+            lineBreak: false,
           }
         );
 
@@ -9911,15 +9903,10 @@ async function downloadOrderRequestPDF(req, res) {
     // BUSINESS HEADER
     // =====================================================
 
-    function drawBusinessHeader(
-      continuation = false
-    ) {
-      const headerY =
-        continuation
-          ? MARGIN
-          : 24;
+    function drawBusinessHeader() {
+      const headerY = MARGIN;
 
-      // Decorative top-right section
+      // Top decoration
       drawTopDesign();
 
       // ===================================================
@@ -9956,10 +9943,11 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: shopWidth - 70,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
-      // Small brand line
+      // Brand line
       doc
         .font("Helvetica-Bold")
         .fontSize(5.2)
@@ -9970,6 +9958,7 @@ async function downloadOrderRequestPDF(req, res) {
           headerY + 22,
           {
             width: shopWidth - 70,
+            lineBreak: false,
           }
         );
 
@@ -9993,6 +9982,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: shopWidth - 70,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
@@ -10008,6 +9998,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: shopWidth - 70,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
@@ -10045,7 +10036,7 @@ async function downloadOrderRequestPDF(req, res) {
         lineY + 9;
 
       // ===================================================
-      // ORDER REQUEST TITLE BAR
+      // ORDER REQUEST TITLE
       // ===================================================
 
       const titleY = doc.y;
@@ -10081,13 +10072,12 @@ async function downloadOrderRequestPDF(req, res) {
         .fontSize(14)
         .fillColor(BLACK)
         .text(
-          continuation
-            ? "ORDER REQUEST"
-            : "ORDER REQUEST",
+          "ORDER REQUEST",
           MARGIN + 16,
           titleY + 8,
           {
             width: 190,
+            lineBreak: false,
           }
         );
 
@@ -10102,6 +10092,7 @@ async function downloadOrderRequestPDF(req, res) {
           titleY + 28,
           {
             width: 190,
+            lineBreak: false,
           }
         );
 
@@ -10112,7 +10103,6 @@ async function downloadOrderRequestPDF(req, res) {
       const orderBoxX =
         PAGE_WIDTH - MARGIN - 108;
 
-      // Separator
       doc
         .moveTo(
           orderBoxX - 8,
@@ -10136,6 +10126,7 @@ async function downloadOrderRequestPDF(req, res) {
           titleY + 8,
           {
             width: 100,
+            lineBreak: false,
           }
         );
 
@@ -10149,6 +10140,7 @@ async function downloadOrderRequestPDF(req, res) {
           titleY + 20,
           {
             width: 100,
+            lineBreak: false,
           }
         );
 
@@ -10167,7 +10159,6 @@ async function downloadOrderRequestPDF(req, res) {
 
       const boxHeight = 46;
 
-      // Outer border
       doc
         .roundedRect(
           MARGIN,
@@ -10180,7 +10171,6 @@ async function downloadOrderRequestPDF(req, res) {
         .strokeColor(BORDER)
         .stroke();
 
-      // 3 columns
       const colWidth =
         CONTENT_WIDTH / 3;
 
@@ -10222,7 +10212,10 @@ async function downloadOrderRequestPDF(req, res) {
         .text(
           "ORDER ID",
           MARGIN + 8,
-          y + 8
+          y + 8,
+          {
+            lineBreak: false,
+          }
         );
 
       doc
@@ -10235,6 +10228,7 @@ async function downloadOrderRequestPDF(req, res) {
           y + 21,
           {
             width: colWidth - 15,
+            lineBreak: false,
           }
         );
 
@@ -10252,7 +10246,10 @@ async function downloadOrderRequestPDF(req, res) {
         .text(
           "STATUS",
           statusX + 8,
-          y + 8
+          y + 8,
+          {
+            lineBreak: false,
+          }
         );
 
       doc
@@ -10266,6 +10263,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: colWidth - 15,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
@@ -10283,7 +10281,10 @@ async function downloadOrderRequestPDF(req, res) {
         .text(
           "ORDER DATE",
           dateX + 8,
-          y + 8
+          y + 8,
+          {
+            lineBreak: false,
+          }
         );
 
       doc
@@ -10291,17 +10292,12 @@ async function downloadOrderRequestPDF(req, res) {
         .fontSize(7)
         .fillColor(BLACK)
         .text(
-          order.order_date
-            ? new Date(
-                order.order_date
-              ).toLocaleDateString(
-                "en-IN"
-              )
-            : "-",
+          formatDate(order.order_date),
           dateX + 8,
           y + 21,
           {
             width: colWidth - 15,
+            lineBreak: false,
           }
         );
 
@@ -10318,7 +10314,7 @@ async function downloadOrderRequestPDF(req, res) {
     function drawShopDetails() {
       const y = doc.y;
 
-      // Section heading
+      // Heading
       doc
         .font("Helvetica-Bold")
         .fontSize(7)
@@ -10326,10 +10322,13 @@ async function downloadOrderRequestPDF(req, res) {
         .text(
           "SHOP DETAILS",
           MARGIN,
-          y
+          y,
+          {
+            lineBreak: false,
+          }
         );
 
-      // Small gold underline
+      // Underline
       doc
         .moveTo(
           MARGIN,
@@ -10343,7 +10342,7 @@ async function downloadOrderRequestPDF(req, res) {
         .strokeColor(GOLD)
         .stroke();
 
-      // Shop name + phone
+      // Shop
       doc
         .font("Helvetica-Bold")
         .fontSize(7)
@@ -10356,9 +10355,11 @@ async function downloadOrderRequestPDF(req, res) {
             width:
               CONTENT_WIDTH / 2 - 5,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
+      // Phone
       doc
         .font("Helvetica")
         .fontSize(6.5)
@@ -10372,9 +10373,11 @@ async function downloadOrderRequestPDF(req, res) {
               CONTENT_WIDTH / 2,
             align: "right",
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
+      // Address
       const address = [
         order.shop_address,
         order.city,
@@ -10394,26 +10397,17 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: CONTENT_WIDTH,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
       doc.y =
-        y +
-        41;
+        y + 41;
     }
 
     // =====================================================
     // TABLE
     // =====================================================
-
-    /*
-     * A5 printable width:
-     *
-     * 58 + 55 + 55 + 105 + 40 + 58
-     * = 371
-     *
-     * Content width = 375.53
-     */
 
     const rowHeight = 22;
 
@@ -10467,6 +10461,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width:
             colWidths.counter - 6,
+          lineBreak: false,
         }
       );
 
@@ -10480,6 +10475,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width:
             colWidths.category - 6,
+          lineBreak: false,
         }
       );
 
@@ -10493,6 +10489,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width:
             colWidths.department - 6,
+          lineBreak: false,
         }
       );
 
@@ -10506,6 +10503,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width:
             colWidths.sweet - 6,
+          lineBreak: false,
         }
       );
 
@@ -10519,6 +10517,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width: colWidths.qty,
           align: "center",
+          lineBreak: false,
         }
       );
 
@@ -10532,6 +10531,7 @@ async function downloadOrderRequestPDF(req, res) {
         {
           width: colWidths.unit,
           align: "center",
+          lineBreak: false,
         }
       );
 
@@ -10556,10 +10556,7 @@ async function downloadOrderRequestPDF(req, res) {
     // TABLE ITEM
     // =====================================================
 
-    function drawItem(
-      item,
-      index
-    ) {
+    function drawItem(item, index) {
       const y = doc.y;
 
       let x = MARGIN;
@@ -10567,7 +10564,7 @@ async function downloadOrderRequestPDF(req, res) {
       const qty =
         Number(item.quantity || 0);
 
-      // Alternating row
+      // Alternate background
       if (index % 2 === 0) {
         doc
           .rect(
@@ -10580,6 +10577,7 @@ async function downloadOrderRequestPDF(req, res) {
           .fill();
       }
 
+      // Text
       doc
         .font("Helvetica")
         .fontSize(6.1)
@@ -10594,6 +10592,7 @@ async function downloadOrderRequestPDF(req, res) {
           width:
             colWidths.counter - 6,
           ellipsis: true,
+          lineBreak: false,
         }
       );
 
@@ -10608,6 +10607,7 @@ async function downloadOrderRequestPDF(req, res) {
           width:
             colWidths.category - 6,
           ellipsis: true,
+          lineBreak: false,
         }
       );
 
@@ -10622,6 +10622,7 @@ async function downloadOrderRequestPDF(req, res) {
           width:
             colWidths.department - 6,
           ellipsis: true,
+          lineBreak: false,
         }
       );
 
@@ -10638,6 +10639,7 @@ async function downloadOrderRequestPDF(req, res) {
             width:
               colWidths.sweet - 6,
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
@@ -10653,6 +10655,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width: colWidths.qty,
             align: "center",
+            lineBreak: false,
           }
         );
 
@@ -10669,6 +10672,7 @@ async function downloadOrderRequestPDF(req, res) {
             width: colWidths.unit,
             align: "center",
             ellipsis: true,
+            lineBreak: false,
           }
         );
 
@@ -10684,7 +10688,7 @@ async function downloadOrderRequestPDF(req, res) {
         .strokeColor(BORDER)
         .stroke();
 
-      // Vertical separators
+      // Vertical lines
       let separatorX =
         MARGIN;
 
@@ -10698,10 +10702,13 @@ async function downloadOrderRequestPDF(req, res) {
       ];
 
       widths.forEach(
-        (width, i) => {
+        (width, index) => {
           separatorX += width;
 
-          if (i < widths.length - 1) {
+          if (
+            index <
+            widths.length - 1
+          ) {
             doc
               .moveTo(
                 separatorX,
@@ -10727,9 +10734,7 @@ async function downloadOrderRequestPDF(req, res) {
     // TOTAL
     // =====================================================
 
-    function drawTotal(
-      grandTotal
-    ) {
+    function drawTotal(grandTotal) {
       const y = doc.y;
 
       const height = 28;
@@ -10766,6 +10771,7 @@ async function downloadOrderRequestPDF(req, res) {
           {
             width:
               totalWidth - 80,
+            lineBreak: false,
           }
         );
 
@@ -10775,27 +10781,26 @@ async function downloadOrderRequestPDF(req, res) {
         .fillColor(BRAND_DARK)
         .text(
           grandTotal.toString(),
-          MARGIN +
-            totalWidth -
-            65,
+          MARGIN + totalWidth - 65,
           y + 7,
           {
             width: 45,
             align: "center",
+            lineBreak: false,
           }
         );
 
       doc.y =
         y +
         height +
-        10;
+        8;
     }
 
     // =====================================================
-    // FIRST PAGE
+    // FIRST PAGE HEADER
     // =====================================================
 
-    drawBusinessHeader(false);
+    drawBusinessHeader();
 
     drawOrderInformation();
 
@@ -10811,6 +10816,15 @@ async function downloadOrderRequestPDF(req, res) {
 
     let itemIndex = 0;
 
+    /*
+     * Bottom safe area.
+     *
+     * Footer starts around PAGE_HEIGHT - 30.
+     * We keep 42px safe space before it.
+     */
+
+    const BOTTOM_SAFE_SPACE = 48;
+
     data.forEach((item) => {
       const qty =
         Number(item.quantity || 0);
@@ -10818,17 +10832,21 @@ async function downloadOrderRequestPDF(req, res) {
       grandTotal += qty;
 
       /*
-       * Keep footer area free.
-       * 70 points reserved for footer + total.
+       * IMPORTANT:
+       *
+       * Check BEFORE drawing the row.
+       * This prevents PDFKit from automatically
+       * creating an unwanted page.
        */
 
       if (
-        doc.y >
-        PAGE_HEIGHT - 72
+        doc.y + rowHeight >
+        PAGE_HEIGHT - BOTTOM_SAFE_SPACE
       ) {
+        // Footer current page
         drawFooter();
 
-        // New A5 page
+        // New page
         doc.addPage({
           size: "A5",
           layout: "portrait",
@@ -10841,11 +10859,10 @@ async function downloadOrderRequestPDF(req, res) {
           },
         });
 
-        // Repeat business header
-        drawBusinessHeader(true);
+        // Header on new page
+        drawBusinessHeader();
 
-        // Repeat only table header.
-        // Existing content remains the same.
+        // Only table header on continuation
         drawTableHeader();
 
         itemIndex = 0;
@@ -10863,9 +10880,16 @@ async function downloadOrderRequestPDF(req, res) {
     // TOTAL
     // =====================================================
 
+    const TOTAL_HEIGHT = 36;
+
+    /*
+     * If total cannot fit on current page,
+     * create a new page BEFORE drawing total.
+     */
+
     if (
-      doc.y >
-      PAGE_HEIGHT - 65
+      doc.y + TOTAL_HEIGHT >
+      PAGE_HEIGHT - BOTTOM_SAFE_SPACE
     ) {
       drawFooter();
 
@@ -10881,7 +10905,7 @@ async function downloadOrderRequestPDF(req, res) {
         },
       });
 
-      drawBusinessHeader(true);
+      drawBusinessHeader();
 
       drawTableHeader();
     }
@@ -10891,7 +10915,7 @@ async function downloadOrderRequestPDF(req, res) {
     );
 
     // =====================================================
-    // FOOTER
+    // FINAL FOOTER
     // =====================================================
 
     drawFooter();
@@ -10903,7 +10927,7 @@ async function downloadOrderRequestPDF(req, res) {
     doc.end();
 
     // =====================================================
-    // WAIT UNTIL PDF IS WRITTEN
+    // WAIT FOR PDF WRITE
     // =====================================================
 
     await new Promise(
@@ -10959,6 +10983,7 @@ async function downloadOrderRequestPDF(req, res) {
     }
   }
 }
+
 
 
 

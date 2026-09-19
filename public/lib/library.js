@@ -6181,7 +6181,7 @@ async function getAllChalans(req, res) {
       -- Only actually supplied items
       AND oi.supplied_quantity > 0
 
-      ORDER BY ch.dispatch_date DESC
+      ORDER BY ch.cr_on DESC
     `);
 
     // =========================
@@ -18840,6 +18840,8 @@ async function cancelRemaining(req, res) {
     }
 
     const { order_id, items } = req.data;
+
+    console.log("all items", items);
 
     if (!order_id) {
       return libFunc.sendResponse(res, {

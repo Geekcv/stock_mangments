@@ -7772,7 +7772,7 @@ async function downloadChalanPDF(req, res) {
 
       INNER JOIN ${itemTable} oi
         ON oi.order_id = o.row_id
-        AND oi.item_status = 'ACCEPTED'
+        AND oi.item_status IN ('ACCEPTED', 'PARTIAL')
         AND oi.supplied_quantity > 0
 
       LEFT JOIN ${sweetTable} sw

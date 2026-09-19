@@ -9420,7 +9420,8 @@ async function downloadChalanPDF(req, res) {
 //   }
 // }
 
-// new 
+
+
 async function downloadOrderRequestPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -9440,74 +9441,142 @@ async function downloadOrderRequestPDF(req, res) {
     const counterTable = schema + ".counters";
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
+
+    /*
+     * IMPORTANT:
+     * If supplier table exists in your project,
+     * keep this table.
+     */
     const supplierTable = schema + ".suppliers";
+
+    // =====================================================
+    // ORDER ID
+    // =====================================================
+
+    const safeOrderId = String(order_id)
+      .trim()
+      .replaceAll("'", "''");
 
     // =====================================================
     // FETCH ORDER DATA
     // =====================================================
 
-    const result = await db_query.customQuery(
-      `
+    const result = await db_query.customQuery(`
       SELECT
 
-        -- =========================
+        -- =================================================
         -- ORDER
-        -- =========================
+        -- =================================================
+
         o.id AS order_serial_id,
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
         o.supplier_id,
 
-        -- =========================
+        -- =================================================
         -- SHOP
-        -- =========================
+        -- =================================================
+
         sh.row_id AS shop_id,
-        COALESCE(sh.shop_name, '-') AS shop_name,
-        COALESCE(sh.address, '-') AS shop_address,
-        COALESCE(sh.city, '-') AS city,
-        COALESCE(sh.state, '-') AS state,
-        COALESCE(sh.phone, '-') AS shop_phone,
 
-        -- =========================
+        COALESCE(
+          sh.shop_name,
+          '-'
+        ) AS shop_name,
+
+        COALESCE(
+          sh.address,
+          '-'
+        ) AS shop_address,
+
+        COALESCE(
+          sh.city,
+          ''
+        ) AS city,
+
+        COALESCE(
+          sh.state,
+          ''
+        ) AS state,
+
+        COALESCE(
+          sh.phone,
+          '-'
+        ) AS shop_phone,
+
+        -- =================================================
         -- SUPPLIER
-        -- =========================
-        COALESCE(sup.supplier_name, '-') AS supplier_name,
+        -- =================================================
 
-        -- =========================
+        COALESCE(
+          sup.supplier_name,
+          '-'
+        ) AS supplier_name,
+
+        -- =================================================
         -- ORDER ITEM
-        -- =========================
+        -- =================================================
+
         oi.row_id AS order_item_id,
         oi.request_id,
         oi.quantity,
         oi.item_status,
         oi.counter_id,
 
-        -- =========================
+        -- =================================================
         -- SWEET
-        -- =========================
+        -- =================================================
+
         sw.row_id AS sweet_id,
-        COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
-        COALESCE(sw.unit, '-') AS unit,
 
-        -- =========================
+        COALESCE(
+          sw.sweet_name,
+          'Unknown Sweet'
+        ) AS sweet_name,
+
+        COALESCE(
+          sw.unit,
+          '-'
+        ) AS unit,
+
+        -- =================================================
         -- COUNTER
-        -- =========================
-        c.row_id AS counter_row_id,
-        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
-        COALESCE(c.location, '-') AS counter_location,
+        -- =================================================
 
-        -- =========================
+        c.row_id AS counter_id,
+
+        COALESCE(
+          c.counter_name,
+          'Default Counter'
+        ) AS counter_name,
+
+        COALESCE(
+          c.location,
+          '-'
+        ) AS counter_location,
+
+        -- =================================================
         -- CATEGORY
-        -- =========================
-        cat.row_id AS category_id,
-        COALESCE(cat.category_name, 'Others') AS category_name,
+        -- =================================================
 
-        -- =========================
+        cat.row_id AS category_id,
+
+        COALESCE(
+          cat.category_name,
+          'Others'
+        ) AS category_name,
+
+        -- =================================================
         -- DEPARTMENT
-        -- =========================
+        -- =================================================
+
         d.row_id AS department_id,
-        COALESCE(d.department_name, 'Others') AS department_name
+
+        COALESCE(
+          d.department_name,
+          'Others'
+        ) AS department_name
 
       FROM ${orderTable} o
 
@@ -9532,15 +9601,18 @@ async function downloadOrderRequestPDF(req, res) {
       LEFT JOIN ${departmentTable} d
         ON d.row_id = cat.department_id
 
-      WHERE o.row_id = '${String(order_id).trim().replaceAll("'", "''")}'
+      WHERE o.row_id = '${safeOrderId}'
 
       ORDER BY
         c.counter_name ASC,
         d.department_name ASC,
         cat.category_name ASC,
         sw.sweet_name ASC
-      `,
-    );
+    `);
+
+    // =====================================================
+    // DATA
+    // =====================================================
 
     const data = result.data || [];
 
@@ -9551,23 +9623,25 @@ async function downloadOrderRequestPDF(req, res) {
     const order = data[0];
 
     // =====================================================
-    // ORDER DISPLAY ID
+    // DISPLAY ORDER ID
     // =====================================================
 
-    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
-      6,
-      "0",
-    )}`;
+    const orderDisplayId =
+      `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
 
     // =====================================================
-    // PATH SETUP
+    // BASE UPLOAD PATH
     // =====================================================
 
     const BASE_UPLOAD_PATH = "/home/uploads";
 
+    // =====================================================
+    // PDF FOLDER
+    // =====================================================
+
     const folder = path.join(
       BASE_UPLOAD_PATH,
-      "OrderRequests",
+      "OrderRequests"
     );
 
     if (!fs.existsSync(folder)) {
@@ -9580,43 +9654,66 @@ async function downloadOrderRequestPDF(req, res) {
     // LOGO
     // =====================================================
 
-    const logoPath = path.join(
+    const LOGO_PATH = path.join(
       BASE_UPLOAD_PATH,
       "ShopMedia",
-      "1789809020026_logo.jpg",
+      "1789809020026_logo.jpg"
     );
 
-    const hasLogo = fs.existsSync(logoPath);
+    const hasLogo = fs.existsSync(LOGO_PATH);
+
+    if (!hasLogo) {
+      console.log(
+        "Order PDF logo not found:",
+        LOGO_PATH
+      );
+    }
 
     // =====================================================
-    // PDF FILE
+    // FILE NAME
     // =====================================================
 
-    const fileName = `OrderRequest_${orderDisplayId}_${Date.now()}.pdf`;
+    const fileName =
+      `OrderRequest_${orderDisplayId}_${Date.now()}.pdf`;
 
-    const filePath = path.join(folder, fileName);
+    const filePath = path.join(
+      folder,
+      fileName
+    );
 
     // =====================================================
-    // A5 PDF
+    // A5 SETTINGS
+    // =====================================================
+
+    const PAGE_WIDTH = 419.53;
+    const PAGE_HEIGHT = 595.28;
+
+    const MARGIN = 24;
+
+    const CONTENT_WIDTH =
+      PAGE_WIDTH - MARGIN * 2;
+
+    // =====================================================
+    // PDF DOCUMENT
     // =====================================================
 
     const doc = new PDFDocument({
       size: "A5",
+
       layout: "portrait",
 
-      // A5 = 148 x 210 mm
-      // PDF points ≈ 419.5 x 595.3
       margins: {
-        top: 22,
-        bottom: 25,
-        left: 22,
-        right: 22,
+        top: MARGIN,
+        bottom: MARGIN,
+        left: MARGIN,
+        right: MARGIN,
       },
 
       autoFirstPage: true,
     });
 
-    const writeStream = fs.createWriteStream(filePath);
+    const writeStream =
+      fs.createWriteStream(filePath);
 
     doc.pipe(writeStream);
 
@@ -9624,30 +9721,22 @@ async function downloadOrderRequestPDF(req, res) {
     // COLORS
     // =====================================================
 
-    const PRIMARY = "#222222";
-    const SECONDARY = "#666666";
-    const BORDER = "#D9D9D9";
-    const LIGHT_BG = "#F5F5F5";
-    const HEADER_BG = "#EFEFEF";
-    const TOTAL_BG = "#EAF6F2";
+    const BLACK = "#111111";
+    const DARK = "#222222";
+    const GREY = "#666666";
+    const LIGHT_GREY = "#EEEEEE";
+    const BORDER = "#D0D0D0";
+    const ROW_GREY = "#FAFAFA";
+    const TOTAL_GREY = "#E8E8E8";
 
     // =====================================================
-    // PAGE DIMENSIONS
-    // =====================================================
-
-    const pageWidth = doc.page.width;
-    const pageHeight = doc.page.height;
-
-    const left = 22;
-    const right = pageWidth - 22;
-    const contentWidth = right - left;
-
-    // =====================================================
-    // HELPER FUNCTIONS
+    // HELPER
     // =====================================================
 
     function formatDate(date) {
-      if (!date) return "-";
+      if (!date) {
+        return "-";
+      }
 
       const d = new Date(date);
 
@@ -9655,412 +9744,914 @@ async function downloadOrderRequestPDF(req, res) {
         return "-";
       }
 
-      return d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    }
-
-    function drawLine(y, color = BORDER, width = 0.6) {
-      doc
-        .save()
-        .strokeColor(color)
-        .lineWidth(width)
-        .moveTo(left, y)
-        .lineTo(right, y)
-        .stroke()
-        .restore();
-    }
-
-    function drawCell(x, y, width, height) {
-      doc
-        .save()
-        .strokeColor(BORDER)
-        .lineWidth(0.5)
-        .rect(x, y, width, height)
-        .stroke()
-        .restore();
-    }
-
-    function checkPageSpace(requiredHeight) {
-      if (
-        doc.y + requiredHeight >
-        pageHeight - 45
-      ) {
-        drawFooter();
-        doc.addPage();
-        drawPageHeader();
-      }
+      return d.toLocaleDateString(
+        "en-IN",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      );
     }
 
     // =====================================================
-    // FOOTER
+    // DRAW FOOTER
     // =====================================================
 
     function drawFooter() {
-      const footerY = pageHeight - 25;
+      const footerY =
+        PAGE_HEIGHT - 24;
 
       doc
         .font("Helvetica")
-        .fontSize(6.5)
-        .fillColor(SECONDARY)
+        .fontSize(6)
+        .fillColor(GREY)
         .text(
           "System generated order request",
-          left,
+          MARGIN,
           footerY,
           {
-            width: contentWidth,
+            width: CONTENT_WIDTH,
             align: "center",
-          },
+          }
         );
 
-      doc
-        .fontSize(6)
-        .fillColor("#999999")
-        .text(
-          `Generated on ${formatDate(new Date())}`,
-          left,
-          footerY + 9,
-          {
-            width: contentWidth,
-            align: "center",
-          },
-        );
-    }
-
-    // =====================================================
-    // PAGE HEADER
-    // =====================================================
-
-    function drawPageHeader() {
       doc
         .font("Helvetica")
-        .fontSize(6.5)
-        .fillColor(SECONDARY)
+        .fontSize(5.5)
+        .fillColor("#999999")
         .text(
-          orderDisplayId,
-          left,
-          12,
+          `Generated: ${formatDate(new Date())}`,
+          MARGIN,
+          footerY + 9,
           {
-            width: contentWidth / 2,
-          },
+            width: CONTENT_WIDTH,
+            align: "center",
+          }
         );
 
-      doc
-        .text(
-          "ORDER REQUEST",
-          left + contentWidth / 2,
-          12,
-          {
-            width: contentWidth / 2,
-            align: "right",
-          },
-        );
-
-      doc.y = 25;
+      doc.fillColor(BLACK);
     }
 
     // =====================================================
-    // MAIN HEADER
+    // DRAW ROUND LOGO
     // =====================================================
 
-    let headerY = doc.y;
+    function drawRoundLogo(
+      x,
+      y,
+      size
+    ) {
+      if (!hasLogo) {
+        return;
+      }
 
-    // Logo
-    if (hasLogo) {
       try {
+        doc.save();
+
+        /*
+         * Circular clipping
+         */
+
+        doc
+          .circle(
+            x + size / 2,
+            y + size / 2,
+            size / 2
+          )
+          .clip();
+
         doc.image(
-          logoPath,
-          left,
-          headerY,
+          LOGO_PATH,
+          x,
+          y,
           {
-            fit: [65, 55],
-            align: "left",
-            valign: "center",
-          },
+            width: size,
+            height: size,
+          }
         );
-      } catch (logoError) {
+
+        doc.restore();
+
+        /*
+         * Circular border
+         */
+
+        doc
+          .save()
+          .circle(
+            x + size / 2,
+            y + size / 2,
+            size / 2
+          )
+          .lineWidth(0.8)
+          .strokeColor("#BBBBBB")
+          .stroke()
+          .restore();
+
+      } catch (error) {
         console.log(
-          "Logo loading failed:",
-          logoError,
+          "Round logo error:",
+          error
         );
       }
     }
 
-    const shopTextX = hasLogo
-      ? left + 75
-      : left;
-
-    const shopTextWidth = hasLogo
-      ? contentWidth - 75
-      : contentWidth;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(15)
-      .fillColor(PRIMARY)
-      .text(
-        order.shop_name || "SHOP",
-        shopTextX,
-        headerY + 3,
-        {
-          width: shopTextWidth,
-        },
-      );
-
-    doc
-      .font("Helvetica")
-      .fontSize(7.5)
-      .fillColor(SECONDARY)
-      .text(
-        `${order.shop_address || ""}`,
-        shopTextX,
-        headerY + 23,
-        {
-          width: shopTextWidth,
-        },
-      );
-
-    doc.text(
-      `${order.city || ""}${
-        order.state
-          ? `, ${order.state}`
-          : ""
-      }`,
-      shopTextX,
-      headerY + 34,
-      {
-        width: shopTextWidth,
-      },
-    );
-
-    doc.text(
-      `Phone: ${order.shop_phone || "-"}`,
-      shopTextX,
-      headerY + 45,
-      {
-        width: shopTextWidth,
-      },
-    );
-
-    doc.y = headerY + 65;
-
-    drawLine(doc.y);
-
-    doc.moveDown(0.5);
-
     // =====================================================
-    // TITLE
+    // BUSINESS HEADER
     // =====================================================
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(13)
-      .fillColor(PRIMARY)
-      .text(
-        "ORDER REQUEST",
-        left,
-        doc.y,
+    function drawBusinessHeader(
+      continuation = false
+    ) {
+      const headerY = doc.y;
+
+      const logoSize = 52;
+
+      // ===================================================
+      // LOGO
+      // ===================================================
+
+      drawRoundLogo(
+        MARGIN,
+        headerY,
+        logoSize
+      );
+
+      // ===================================================
+      // BUSINESS INFORMATION
+      // ===================================================
+
+      const businessX =
+        MARGIN + 65;
+
+      const businessWidth =
+        CONTENT_WIDTH - 65;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(14)
+        .fillColor(BLACK)
+        .text(
+          order.shop_name ||
+            "JODHPUR SWEETS",
+          businessX,
+          headerY + 2,
+          {
+            width: businessWidth,
+            ellipsis: true,
+          }
+        );
+
+      const address = [
+        order.shop_address,
+        order.city,
+        order.state,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor(GREY)
+        .text(
+          address || "-",
+          businessX,
+          headerY + 21,
+          {
+            width: businessWidth,
+            ellipsis: true,
+          }
+        );
+
+      doc.text(
+        `Phone: ${order.shop_phone || "-"}`,
+        businessX,
+        headerY + 34,
         {
-          width: contentWidth,
-          align: "center",
-        },
-      );
-
-    doc.moveDown(0.45);
-
-    // =====================================================
-    // ORDER INFO BOX
-    // =====================================================
-
-    const infoY = doc.y;
-    const infoHeight = 53;
-
-    doc
-      .save()
-      .fillColor(LIGHT_BG)
-      .roundedRect(
-        left,
-        infoY,
-        contentWidth,
-        infoHeight,
-        4,
-      )
-      .fill()
-      .restore();
-
-    const halfWidth = contentWidth / 2;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(PRIMARY)
-      .text(
-        "ORDER ID",
-        left + 8,
-        infoY + 8,
-      );
-
-    doc
-      .font("Helvetica")
-      .fontSize(8.5)
-      .text(
-        orderDisplayId,
-        left + 8,
-        infoY + 20,
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .text(
-        "ORDER DATE",
-        left + halfWidth,
-        infoY + 8,
-      );
-
-    doc
-      .font("Helvetica")
-      .fontSize(8.5)
-      .text(
-        formatDate(order.order_date),
-        left + halfWidth,
-        infoY + 20,
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .text(
-        "STATUS",
-        left + 8,
-        infoY + 35,
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7.5)
-      .fillColor(PRIMARY)
-      .text(
-        order.order_status || "-",
-        left + 8,
-        infoY + 44,
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(PRIMARY)
-      .text(
-        "SUPPLIER",
-        left + halfWidth,
-        infoY + 35,
-      );
-
-    doc
-      .font("Helvetica")
-      .fontSize(7.5)
-      .text(
-        order.supplier_name || "-",
-        left + halfWidth,
-        infoY + 44,
-        {
-          width: halfWidth - 10,
+          width: businessWidth,
           ellipsis: true,
-        },
+        }
       );
 
-    doc.y = infoY + infoHeight + 12;
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor("#888888")
+        .text(
+          "Business Order Management",
+          businessX,
+          headerY + 46,
+          {
+            width: businessWidth,
+          }
+        );
+
+      doc.y =
+        headerY + logoSize + 9;
+
+      // ===================================================
+      // LINE
+      // ===================================================
+
+      doc
+        .moveTo(
+          MARGIN,
+          doc.y
+        )
+        .lineTo(
+          PAGE_WIDTH - MARGIN,
+          doc.y
+        )
+        .lineWidth(0.8)
+        .strokeColor(DARK)
+        .stroke();
+
+      doc.moveDown(0.45);
+
+      // ===================================================
+      // TITLE
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .fillColor(BLACK)
+        .text(
+          continuation
+            ? "ORDER REQUEST - CONTINUED"
+            : "ORDER REQUEST",
+          MARGIN,
+          doc.y,
+          {
+            width: CONTENT_WIDTH,
+            align: "center",
+          }
+        );
+
+      doc.moveDown(0.45);
+    }
 
     // =====================================================
-    // TABLE CONFIGURATION
+    // ORDER INFORMATION
     // =====================================================
 
-    const tableX = left;
+    function drawOrderInformation() {
+      const y = doc.y;
+
+      const boxHeight = 60;
+
+      // Outer box
+      doc
+        .roundedRect(
+          MARGIN,
+          y,
+          CONTENT_WIDTH,
+          boxHeight,
+          4
+        )
+        .lineWidth(0.6)
+        .strokeColor(BORDER)
+        .stroke();
+
+      // Vertical separator
+      const separatorX =
+        MARGIN +
+        CONTENT_WIDTH * 0.50;
+
+      doc
+        .moveTo(
+          separatorX,
+          y
+        )
+        .lineTo(
+          separatorX,
+          y + 38
+        )
+        .lineWidth(0.4)
+        .strokeColor(BORDER)
+        .stroke();
+
+      // ===================================================
+      // LEFT
+      // ===================================================
+
+      const leftX =
+        MARGIN + 9;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(GREY)
+        .text(
+          "ORDER INFORMATION",
+          leftX,
+          y + 7
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(7.5)
+        .fillColor(BLACK)
+        .text(
+          `Order No: ${orderDisplayId}`,
+          leftX,
+          y + 20
+        );
+
+      doc.text(
+        `Date: ${formatDate(order.order_date)}`,
+        leftX,
+        y + 34
+      );
+
+      // ===================================================
+      // RIGHT
+      // ===================================================
+
+      const rightX =
+        separatorX + 10;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(GREY)
+        .text(
+          "ORDER STATUS",
+          rightX,
+          y + 7
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7.5)
+        .fillColor(BLACK)
+        .text(
+          order.order_status || "-",
+          rightX,
+          y + 20,
+          {
+            width: CONTENT_WIDTH * 0.45,
+            ellipsis: true,
+          }
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(GREY)
+        .text(
+          "SUPPLIER",
+          rightX,
+          y + 34
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor(BLACK)
+        .text(
+          order.supplier_name || "-",
+          rightX + 43,
+          y + 33,
+          {
+            width:
+              CONTENT_WIDTH * 0.45 - 43,
+            ellipsis: true,
+          }
+        );
+
+      doc.y =
+        y + boxHeight + 10;
+    }
+
+    // =====================================================
+    // TABLE SETTINGS
+    // =====================================================
+
+    const rowHeight = 24;
 
     const colWidths = {
-      no: 22,
-      counter: 68,
-      category: 62,
+      counter: 60,
+      category: 55,
+      department: 58,
       sweet: 105,
       qty: 38,
-      unit: 42,
+      unit: 38,
     };
 
-    const tableWidth =
-      colWidths.no +
+    // Verify total
+    const calculatedWidth =
       colWidths.counter +
       colWidths.category +
+      colWidths.department +
       colWidths.sweet +
       colWidths.qty +
       colWidths.unit;
 
     // =====================================================
-    // DRAW TABLE HEADER
+    // TABLE HEADER
     // =====================================================
 
     function drawTableHeader() {
-      const tableY = doc.y;
-      const rowHeight = 22;
+      const y = doc.y;
+
+      let x = MARGIN;
+
+      // Background
+      doc
+        .rect(
+          MARGIN,
+          y,
+          calculatedWidth,
+          rowHeight
+        )
+        .fill(LIGHT_GREY);
 
       doc
-        .save()
-        .fillColor(HEADER_BG)
+        .fillColor(BLACK)
+        .font("Helvetica-Bold")
+        .fontSize(6.2);
+
+      // Counter
+      doc.text(
+        "COUNTER",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.counter - 6,
+        }
+      );
+
+      x += colWidths.counter;
+
+      // Category
+      doc.text(
+        "CATEGORY",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.category - 6,
+        }
+      );
+
+      x += colWidths.category;
+
+      // Department
+      doc.text(
+        "DEPARTMENT",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.department - 6,
+        }
+      );
+
+      x += colWidths.department;
+
+      // Sweet
+      doc.text(
+        "SWEET",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.sweet - 6,
+        }
+      );
+
+      x += colWidths.sweet;
+
+      // Qty
+      doc.text(
+        "QTY",
+        x,
+        y + 8,
+        {
+          width: colWidths.qty,
+          align: "center",
+        }
+      );
+
+      x += colWidths.qty;
+
+      // Unit
+      doc.text(
+        "UNIT",
+        x,
+        y + 8,
+        {
+          width: colWidths.unit,
+          align: "center",
+        }
+      );
+
+      // Border
+      doc
         .rect(
-          tableX,
-          tableY,
-          tableWidth,
-          rowHeight,
+          MARGIN,
+          y,
+          calculatedWidth,
+          rowHeight
         )
-        .fill()
-        .restore();
+        .lineWidth(0.5)
+        .strokeColor(BORDER)
+        .stroke();
 
-      let x = tableX;
+      doc.y =
+        y + rowHeight;
+    }
 
-      const headers = [
-        ["#", colWidths.no],
-        ["Counter", colWidths.counter],
-        ["Category", colWidths.category],
-        ["Sweet", colWidths.sweet],
-        ["Qty", colWidths.qty],
-        ["Unit", colWidths.unit],
-      ];
+    // =====================================================
+    // TABLE ITEM
+    // =====================================================
 
-      headers.forEach(([label, width]) => {
-        drawCell(
-          x,
-          tableY,
-          width,
-          rowHeight,
+    function drawItem(
+      item,
+      index
+    ) {
+      const y = doc.y;
+
+      let x = MARGIN;
+
+      const qty =
+        Number(item.quantity || 0);
+
+      // Alternate row background
+      if (index % 2 === 0) {
+        doc
+          .rect(
+            MARGIN,
+            y,
+            calculatedWidth,
+            rowHeight
+          )
+          .fill(ROW_GREY);
+      }
+
+      doc
+        .fillColor(BLACK)
+        .font("Helvetica")
+        .fontSize(6.3);
+
+      // -----------------------------------------------
+      // Counter
+      // -----------------------------------------------
+
+      doc.text(
+        item.counter_name || "-",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.counter - 6,
+          ellipsis: true,
+        }
+      );
+
+      x += colWidths.counter;
+
+      // -----------------------------------------------
+      // Category
+      // -----------------------------------------------
+
+      doc.text(
+        item.category_name || "-",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.category - 6,
+          ellipsis: true,
+        }
+      );
+
+      x += colWidths.category;
+
+      // -----------------------------------------------
+      // Department
+      // -----------------------------------------------
+
+      doc.text(
+        item.department_name || "-",
+        x + 3,
+        y + 8,
+        {
+          width:
+            colWidths.department - 6,
+          ellipsis: true,
+        }
+      );
+
+      x += colWidths.department;
+
+      // -----------------------------------------------
+      // Sweet
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .text(
+          item.sweet_name || "-",
+          x + 3,
+          y + 8,
+          {
+            width:
+              colWidths.sweet - 6,
+            ellipsis: true,
+          }
         );
 
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(6.5)
-          .fillColor(PRIMARY)
-          .text(
-            label,
-            x + 2,
-            tableY + 7,
-            {
-              width: width - 4,
-              align:
-                label === "#" ||
-                label === "Qty" ||
-                label === "Unit"
-                  ? "center"
-                  : "left",
-            },
-          );
+      x += colWidths.sweet;
 
-        x += width;
-      });
+      // -----------------------------------------------
+      // Quantity
+      // -----------------------------------------------
 
-      doc.y = tableY + rowHeight;
+      doc
+        .font("Helvetica")
+        .text(
+          String(qty),
+          x,
+          y + 8,
+          {
+            width: colWidths.qty,
+            align: "center",
+          }
+        );
 
-      return rowHeight;
+      x += colWidths.qty;
+
+      // -----------------------------------------------
+      // Unit
+      // -----------------------------------------------
+
+      doc.text(
+        item.unit || "-",
+        x,
+        y + 8,
+        {
+          width: colWidths.unit,
+          align: "center",
+          ellipsis: true,
+        }
+      );
+
+      // -----------------------------------------------
+      // Row border
+      // -----------------------------------------------
+
+      doc
+        .rect(
+          MARGIN,
+          y,
+          calculatedWidth,
+          rowHeight
+        )
+        .lineWidth(0.35)
+        .strokeColor(BORDER)
+        .stroke();
+
+      doc.y =
+        y + rowHeight;
     }
+
+    // =====================================================
+    // TOTAL
+    // =====================================================
+
+    function drawTotal(
+      totalQuantity,
+      totalItems
+    ) {
+      const y = doc.y;
+
+      const height = 32;
+
+      doc
+        .rect(
+          MARGIN,
+          y,
+          calculatedWidth,
+          height
+        )
+        .fill(TOTAL_GREY);
+
+      doc
+        .rect(
+          MARGIN,
+          y,
+          calculatedWidth,
+          height
+        )
+        .lineWidth(0.5)
+        .strokeColor(BORDER)
+        .stroke();
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(GREY)
+        .text(
+          `Total Items: ${totalItems}`,
+          MARGIN + 8,
+          y + 6
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor(BLACK)
+        .text(
+          "TOTAL QUANTITY",
+          MARGIN + 8,
+          y + 17
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .fillColor(BLACK)
+        .text(
+          String(totalQuantity),
+          PAGE_WIDTH - MARGIN - 58,
+          y + 10,
+          {
+            width: 48,
+            align: "right",
+          }
+        );
+
+      doc.y =
+        y + height + 14;
+    }
+
+    // =====================================================
+    // APPROVAL / SIGNATURE SECTION
+    // =====================================================
+
+    function drawApprovalSection() {
+      const y = doc.y;
+
+      // Separator
+      doc
+        .moveTo(
+          MARGIN,
+          y
+        )
+        .lineTo(
+          PAGE_WIDTH - MARGIN,
+          y
+        )
+        .lineWidth(0.5)
+        .strokeColor(BORDER)
+        .stroke();
+
+      doc.moveDown(0.8);
+
+      const colWidth =
+        CONTENT_WIDTH / 3;
+
+      // Titles
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(DARK);
+
+      doc.text(
+        "PREPARED BY",
+        MARGIN,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.text(
+        "CHECKED BY",
+        MARGIN + colWidth,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.text(
+        "RECEIVED BY",
+        MARGIN + colWidth * 2,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.moveDown(1.7);
+
+      // Signature lines
+      doc
+        .strokeColor("#AAAAAA")
+        .lineWidth(0.4);
+
+      doc
+        .moveTo(
+          MARGIN + 15,
+          doc.y
+        )
+        .lineTo(
+          MARGIN + colWidth - 15,
+          doc.y
+        )
+        .stroke();
+
+      doc
+        .moveTo(
+          MARGIN + colWidth + 15,
+          doc.y
+        )
+        .lineTo(
+          MARGIN + colWidth * 2 - 15,
+          doc.y
+        )
+        .stroke();
+
+      doc
+        .moveTo(
+          MARGIN + colWidth * 2 + 15,
+          doc.y
+        )
+        .lineTo(
+          PAGE_WIDTH - MARGIN - 15,
+          doc.y
+        )
+        .stroke();
+
+      doc.moveDown(0.35);
+
+      doc
+        .font("Helvetica")
+        .fontSize(5.5)
+        .fillColor("#888888");
+
+      doc.text(
+        "Signature",
+        MARGIN,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.text(
+        "Signature",
+        MARGIN + colWidth,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.text(
+        "Signature",
+        MARGIN + colWidth * 2,
+        doc.y,
+        {
+          width: colWidth,
+          align: "center",
+        }
+      );
+
+      doc.moveDown(0.8);
+
+      doc
+        .fontSize(5.8)
+        .fillColor("#888888")
+        .text(
+          "This is a system-generated order request document.",
+          MARGIN,
+          doc.y,
+          {
+            width: CONTENT_WIDTH,
+            align: "center",
+          }
+        );
+    }
+
+    // =====================================================
+    // FIRST PAGE
+    // =====================================================
+
+    drawBusinessHeader(false);
+
+    drawOrderInformation();
 
     drawTableHeader();
 
@@ -10070,239 +10661,151 @@ async function downloadOrderRequestPDF(req, res) {
 
     let grandTotal = 0;
 
-    data.forEach((item, index) => {
-      const qty = Number(
-        item.quantity || 0,
-      );
+    let itemIndex = 0;
+
+    data.forEach((item) => {
+      const qty =
+        Number(item.quantity || 0);
 
       grandTotal += qty;
 
-      const rowHeight = 27;
+      /*
+       * Keep enough space at bottom.
+       *
+       * 24 = item row
+       * 40 = safety space
+       */
 
-      checkPageSpace(rowHeight + 10);
-
-      // Re-draw header after page break
       if (
-        doc.y === 25 ||
-        doc.y < 40
+        doc.y >
+        PAGE_HEIGHT - 75
       ) {
+        // Footer current page
+        drawFooter();
+
+        // New A5 page
+        doc.addPage({
+          size: "A5",
+
+          margins: {
+            top: MARGIN,
+            bottom: MARGIN,
+            left: MARGIN,
+            right: MARGIN,
+          },
+        });
+
+        drawBusinessHeader(true);
+
+        drawOrderInformation();
+
         drawTableHeader();
+
+        itemIndex = 0;
       }
 
-      const rowY = doc.y;
+      drawItem(
+        item,
+        itemIndex
+      );
 
-      if (index % 2 === 0) {
-        doc
-          .save()
-          .fillColor("#FAFAFA")
-          .rect(
-            tableX,
-            rowY,
-            tableWidth,
-            rowHeight,
-          )
-          .fill()
-          .restore();
-      }
-
-      let x = tableX;
-
-      const cells = [
-        {
-          value: String(index + 1),
-          width: colWidths.no,
-          align: "center",
-        },
-        {
-          value: item.counter_name || "-",
-          width: colWidths.counter,
-          align: "left",
-        },
-        {
-          value: item.category_name || "-",
-          width: colWidths.category,
-          align: "left",
-        },
-        {
-          value: item.sweet_name || "-",
-          width: colWidths.sweet,
-          align: "left",
-        },
-        {
-          value: qty.toString(),
-          width: colWidths.qty,
-          align: "center",
-        },
-        {
-          value: item.unit || "-",
-          width: colWidths.unit,
-          align: "center",
-        },
-      ];
-
-      cells.forEach((cell) => {
-        drawCell(
-          x,
-          rowY,
-          cell.width,
-          rowHeight,
-        );
-
-        doc
-          .font(
-            cell.value ===
-              item.sweet_name
-              ? "Helvetica-Bold"
-              : "Helvetica",
-          )
-          .fontSize(6.7)
-          .fillColor(PRIMARY)
-          .text(
-            cell.value,
-            x + 3,
-            rowY + 9,
-            {
-              width: cell.width - 6,
-              align: cell.align,
-              ellipsis: true,
-            },
-          );
-
-        x += cell.width;
-      });
-
-      doc.y = rowY + rowHeight;
+      itemIndex++;
     });
 
     // =====================================================
     // TOTAL
     // =====================================================
 
-    checkPageSpace(35);
+    /*
+     * If total doesn't fit,
+     * move it to a new page.
+     */
 
-    const totalY = doc.y;
-    const totalHeight = 25;
+    if (
+      doc.y >
+      PAGE_HEIGHT - 110
+    ) {
+      drawFooter();
 
-    doc
-      .save()
-      .fillColor(TOTAL_BG)
-      .rect(
-        tableX,
-        totalY,
-        tableWidth,
-        totalHeight,
-      )
-      .fill()
-      .restore();
+      doc.addPage({
+        size: "A5",
 
-    drawCell(
-      tableX,
-      totalY,
-      tableWidth,
-      totalHeight,
+        margins: {
+          top: MARGIN,
+          bottom: MARGIN,
+          left: MARGIN,
+          right: MARGIN,
+        },
+      });
+
+      drawBusinessHeader(true);
+
+      drawOrderInformation();
+    }
+
+    drawTotal(
+      grandTotal,
+      data.length
     );
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor(PRIMARY)
-      .text(
-        "TOTAL QUANTITY",
-        tableX + 8,
-        totalY + 8,
-        {
-          width: 300,
-        },
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .text(
-        grandTotal.toString(),
-        tableX + tableWidth - 80,
-        totalY + 7,
-        {
-          width: 40,
-          align: "center",
-        },
-      );
-
-    doc.y = totalY + totalHeight + 12;
-
     // =====================================================
-    // NOTES / SUMMARY
+    // APPROVAL SECTION
     // =====================================================
 
-    checkPageSpace(45);
+    if (
+      doc.y >
+      PAGE_HEIGHT - 105
+    ) {
+      drawFooter();
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor(PRIMARY)
-      .text("Order Summary");
+      doc.addPage({
+        size: "A5",
 
-    doc.moveDown(0.3);
-
-    doc
-      .font("Helvetica")
-      .fontSize(7)
-      .fillColor(SECONDARY)
-      .text(
-        `Total Items: ${data.length}`,
-        {
-          width: contentWidth,
+        margins: {
+          top: MARGIN,
+          bottom: MARGIN,
+          left: MARGIN,
+          right: MARGIN,
         },
-      );
+      });
 
-    doc.text(
-      `Total Quantity: ${grandTotal}`,
-      {
-        width: contentWidth,
-      },
-    );
+      drawBusinessHeader(true);
+    }
 
-    doc.moveDown(0.8);
-
-    drawLine(doc.y);
-
-    doc.moveDown(0.6);
-
-    doc
-      .font("Helvetica")
-      .fontSize(6.5)
-      .fillColor(SECONDARY)
-      .text(
-        "This document is system generated and does not require a signature.",
-        {
-          width: contentWidth,
-          align: "center",
-        },
-      );
+    drawApprovalSection();
 
     // =====================================================
-    // FOOTER
+    // FINAL FOOTER
     // =====================================================
 
     drawFooter();
 
     // =====================================================
-    // FINISH PDF
+    // END PDF
     // =====================================================
 
     doc.end();
 
     // =====================================================
-    // WAIT FOR FILE TO FINISH WRITING
+    // WAIT FOR FILE
     // =====================================================
 
-    await new Promise((resolve, reject) => {
-      writeStream.on("finish", resolve);
-      writeStream.on("error", reject);
-    });
+    await new Promise(
+      (resolve, reject) => {
+        writeStream.on(
+          "finish",
+          resolve
+        );
+
+        writeStream.on(
+          "error",
+          reject
+        );
+      }
+    );
 
     // =====================================================
-    // RESPONSE
+    // FILE URL
     // =====================================================
 
     const fileUrl =
@@ -10311,25 +10814,37 @@ async function downloadOrderRequestPDF(req, res) {
     const serverUrl =
       "https://api.joswee.cloud";
 
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Order request A5 PDF generated successfully",
-      filePath: serverUrl + fileUrl,
+
+      msg:
+        "Order request A5 PDF generated successfully",
+
+      filePath:
+        serverUrl + fileUrl,
     });
 
   } catch (error) {
     console.log(
       "downloadOrderRequestPDF error:",
-      error,
+      error
     );
 
-    return res
-      .status(500)
-      .send(
-        "Error generating order request PDF",
-      );
+    if (!res.headersSent) {
+      return res
+        .status(500)
+        .send(
+          "Error generating order request PDF"
+        );
+    }
   }
 }
+
+
 
 // async function downloadOrderRequestPDF(req, res) {
 //   try {

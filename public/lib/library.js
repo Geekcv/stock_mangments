@@ -10490,11 +10490,14 @@ async function downloadOrderRequestPDF(req, res) {
     // LOGO
     // =====================================================
 
-    const LOGO_PATH = path.join(
-      process.cwd(),
-      "public",
-      "uploads/ShopMedia/1789809020026_logo.jpg",
-    );
+    // const LOGO_PATH = path.join(
+    //   process.cwd(),
+    //   "public",
+    //   "uploads/ShopMedia/1789809020026_logo.jpg",
+    // );
+
+    const LOGO_PATH =
+      "https://api.joswee.cloud/uploads/ShopMedia/1789809020026_logo.jpg";
 
     // =====================================================
     // A5 PDF

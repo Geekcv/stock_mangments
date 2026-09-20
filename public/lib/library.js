@@ -7687,6 +7687,463 @@ async function downloadOrderPDF(req, res) {
 //   }
 // }
 
+// old
+// async function downloadChalanPDF(req, res) {
+//   try {
+//     const { chalan_id } = req.data || {};
+
+//     if (!chalan_id) {
+//       return res.status(400).send("Chalan ID required");
+//     }
+
+//     const chalanTable = schema + ".chalans";
+//     const orderTable = schema + ".orders";
+//     const supplierTable = schema + ".suppliers";
+//     const shopTable = schema + ".shops";
+//     const itemTable = schema + ".order_items";
+//     const sweetTable = schema + ".sweets";
+//     const categoryTable = schema + ".categories";
+//     const counterTable = schema + ".counters";
+
+//     const safeChalanId = chalan_id.trim().replaceAll("'", "`");
+
+//     // ================= QUERY =================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Chalan
+//         ch.id AS chalan_serial_id,
+//         ch.row_id AS chalan_id,
+//         ch.dispatch_date,
+//         ch.transport_details,
+//         ch.verification_code,
+//         ch.is_verified,
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+
+//         -- Supplier
+//         sup.row_id AS supplier_id,
+//         sup.supplier_name,
+//         sup.phone AS supplier_phone,
+//         sup.address AS supplier_address,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.city,
+//         sh.state,
+//         sh.address AS shop_address,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.sweet_id,
+//         oi.counter_id,
+//         oi.quantity AS ordered_quantity,
+//         oi.supplied_quantity,
+//         oi.item_status,
+
+//         -- Sweet
+//         sw.sweet_name,
+//         sw.unit,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         cat.category_name,
+
+//         -- Counter
+//         c.counter_name,
+//         c.location AS counter_location
+
+//       FROM ${chalanTable} ch
+
+//       INNER JOIN ${orderTable} o
+//         ON o.row_id = ch.order_id
+
+//       LEFT JOIN ${supplierTable} sup
+//         ON sup.row_id = ch.supplier_id
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       INNER JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+//         AND oi.item_status IN ('ACCEPTED', 'PARTIAL')
+//         AND oi.supplied_quantity > 0
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       WHERE ch.row_id = '${safeChalanId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     if (!result.data?.length) {
+//       return res
+//         .status(404)
+//         .send("Chalan not found or no accepted supplied items found");
+//     }
+
+//     const data = result.data;
+//     const firstRow = data[0];
+
+//     // ================= DISPLAY IDS =================
+
+//     const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(6, "0")}`;
+
+//     const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(6, "0")}`;
+
+//     // ================= GROUPING =================
+
+//     const groupedData = {};
+
+//     data.forEach((item) => {
+//       const counter = item.counter_name || "Default Counter";
+
+//       const category = item.category_name || "Others";
+
+//       if (!groupedData[counter]) {
+//         groupedData[counter] = {};
+//       }
+
+//       if (!groupedData[counter][category]) {
+//         groupedData[counter][category] = [];
+//       }
+
+//       groupedData[counter][category].push(item);
+//     });
+
+//     // ================= FILE SETUP =================
+//     // const BASE_UPLOAD_PATH = "./public/uploads";
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `Chalan_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     const doc = new PDFDocument({
+//       margin: 40,
+//       size: "A4",
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     const startX = 40;
+
+//     const colWidths = {
+//       name: 230,
+//       qty: 90,
+//       unit: 70,
+//       status: 90,
+//     };
+
+//     const rowHeight = 20;
+
+//     let isFirstPage = true;
+
+//     // ================= COUNTER LOOP =================
+
+//     for (const counter of Object.keys(groupedData)) {
+//       if (!isFirstPage) {
+//         doc.addPage();
+//       }
+
+//       isFirstPage = false;
+
+//       // ================= HEADER =================
+
+//       doc
+//         .fontSize(16)
+//         .fillColor("#2c3e50")
+//         .font("Helvetica-Bold")
+//         .text("DISPATCH CHALAN", {
+//           align: "center",
+//         });
+
+//       doc.moveDown(0.5);
+
+//       doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+
+//       doc.moveDown();
+
+//       // ================= BASIC INFO =================
+
+//       doc.fontSize(10).fillColor("#000").font("Helvetica");
+
+//       doc.text(`Chalan ID: ${chalanDisplayId}`);
+
+//       doc.text(`Order ID: ${orderDisplayId}`);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .text(`Verification Code: ${firstRow.verification_code || "-"}`)
+//         .font("Helvetica");
+
+//       doc.text(
+//         `Dispatch Date: ${
+//           firstRow.dispatch_date
+//             ? new Date(firstRow.dispatch_date).toLocaleDateString()
+//             : "-"
+//         }`,
+//       );
+
+//       doc.text(
+//         `Chalan Status: ${
+//           firstRow.is_verified ? "VERIFIED" : "PENDING VERIFICATION"
+//         }`,
+//       );
+
+//       doc.moveDown();
+
+//       // ================= SUPPLIER =================
+
+//       doc
+//         .fontSize(11)
+//         .fillColor("#34495e")
+//         .font("Helvetica-Bold")
+//         .text("Supplier Details", {
+//           underline: true,
+//         });
+
+//       doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
+
+//       doc.text(`Name: ${firstRow.supplier_name || "-"}`);
+
+//       doc.text(`Phone: ${firstRow.supplier_phone || "-"}`);
+
+//       doc.text(`Address: ${firstRow.supplier_address || "-"}`);
+
+//       doc.moveDown();
+
+//       // ================= SHOP =================
+
+//       doc
+//         .fontSize(11)
+//         .fillColor("#34495e")
+//         .font("Helvetica-Bold")
+//         .text("Shop Details", {
+//           underline: true,
+//         });
+
+//       doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
+
+//       doc.text(`Shop Name: ${firstRow.shop_name || "-"}`);
+
+//       doc.text(`Phone: ${firstRow.shop_phone || "-"}`);
+
+//       doc.text(`Address: ${firstRow.shop_address || "-"}`);
+
+//       doc.text(`City: ${firstRow.city || "-"}, ${firstRow.state || "-"}`);
+
+//       doc.moveDown();
+
+//       // ================= TRANSPORT =================
+
+//       doc
+//         .fontSize(11)
+//         .fillColor("#34495e")
+//         .font("Helvetica-Bold")
+//         .text("Transport Details", {
+//           underline: true,
+//         });
+
+//       doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
+
+//       doc.text(firstRow.transport_details || "-");
+
+//       doc.moveDown();
+
+//       // ================= COUNTER =================
+
+//       const counterItems = Object.values(groupedData[counter]).flat();
+
+//       const counterLocation = counterItems[0]?.counter_location;
+
+//       doc
+//         .fontSize(13)
+//         .fillColor("#2980b9")
+//         .font("Helvetica-Bold")
+//         .text(`Counter: ${counter}`);
+
+//       if (counterLocation) {
+//         doc
+//           .fontSize(9)
+//           .fillColor("#555")
+//           .font("Helvetica")
+//           .text(`Location: ${counterLocation}`);
+//       }
+
+//       doc.moveDown(0.5);
+
+//       // ================= CATEGORY LOOP =================
+
+//       for (const category of Object.keys(groupedData[counter])) {
+//         doc
+//           .fontSize(11)
+//           .fillColor("#8e44ad")
+//           .font("Helvetica-Bold")
+//           .text(`Category: ${category}`);
+
+//         doc.moveDown(0.3);
+
+//         let y = doc.y;
+
+//         // ================= TABLE HEADER =================
+
+//         doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
+
+//         doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
+
+//         doc.text("Sweet Name", startX + 5, y + 5, {
+//           width: colWidths.name,
+//         });
+
+//         doc.text("Qty", startX + colWidths.name, y + 5, {
+//           width: colWidths.qty,
+//           align: "center",
+//         });
+
+//         doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
+//           width: colWidths.unit,
+//           align: "center",
+//         });
+
+//         doc.text(
+//           "Status",
+//           startX + colWidths.name + colWidths.qty + colWidths.unit,
+//           y + 5,
+//           {
+//             width: colWidths.status,
+//             align: "center",
+//           },
+//         );
+
+//         y += rowHeight;
+
+//         let total = 0;
+
+//         // ================= ITEMS =================
+
+//         groupedData[counter][category].forEach((item, index) => {
+//           const qty = Number(item.supplied_quantity || 0);
+
+//           total += qty;
+
+//           if (index % 2 === 0) {
+//             doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
+//           }
+
+//           doc.fillColor("#000").fontSize(9).font("Helvetica");
+
+//           doc.text(item.sweet_name || "-", startX + 5, y + 5, {
+//             width: colWidths.name,
+//           });
+
+//           doc.text(qty.toString(), startX + colWidths.name, y + 5, {
+//             width: colWidths.qty,
+//             align: "center",
+//           });
+
+//           doc.text(
+//             item.unit || "-",
+//             startX + colWidths.name + colWidths.qty,
+//             y + 5,
+//             {
+//               width: colWidths.unit,
+//               align: "center",
+//             },
+//           );
+
+//           doc.text(
+//             item.item_status || "ACCEPTED",
+//             startX + colWidths.name + colWidths.qty + colWidths.unit,
+//             y + 5,
+//             {
+//               width: colWidths.status,
+//               align: "center",
+//             },
+//           );
+
+//           y += rowHeight;
+//         });
+
+//         // ================= TOTAL =================
+
+//         doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
+
+//         doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
+
+//         doc.text("Total", startX + 5, y + 5, {
+//           width: colWidths.name,
+//         });
+
+//         doc.text(total.toString(), startX + colWidths.name, y + 5, {
+//           width: colWidths.qty,
+//           align: "center",
+//         });
+
+//         doc.moveDown(2);
+//       }
+
+//       // ================= FOOTER =================
+
+//       doc.moveDown(2);
+
+//       doc
+//         .fontSize(9)
+//         .fillColor("gray")
+//         .font("Helvetica")
+//         .text("This is a system generated document.", {
+//           align: "center",
+//         });
+//     }
+
+//     // ================= END PDF =================
+
+//     doc.end();
+
+//     // ================= RESPONSE =================
+
+//     const fileUrl = `/uploads/ShopMedia/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadChalanPDF error:", error);
+
+//     return res.status(500).send("Error generating PDF");
+//   }
+// }
+
+// a5
 async function downloadChalanPDF(req, res) {
   try {
     const { chalan_id } = req.data || {};
@@ -7704,9 +8161,11 @@ async function downloadChalanPDF(req, res) {
     const categoryTable = schema + ".categories";
     const counterTable = schema + ".counters";
 
-    const safeChalanId = chalan_id.trim().replaceAll("'", "`");
+    const safeChalanId = chalan_id.trim().replaceAll("'", "''");
 
-    // ================= QUERY =================
+    // =====================================================
+    // QUERY
+    // =====================================================
 
     const result = await db_query.customQuery(`
       SELECT
@@ -7792,6 +8251,10 @@ async function downloadChalanPDF(req, res) {
         sw.sweet_name ASC
     `);
 
+    // =====================================================
+    // VALIDATION
+    // =====================================================
+
     if (!result.data?.length) {
       return res
         .status(404)
@@ -7801,13 +8264,23 @@ async function downloadChalanPDF(req, res) {
     const data = result.data;
     const firstRow = data[0];
 
-    // ================= DISPLAY IDS =================
+    // =====================================================
+    // DISPLAY IDS
+    // =====================================================
 
-    const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(6, "0")}`;
+    const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(
+      6,
+      "0",
+    )}`;
 
-    const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(6, "0")}`;
+    const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(
+      6,
+      "0",
+    )}`;
 
-    // ================= GROUPING =================
+    // =====================================================
+    // GROUP DATA
+    // =====================================================
 
     const groupedData = {};
 
@@ -7827,8 +8300,10 @@ async function downloadChalanPDF(req, res) {
       groupedData[counter][category].push(item);
     });
 
-    // ================= FILE SETUP =================
-    // const BASE_UPLOAD_PATH = "./public/uploads";
+    // =====================================================
+    // FILE SETUP
+    // =====================================================
+
     const BASE_UPLOAD_PATH = "/home/uploads";
 
     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
@@ -7843,288 +8318,749 @@ async function downloadChalanPDF(req, res) {
 
     const filePath = path.join(folder, fileName);
 
+    // =====================================================
+    // LOGO
+    // =====================================================
+
+    const LOGO_PATH = path.join(
+      process.cwd(),
+      "public",
+      "uploads/ShopMedia/1789809020026_logo.jpg",
+    );
+
+    // =====================================================
+    // A5 PDF
+    // =====================================================
+
+    const PAGE_WIDTH = 419.53;
+    const PAGE_HEIGHT = 595.28;
+
+    const MARGIN = 20;
+
+    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
     const doc = new PDFDocument({
-      margin: 40,
-      size: "A4",
+      size: "A5",
+      margin: MARGIN,
+      autoFirstPage: true,
+      bufferPages: false,
     });
 
     doc.pipe(fs.createWriteStream(filePath));
 
-    const startX = 40;
+    // =====================================================
+    // COLORS
+    // =====================================================
 
-    const colWidths = {
-      name: 230,
-      qty: 90,
-      unit: 70,
-      status: 90,
+    const PRIMARY = "#1F2937";
+    const SECONDARY = "#6B7280";
+    const BORDER = "#D1D5DB";
+    const LIGHT = "#F3F4F6";
+    const WHITE = "#FFFFFF";
+    const GREEN = "#047857";
+    const ORANGE = "#C2410C";
+
+    // =====================================================
+    // HELPERS
+    // =====================================================
+
+    const formatDate = (value) => {
+      if (!value) return "-";
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return "-";
+      }
+
+      return date.toLocaleDateString("en-IN");
     };
 
-    const rowHeight = 20;
+    const drawCircularLogo = (x, y, size) => {
+      if (!fs.existsSync(LOGO_PATH)) {
+        return;
+      }
 
-    let isFirstPage = true;
+      try {
+        doc.save();
 
-    // ================= COUNTER LOOP =================
+        doc.circle(x + size / 2, y + size / 2, size / 2).clip();
+
+        doc.image(LOGO_PATH, x, y, {
+          width: size,
+          height: size,
+        });
+
+        doc.restore();
+
+        doc
+          .circle(x + size / 2, y + size / 2, size / 2)
+          .lineWidth(0.7)
+          .stroke(BORDER);
+      } catch (error) {
+        console.log("Logo error:", error);
+      }
+    };
+
+    // =====================================================
+    // HEADER
+    // =====================================================
+
+    const drawHeader = () => {
+      const logoSize = 42;
+
+      // Small circular logo
+      drawCircularLogo(MARGIN, 14, logoSize);
+
+      // Center title
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(PRIMARY)
+        .text("DISPATCH CHALAN", MARGIN, 22, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      doc
+        .font("Helvetica")
+        .fontSize(6)
+        .fillColor(SECONDARY)
+        .text("GOODS DISPATCH DOCUMENT", MARGIN, 40, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      // Header line
+      doc
+        .moveTo(MARGIN, 65)
+        .lineTo(PAGE_WIDTH - MARGIN, 65)
+        .lineWidth(0.8)
+        .stroke(PRIMARY);
+    };
+
+    // =====================================================
+    // BASIC INFORMATION
+    // =====================================================
+
+    const drawBasicInfo = () => {
+      const top = 75;
+      const headerHeight = 22;
+      const valueHeight = 22;
+
+      // ===================================================
+      // HEADER
+      // ===================================================
+
+      doc.rect(MARGIN, top, CONTENT_WIDTH, headerHeight).fill(PRIMARY);
+
+      doc.font("Helvetica-Bold").fontSize(6.2).fillColor(WHITE);
+
+      // Header columns
+
+      doc.text("CHALAN ID", MARGIN + 7, top + 7);
+
+      doc.text("ORDER ID", MARGIN + 105, top + 7);
+
+      doc.text("DISPATCH DATE", MARGIN + 205, top + 7);
+
+      doc.text("STATUS", MARGIN + 315, top + 7);
+
+      // ===================================================
+      // VALUE ROW
+      // ===================================================
+
+      doc
+        .rect(MARGIN, top + headerHeight, CONTENT_WIDTH, valueHeight)
+        .fill("#FAFAFA");
+
+      // IMPORTANT:
+      // Reset text color after header
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(PRIMARY);
+
+      // ---------------------------------------------------
+      // CHALAN ID
+      // ---------------------------------------------------
+
+      doc.text(chalanDisplayId, MARGIN + 7, top + headerHeight + 7, {
+        width: 85,
+        ellipsis: true,
+      });
+
+      // ---------------------------------------------------
+      // ORDER ID
+      // ---------------------------------------------------
+
+      doc.text(orderDisplayId, MARGIN + 105, top + headerHeight + 7, {
+        width: 85,
+        ellipsis: true,
+      });
+
+      // ---------------------------------------------------
+      // DISPATCH DATE
+      // ---------------------------------------------------
+
+      doc.text(
+        formatDate(firstRow.dispatch_date),
+        MARGIN + 205,
+        top + headerHeight + 7,
+        {
+          width: 90,
+          ellipsis: true,
+        },
+      );
+
+      // ---------------------------------------------------
+      // STATUS
+      // ---------------------------------------------------
+
+      const status = firstRow.is_verified ? "VERIFIED" : "PENDING";
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .fillColor(firstRow.is_verified ? GREEN : ORANGE)
+        .text(status, MARGIN + 315, top + headerHeight + 7, {
+          width: 55,
+          align: "center",
+        });
+
+      // ===================================================
+      // RETURN
+      // ===================================================
+
+      return top + headerHeight + valueHeight;
+    };
+
+    // =====================================================
+    // PARTY INFORMATION
+    // =====================================================
+
+    const drawPartyInfo = (top) => {
+      const leftWidth = CONTENT_WIDTH / 2 - 5;
+
+      const rightX = MARGIN + CONTENT_WIDTH / 2 + 5;
+
+      // Section title
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7.5)
+        .fillColor(PRIMARY)
+        .text("PARTIES", MARGIN, top + 8);
+
+      // Supplier
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text("Supplier", MARGIN, top + 23);
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text(firstRow.supplier_name || "-", MARGIN + 40, top + 23, {
+          width: leftWidth - 40,
+          ellipsis: true,
+        });
+
+      doc
+        .font("Helvetica")
+        .fontSize(6)
+        .fillColor(SECONDARY)
+        .text(`Phone: ${firstRow.supplier_phone || "-"}`, MARGIN, top + 36, {
+          width: leftWidth,
+          ellipsis: true,
+        });
+
+      doc.text(
+        `Address: ${firstRow.supplier_address || "-"}`,
+        MARGIN,
+        top + 48,
+        {
+          width: leftWidth,
+          ellipsis: true,
+        },
+      );
+
+      // Vertical divider
+
+      doc
+        .moveTo(PAGE_WIDTH / 2, top + 18)
+        .lineTo(PAGE_WIDTH / 2, top + 58)
+        .lineWidth(0.4)
+        .stroke(BORDER);
+
+      // Deliver to
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text("Deliver To", rightX, top + 23);
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text(firstRow.shop_name || "-", rightX + 43, top + 23, {
+          width: leftWidth - 43,
+          ellipsis: true,
+        });
+
+      doc
+        .font("Helvetica")
+        .fontSize(6)
+        .fillColor(SECONDARY)
+        .text(`Phone: ${firstRow.shop_phone || "-"}`, rightX, top + 36, {
+          width: leftWidth,
+          ellipsis: true,
+        });
+
+      const address = [firstRow.shop_address, firstRow.city, firstRow.state]
+        .filter(Boolean)
+        .join(", ");
+
+      doc.text(`Address: ${address || "-"}`, rightX, top + 48, {
+        width: leftWidth,
+        ellipsis: true,
+      });
+
+      return top + 66;
+    };
+
+    // =====================================================
+    // TRANSPORT
+    // =====================================================
+
+    const drawTransport = (top) => {
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text("Transport:", MARGIN, top);
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text(firstRow.transport_details || "-", MARGIN + 50, top, {
+          width: CONTENT_WIDTH - 50,
+          ellipsis: true,
+        });
+
+      // Verification code
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .text("Verification Code:", MARGIN, top + 13);
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.5)
+        .text(firstRow.verification_code || "-", MARGIN + 75, top + 13, {
+          width: 100,
+          ellipsis: true,
+        });
+
+      return top + 27;
+    };
+
+    // =====================================================
+    // TABLE HEADER
+    // =====================================================
+
+    const tableColumns = {
+      sweet: 175,
+      ordered: 48,
+      supplied: 55,
+      unit: 45,
+      status: 60,
+    };
+
+    const tableWidth =
+      tableColumns.sweet +
+      tableColumns.ordered +
+      tableColumns.supplied +
+      tableColumns.unit +
+      tableColumns.status;
+
+    const drawTableHeader = (y) => {
+      doc.rect(MARGIN, y, tableWidth, 17).fill(PRIMARY);
+
+      doc.font("Helvetica-Bold").fontSize(5.8).fillColor(WHITE);
+
+      let x = MARGIN;
+
+      doc.text("SWEET", x + 4, y + 5);
+
+      x += tableColumns.sweet;
+
+      doc.text("ORDERED", x, y + 5, {
+        width: tableColumns.ordered,
+        align: "center",
+      });
+
+      x += tableColumns.ordered;
+
+      doc.text("SUPPLIED", x, y + 5, {
+        width: tableColumns.supplied,
+        align: "center",
+      });
+
+      x += tableColumns.supplied;
+
+      doc.text("UNIT", x, y + 5, {
+        width: tableColumns.unit,
+        align: "center",
+      });
+
+      x += tableColumns.unit;
+
+      doc.text("STATUS", x, y + 5, {
+        width: tableColumns.status,
+        align: "center",
+      });
+
+      return y + 17;
+    };
+
+    // =====================================================
+    // CATEGORY TABLE
+    // =====================================================
+
+    const drawCategory = (counter, category, items, startY) => {
+      let y = startY;
+
+      // Category heading
+
+      if (y + 20 > PAGE_HEIGHT - 25) {
+        doc.addPage({
+          size: "A5",
+          margin: MARGIN,
+        });
+
+        y = 25;
+      }
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .fillColor(PRIMARY)
+        .text(category, MARGIN, y);
+
+      y += 11;
+
+      y = drawTableHeader(y);
+
+      let categoryTotal = 0;
+
+      items.forEach((item, index) => {
+        const rowHeight = 16;
+
+        if (y + rowHeight > PAGE_HEIGHT - 25) {
+          doc.addPage({
+            size: "A5",
+            margin: MARGIN,
+          });
+
+          y = 25;
+
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(7)
+            .fillColor(PRIMARY)
+            .text(`${category}`, MARGIN, y);
+
+          y += 11;
+
+          y = drawTableHeader(y);
+        }
+
+        const ordered = Number(item.ordered_quantity || 0);
+
+        const supplied = Number(item.supplied_quantity || 0);
+
+        categoryTotal += supplied;
+
+        // Alternating row
+
+        if (index % 2 === 0) {
+          doc.rect(MARGIN, y, tableWidth, rowHeight).fill("#FAFAFA");
+        }
+
+        // Bottom line
+
+        doc
+          .moveTo(MARGIN, y + rowHeight)
+          .lineTo(MARGIN + tableWidth, y + rowHeight)
+          .lineWidth(0.25)
+          .stroke(BORDER);
+
+        let x = MARGIN;
+
+        doc
+          .font("Helvetica")
+          .fontSize(6)
+          .fillColor(PRIMARY)
+          .text(item.sweet_name || "-", x + 4, y + 5, {
+            width: tableColumns.sweet - 8,
+            ellipsis: true,
+            lineBreak: false,
+          });
+
+        x += tableColumns.sweet;
+
+        doc.text(ordered.toString(), x, y + 5, {
+          width: tableColumns.ordered,
+          align: "center",
+        });
+
+        x += tableColumns.ordered;
+
+        doc.font("Helvetica-Bold").text(supplied.toString(), x, y + 5, {
+          width: tableColumns.supplied,
+          align: "center",
+        });
+
+        x += tableColumns.supplied;
+
+        doc.font("Helvetica").text(item.unit || "-", x, y + 5, {
+          width: tableColumns.unit,
+          align: "center",
+          ellipsis: true,
+        });
+
+        x += tableColumns.unit;
+
+        const status = item.item_status || "ACCEPTED";
+
+        doc
+          .font("Helvetica-Bold")
+          .fillColor(status === "PARTIAL" ? ORANGE : GREEN)
+          .text(status, x, y + 5, {
+            width: tableColumns.status,
+            align: "center",
+          });
+
+        y += rowHeight;
+      });
+
+      // Category total
+
+      if (y + 16 > PAGE_HEIGHT - 25) {
+        doc.addPage({
+          size: "A5",
+          margin: MARGIN,
+        });
+
+        y = 25;
+      }
+
+      doc.rect(MARGIN, y, tableWidth, 16).fill(LIGHT);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6)
+        .fillColor(PRIMARY)
+        .text("Category Total", MARGIN + 4, y + 5);
+
+      doc.text(
+        categoryTotal.toString(),
+        MARGIN + tableColumns.sweet + tableColumns.ordered,
+        y + 5,
+        {
+          width: tableColumns.supplied,
+          align: "center",
+        },
+      );
+
+      return {
+        y: y + 24,
+        total: categoryTotal,
+      };
+    };
+
+    // =====================================================
+    // DRAW FIRST PAGE HEADER
+    // =====================================================
+
+    drawHeader();
+
+    // =====================================================
+    // BASIC INFO
+    // =====================================================
+
+    let currentY = drawBasicInfo() + 9;
+
+    // =====================================================
+    // PARTY INFO
+    // =====================================================
+
+    currentY = drawPartyInfo(currentY) + 4;
+
+    // =====================================================
+    // TRANSPORT
+    // =====================================================
+
+    currentY = drawTransport(currentY) + 10;
+
+    // =====================================================
+    // ITEMS TITLE
+    // =====================================================
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text("DISPATCHED ITEMS", MARGIN, currentY);
+
+    currentY += 15;
+
+    // =====================================================
+    // COUNTERS
+    // =====================================================
+
+    let grandTotal = 0;
 
     for (const counter of Object.keys(groupedData)) {
-      if (!isFirstPage) {
-        doc.addPage();
-      }
-
-      isFirstPage = false;
-
-      // ================= HEADER =================
-
-      doc
-        .fontSize(16)
-        .fillColor("#2c3e50")
-        .font("Helvetica-Bold")
-        .text("DISPATCH CHALAN", {
-          align: "center",
-        });
-
-      doc.moveDown(0.5);
-
-      doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-
-      doc.moveDown();
-
-      // ================= BASIC INFO =================
-
-      doc.fontSize(10).fillColor("#000").font("Helvetica");
-
-      doc.text(`Chalan ID: ${chalanDisplayId}`);
-
-      doc.text(`Order ID: ${orderDisplayId}`);
-
-      doc
-        .font("Helvetica-Bold")
-        .text(`Verification Code: ${firstRow.verification_code || "-"}`)
-        .font("Helvetica");
-
-      doc.text(
-        `Dispatch Date: ${
-          firstRow.dispatch_date
-            ? new Date(firstRow.dispatch_date).toLocaleDateString()
-            : "-"
-        }`,
-      );
-
-      doc.text(
-        `Chalan Status: ${
-          firstRow.is_verified ? "VERIFIED" : "PENDING VERIFICATION"
-        }`,
-      );
-
-      doc.moveDown();
-
-      // ================= SUPPLIER =================
-
-      doc
-        .fontSize(11)
-        .fillColor("#34495e")
-        .font("Helvetica-Bold")
-        .text("Supplier Details", {
-          underline: true,
-        });
-
-      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
-
-      doc.text(`Name: ${firstRow.supplier_name || "-"}`);
-
-      doc.text(`Phone: ${firstRow.supplier_phone || "-"}`);
-
-      doc.text(`Address: ${firstRow.supplier_address || "-"}`);
-
-      doc.moveDown();
-
-      // ================= SHOP =================
-
-      doc
-        .fontSize(11)
-        .fillColor("#34495e")
-        .font("Helvetica-Bold")
-        .text("Shop Details", {
-          underline: true,
-        });
-
-      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
-
-      doc.text(`Shop Name: ${firstRow.shop_name || "-"}`);
-
-      doc.text(`Phone: ${firstRow.shop_phone || "-"}`);
-
-      doc.text(`Address: ${firstRow.shop_address || "-"}`);
-
-      doc.text(`City: ${firstRow.city || "-"}, ${firstRow.state || "-"}`);
-
-      doc.moveDown();
-
-      // ================= TRANSPORT =================
-
-      doc
-        .fontSize(11)
-        .fillColor("#34495e")
-        .font("Helvetica-Bold")
-        .text("Transport Details", {
-          underline: true,
-        });
-
-      doc.moveDown(0.3).fontSize(10).font("Helvetica").fillColor("#000");
-
-      doc.text(firstRow.transport_details || "-");
-
-      doc.moveDown();
-
-      // ================= COUNTER =================
-
       const counterItems = Object.values(groupedData[counter]).flat();
 
-      const counterLocation = counterItems[0]?.counter_location;
+      const counterTotal = counterItems.reduce(
+        (sum, item) => sum + Number(item.supplied_quantity || 0),
+        0,
+      );
 
-      doc
-        .fontSize(13)
-        .fillColor("#2980b9")
-        .font("Helvetica-Bold")
-        .text(`Counter: ${counter}`);
+      grandTotal += counterTotal;
 
-      if (counterLocation) {
-        doc
-          .fontSize(9)
-          .fillColor("#555")
-          .font("Helvetica")
-          .text(`Location: ${counterLocation}`);
+      // Counter heading
+
+      if (currentY + 28 > PAGE_HEIGHT - 25) {
+        doc.addPage({
+          size: "A5",
+          margin: MARGIN,
+        });
+
+        currentY = 25;
       }
 
-      doc.moveDown(0.5);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor(PRIMARY)
+        .text(`Counter: ${counter}`, MARGIN, currentY);
 
-      // ================= CATEGORY LOOP =================
+      const location = counterItems[0]?.counter_location;
+
+      if (location) {
+        doc
+          .font("Helvetica")
+          .fontSize(5.8)
+          .fillColor(SECONDARY)
+          .text(location, MARGIN + 230, currentY + 1, {
+            width: CONTENT_WIDTH - 230,
+            align: "right",
+            ellipsis: true,
+          });
+      }
+
+      currentY += 12;
+
+      // ---------------------------------------------------
+      // Categories
+      // ---------------------------------------------------
 
       for (const category of Object.keys(groupedData[counter])) {
-        doc
-          .fontSize(11)
-          .fillColor("#8e44ad")
-          .font("Helvetica-Bold")
-          .text(`Category: ${category}`);
+        const result = drawCategory(
+          counter,
+          category,
+          groupedData[counter][category],
+          currentY,
+        );
 
-        doc.moveDown(0.3);
+        currentY = result.y;
+      }
 
-        let y = doc.y;
+      // Counter total
 
-        // ================= TABLE HEADER =================
-
-        doc.rect(startX, y, 500, rowHeight).fill("#f2f2f2");
-
-        doc.fillColor("#000").fontSize(9).font("Helvetica-Bold");
-
-        doc.text("Sweet Name", startX + 5, y + 5, {
-          width: colWidths.name,
+      if (currentY + 17 > PAGE_HEIGHT - 25) {
+        doc.addPage({
+          size: "A5",
+          margin: MARGIN,
         });
 
-        doc.text("Qty", startX + colWidths.name, y + 5, {
-          width: colWidths.qty,
-          align: "center",
-        });
+        currentY = 25;
+      }
 
-        doc.text("Unit", startX + colWidths.name + colWidths.qty, y + 5, {
-          width: colWidths.unit,
-          align: "center",
-        });
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .fillColor(PRIMARY)
+        .text("Counter Total", MARGIN, currentY);
 
-        doc.text(
-          "Status",
-          startX + colWidths.name + colWidths.qty + colWidths.unit,
-          y + 5,
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .text(
+          counterTotal.toString(),
+          MARGIN + tableColumns.sweet + tableColumns.ordered,
+          currentY,
           {
-            width: colWidths.status,
+            width: tableColumns.supplied,
             align: "center",
           },
         );
 
-        y += rowHeight;
-
-        let total = 0;
-
-        // ================= ITEMS =================
-
-        groupedData[counter][category].forEach((item, index) => {
-          const qty = Number(item.supplied_quantity || 0);
-
-          total += qty;
-
-          if (index % 2 === 0) {
-            doc.rect(startX, y, 500, rowHeight).fill("#fafafa");
-          }
-
-          doc.fillColor("#000").fontSize(9).font("Helvetica");
-
-          doc.text(item.sweet_name || "-", startX + 5, y + 5, {
-            width: colWidths.name,
-          });
-
-          doc.text(qty.toString(), startX + colWidths.name, y + 5, {
-            width: colWidths.qty,
-            align: "center",
-          });
-
-          doc.text(
-            item.unit || "-",
-            startX + colWidths.name + colWidths.qty,
-            y + 5,
-            {
-              width: colWidths.unit,
-              align: "center",
-            },
-          );
-
-          doc.text(
-            item.item_status || "ACCEPTED",
-            startX + colWidths.name + colWidths.qty + colWidths.unit,
-            y + 5,
-            {
-              width: colWidths.status,
-              align: "center",
-            },
-          );
-
-          y += rowHeight;
-        });
-
-        // ================= TOTAL =================
-
-        doc.rect(startX, y, 500, rowHeight).fill("#e8f8f5");
-
-        doc.fillColor("#000").fontSize(10).font("Helvetica-Bold");
-
-        doc.text("Total", startX + 5, y + 5, {
-          width: colWidths.name,
-        });
-
-        doc.text(total.toString(), startX + colWidths.name, y + 5, {
-          width: colWidths.qty,
-          align: "center",
-        });
-
-        doc.moveDown(2);
-      }
-
-      // ================= FOOTER =================
-
-      doc.moveDown(2);
-
-      doc
-        .fontSize(9)
-        .fillColor("gray")
-        .font("Helvetica")
-        .text("This is a system generated document.", {
-          align: "center",
-        });
+      currentY += 18;
     }
 
-    // ================= END PDF =================
+    // =====================================================
+    // GRAND TOTAL
+    // =====================================================
+
+    if (currentY + 25 > PAGE_HEIGHT - 25) {
+      doc.addPage({
+        size: "A5",
+        margin: MARGIN,
+      });
+
+      currentY = 25;
+    }
+
+    doc
+      .moveTo(MARGIN, currentY)
+      .lineTo(MARGIN + tableWidth, currentY)
+      .lineWidth(0.7)
+      .stroke(PRIMARY);
+
+    currentY += 7;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text("TOTAL DISPATCHED", MARGIN, currentY);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .text(grandTotal.toString(), MARGIN + tableWidth - 70, currentY - 1, {
+        width: 65,
+        align: "right",
+      });
+
+    // =====================================================
+    // END PDF
+    // =====================================================
 
     doc.end();
 
-    // ================= RESPONSE =================
+    // =====================================================
+    // RESPONSE
+    // =====================================================
 
     const fileUrl = `/uploads/ShopMedia/${fileName}`;
 
@@ -8132,13 +9068,13 @@ async function downloadChalanPDF(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "PDF generated successfully",
+      msg: "A5 Chalan PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
 
-    return res.status(500).send("Error generating PDF");
+    return res.status(500).send("Error generating Chalan PDF");
   }
 }
 
@@ -9034,8 +9970,394 @@ async function downloadChalanPDF(req, res) {
 //   }
 // }
 
-
 // old
+// async function downloadOrderRequestPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = order_id.trim().replaceAll("'", "`");
+
+//     // =====================================================
+//     // FETCH ORDER DATA
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         -- Sweet
+//         sw.row_id AS sweet_id,
+//         COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
+//         COALESCE(sw.unit, '-') AS unit,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+//         c.location AS counter_location,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         COALESCE(cat.category_name, 'Others') AS category_name,
+
+//         -- Department
+//         d.row_id AS department_id,
+//         COALESCE(d.department_name, 'Others') AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     if (data.length === 0) {
+//       return res.status(404).send("No order found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "./public/uploads";
+//     // const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `OrderRequest_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     const doc = new PDFDocument({
+//       margin: 30,
+//       size: "A4",
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // =====================================================
+//     // HEADER
+//     // =====================================================
+
+//     doc.fontSize(17).font("Helvetica-Bold").text("ORDER REQUEST", {
+//       align: "center",
+//     });
+
+//     doc.moveDown(0.4);
+
+//     doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
+
+//     doc.moveDown(0.5);
+
+//     // =====================================================
+//     // ORDER INFORMATION
+//     // =====================================================
+
+//     doc.fontSize(9).font("Helvetica");
+
+//     doc.text(`Order ID: ${orderDisplayId}`, {
+//       continued: true,
+//     });
+
+//     doc.text(`Status: ${order.order_status || "-"}`, {
+//       align: "right",
+//     });
+
+//     doc.text(
+//       `Order Date: ${
+//         order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
+//       }`,
+//     );
+
+//     doc.moveDown(0.5);
+
+//     // =====================================================
+//     // SHOP
+//     // =====================================================
+
+//     doc.fontSize(10).font("Helvetica-Bold").text("Shop Details");
+
+//     doc.fontSize(8).font("Helvetica");
+
+//     doc.text(`Shop: ${order.shop_name || "-"}`, {
+//       continued: true,
+//     });
+
+//     doc.text(`Phone: ${order.shop_phone || "-"}`, {
+//       align: "right",
+//     });
+
+//     doc.text(
+//       `Address: ${order.shop_address || "-"}, ${
+//         order.city || "-"
+//       }, ${order.state || "-"}`,
+//     );
+
+//     doc.moveDown(0.6);
+
+//     // =====================================================
+//     // TABLE
+//     // =====================================================
+
+//     const startX = 30;
+//     let y = doc.y;
+
+//     const rowHeight = 18;
+
+//     const colWidths = {
+//       counter: 105,
+//       category: 105,
+//       department: 105,
+//       sweet: 135,
+//       qty: 40,
+//       unit: 45,
+//     };
+
+//     const totalWidth = 535;
+
+//     // =====================================================
+//     // TABLE HEADER
+//     // =====================================================
+
+//     doc.rect(startX, y, totalWidth, rowHeight).fill("#e5e5e5");
+
+//     doc.fillColor("#000").fontSize(7).font("Helvetica-Bold");
+
+//     let x = startX;
+
+//     doc.text("Counter", x + 3, y + 5, {
+//       width: colWidths.counter,
+//     });
+
+//     x += colWidths.counter;
+
+//     doc.text("Category", x + 3, y + 5, {
+//       width: colWidths.category,
+//     });
+
+//     x += colWidths.category;
+
+//     doc.text("Department", x + 3, y + 5, {
+//       width: colWidths.department,
+//     });
+
+//     x += colWidths.department;
+
+//     doc.text("Sweet", x + 3, y + 5, {
+//       width: colWidths.sweet,
+//     });
+
+//     x += colWidths.sweet;
+
+//     doc.text("Qty", x, y + 5, {
+//       width: colWidths.qty,
+//       align: "center",
+//     });
+
+//     x += colWidths.qty;
+
+//     doc.text("Unit", x, y + 5, {
+//       width: colWidths.unit,
+//       align: "center",
+//     });
+
+//     y += rowHeight;
+
+//     // =====================================================
+//     // ITEMS
+//     // =====================================================
+
+//     let grandTotal = 0;
+
+//     data.forEach((item, index) => {
+//       const qty = Number(item.quantity || 0);
+
+//       grandTotal += qty;
+
+//       // Keep single page
+//       if (y > 760) {
+//         return;
+//       }
+
+//       if (index % 2 === 0) {
+//         doc.rect(startX, y, totalWidth, rowHeight).fill("#fafafa");
+//       }
+
+//       doc.fillColor("#000").fontSize(7).font("Helvetica");
+
+//       let x = startX;
+
+//       doc.text(item.counter_name || "-", x + 3, y + 5, {
+//         width: colWidths.counter - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.counter;
+
+//       doc.text(item.category_name || "-", x + 3, y + 5, {
+//         width: colWidths.category - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.category;
+
+//       doc.text(item.department_name || "-", x + 3, y + 5, {
+//         width: colWidths.department - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.department;
+
+//       doc.text(item.sweet_name || "-", x + 3, y + 5, {
+//         width: colWidths.sweet - 6,
+//         ellipsis: true,
+//       });
+
+//       x += colWidths.sweet;
+
+//       doc.text(qty.toString(), x, y + 5, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       x += colWidths.qty;
+
+//       doc.text(item.unit || "-", x, y + 5, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       y += rowHeight;
+//     });
+
+//     // =====================================================
+//     // TOTAL
+//     // =====================================================
+
+//     doc.rect(startX, y, totalWidth, rowHeight).fill("#e8f8f5");
+
+//     doc.fillColor("#000").fontSize(8).font("Helvetica-Bold");
+
+//     doc.text("TOTAL", startX + 5, y + 5, {
+//       width: 420,
+//     });
+
+//     doc.text(grandTotal.toString(), startX + 420, y + 5, {
+//       width: 60,
+//       align: "center",
+//     });
+
+//     doc.moveDown(2);
+
+//     // =====================================================
+//     // FOOTER
+//     // =====================================================
+
+//     doc
+//       .fontSize(8)
+//       .font("Helvetica")
+//       .fillColor("gray")
+//       .text("System generated order request.", {
+//         align: "center",
+//       });
+
+//     doc.fillColor("#000");
+
+//     // =====================================================
+//     // END
+//     // =====================================================
+
+//     doc.end();
+
+//     const fileUrl = `/uploads/OrderRequests/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Order request PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadOrderRequestPDF error:", error);
+
+//     return res.status(500).send("Error generating order request PDF");
+//   }
+// }
+
+// a5
 async function downloadOrderRequestPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -9052,7 +10374,7 @@ async function downloadOrderRequestPDF(req, res) {
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
 
-    const safeOrderId = order_id.trim().replaceAll("'", "`");
+    const safeOrderId = order_id.trim().replaceAll("'", "\\'");
 
     // =====================================================
     // FETCH ORDER DATA
@@ -9138,7 +10460,7 @@ async function downloadOrderRequestPDF(req, res) {
     const order = data[0];
 
     // =====================================================
-    // DISPLAY ORDER ID
+    // ORDER DISPLAY ID
     // =====================================================
 
     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
@@ -9150,7 +10472,6 @@ async function downloadOrderRequestPDF(req, res) {
     // FILE SETUP
     // =====================================================
 
-    // const BASE_UPLOAD_PATH = "./public/uploads";
     const BASE_UPLOAD_PATH = "/home/uploads";
 
     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
@@ -9165,140 +10486,396 @@ async function downloadOrderRequestPDF(req, res) {
 
     const filePath = path.join(folder, fileName);
 
+    // =====================================================
+    // LOGO
+    // =====================================================
+
+    const LOGO_PATH = path.join(
+      process.cwd(),
+      "public",
+      "uploads/ShopMedia/1789809020026_logo.jpg",
+    );
+
+    // =====================================================
+    // A5 PDF
+    // =====================================================
+
+    const PAGE_WIDTH = 419.53;
+    const PAGE_HEIGHT = 595.28;
+
+    const MARGIN = 20;
+
+    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
     const doc = new PDFDocument({
-      margin: 30,
-      size: "A4",
+      size: "A5",
+      margin: MARGIN,
+      autoFirstPage: true,
+      bufferPages: false,
     });
 
     doc.pipe(fs.createWriteStream(filePath));
 
     // =====================================================
-    // HEADER
+    // COLORS
     // =====================================================
 
-    doc.fontSize(17).font("Helvetica-Bold").text("ORDER REQUEST", {
-      align: "center",
-    });
+    const PRIMARY = "#1F2937";
+    const SECONDARY = "#6B7280";
+    const BORDER = "#D1D5DB";
+    const LIGHT_BG = "#F3F4F6";
+    const TOTAL_BG = "#EEF2F7";
+    const WHITE = "#FFFFFF";
 
-    doc.moveDown(0.4);
+    // =====================================================
+    // TABLE CONFIG
+    // =====================================================
 
-    doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
+    const rowHeight = 18;
 
-    doc.moveDown(0.5);
+    const colWidths = {
+      counter: 62,
+      category: 59,
+      department: 61,
+      sweet: 100,
+      qty: 38,
+      unit: 39,
+    };
+
+    const totalWidth =
+      colWidths.counter +
+      colWidths.category +
+      colWidths.department +
+      colWidths.sweet +
+      colWidths.qty +
+      colWidths.unit;
+
+    // =====================================================
+    // DRAW HEADER
+    // =====================================================
+
+    const drawHeader = () => {
+      const headerTop = 16;
+
+      // ---------------------------------------------------
+      // CIRCULAR LOGO
+      // ---------------------------------------------------
+
+      const logoSize = 52;
+
+      if (fs.existsSync(LOGO_PATH)) {
+        try {
+          // Circular clipping
+          doc.save();
+
+          doc
+            .circle(
+              MARGIN + logoSize / 2,
+              headerTop + logoSize / 2,
+              logoSize / 2,
+            )
+            .clip();
+
+          doc.image(LOGO_PATH, MARGIN, headerTop, {
+            width: logoSize,
+            height: logoSize,
+          });
+
+          doc.restore();
+
+          // Circular border
+          doc
+            .circle(
+              MARGIN + logoSize / 2,
+              headerTop + logoSize / 2,
+              logoSize / 2,
+            )
+            .lineWidth(1)
+            .stroke(BORDER);
+        } catch (logoError) {
+          console.log("Logo loading error:", logoError);
+        }
+      }
+
+      // ---------------------------------------------------
+      // CENTER TITLE
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(16)
+        .fillColor(PRIMARY)
+        .text("ORDER REQUEST", MARGIN, headerTop + 13, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      // ---------------------------------------------------
+      // SUB TITLE
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.8)
+        .fillColor(SECONDARY)
+        .text("PURCHASE / STOCK REQUEST", MARGIN, headerTop + 34, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      // ---------------------------------------------------
+      // HEADER LINE
+      // ---------------------------------------------------
+
+      const headerBottom = 80;
+
+      doc
+        .moveTo(MARGIN, headerBottom)
+        .lineTo(PAGE_WIDTH - MARGIN, headerBottom)
+        .lineWidth(1)
+        .stroke(PRIMARY);
+    };
+
+    // =====================================================
+    // DRAW TABLE HEADER
+    // =====================================================
+
+    const drawTableHeader = (y) => {
+      doc.rect(MARGIN, y, totalWidth, rowHeight).fill(PRIMARY);
+
+      doc.font("Helvetica-Bold").fontSize(6.3).fillColor(WHITE);
+
+      let x = MARGIN;
+
+      // Counter
+
+      doc.text("COUNTER", x + 3, y + 6, {
+        width: colWidths.counter - 6,
+      });
+
+      x += colWidths.counter;
+
+      // Category
+
+      doc.text("CATEGORY", x + 3, y + 6, {
+        width: colWidths.category - 6,
+      });
+
+      x += colWidths.category;
+
+      // Department
+
+      doc.text("DEPARTMENT", x + 3, y + 6, {
+        width: colWidths.department - 6,
+      });
+
+      x += colWidths.department;
+
+      // Sweet
+
+      doc.text("SWEET", x + 3, y + 6, {
+        width: colWidths.sweet - 6,
+      });
+
+      x += colWidths.sweet;
+
+      // Quantity
+
+      doc.text("QTY", x, y + 6, {
+        width: colWidths.qty,
+        align: "center",
+      });
+
+      x += colWidths.qty;
+
+      // Unit
+
+      doc.text("UNIT", x, y + 6, {
+        width: colWidths.unit,
+        align: "center",
+      });
+
+      return y + rowHeight;
+    };
+
+    // =====================================================
+    // FIRST PAGE HEADER
+    // =====================================================
+
+    drawHeader();
 
     // =====================================================
     // ORDER INFORMATION
     // =====================================================
 
-    doc.fontSize(9).font("Helvetica");
+    const infoTop = 92;
+    const infoHeight = 52;
 
-    doc.text(`Order ID: ${orderDisplayId}`, {
-      continued: true,
-    });
+    doc
+      .roundedRect(MARGIN, infoTop, CONTENT_WIDTH, infoHeight, 4)
+      .fillAndStroke(LIGHT_BG, BORDER);
 
-    doc.text(`Status: ${order.order_status || "-"}`, {
-      align: "right",
-    });
+    // -----------------------------------------------------
+    // ORDER ID
+    // -----------------------------------------------------
 
-    doc.text(
-      `Order Date: ${
-        order.order_date ? new Date(order.order_date).toLocaleDateString() : "-"
-      }`,
-    );
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor(SECONDARY)
+      .text("ORDER ID", MARGIN + 10, infoTop + 9);
 
-    doc.moveDown(0.5);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .fillColor(PRIMARY)
+      .text(orderDisplayId, MARGIN + 10, infoTop + 20);
+
+    // -----------------------------------------------------
+    // ORDER DATE
+    // -----------------------------------------------------
+
+    const middleX = MARGIN + CONTENT_WIDTH / 2 - 10;
+
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor(SECONDARY)
+      .text("ORDER DATE", middleX, infoTop + 9);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text(
+        order.order_date
+          ? new Date(order.order_date).toLocaleDateString("en-IN")
+          : "-",
+        middleX,
+        infoTop + 20,
+      );
+
+    // -----------------------------------------------------
+    // STATUS
+    // -----------------------------------------------------
+
+    const statusX = MARGIN + CONTENT_WIDTH - 92;
+
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor(SECONDARY)
+      .text("STATUS", statusX, infoTop + 9, {
+        width: 82,
+        align: "right",
+      });
+
+    const statusText = order.order_status || "PENDING";
+
+    doc.roundedRect(statusX + 20, infoTop + 20, 62, 17, 3).fill("#E5E7EB");
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(6.5)
+      .fillColor(PRIMARY)
+      .text(statusText.toUpperCase(), statusX + 20, infoTop + 25, {
+        width: 62,
+        align: "center",
+      });
 
     // =====================================================
+    // SHOP DETAILS
+    // =====================================================
+
+    const shopSectionY = infoTop + infoHeight + 15;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text("SHOP DETAILS", MARGIN, shopSectionY);
+
+    doc
+      .moveTo(MARGIN, shopSectionY + 13)
+      .lineTo(PAGE_WIDTH - MARGIN, shopSectionY + 13)
+      .lineWidth(0.5)
+      .stroke(BORDER);
+
+    const detailsY = shopSectionY + 20;
+
+    // -----------------------------------------------------
     // SHOP
+    // -----------------------------------------------------
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(6.5)
+      .fillColor(PRIMARY)
+      .text("Shop", MARGIN, detailsY);
+
+    doc
+      .font("Helvetica")
+      .fontSize(7)
+      .fillColor(PRIMARY)
+      .text(order.shop_name || "-", MARGIN + 32, detailsY, {
+        width: 150,
+        ellipsis: true,
+      });
+
+    // -----------------------------------------------------
+    // PHONE
+    // -----------------------------------------------------
+
+    doc.font("Helvetica-Bold").fontSize(6.5).text("Phone", 235, detailsY);
+
+    doc
+      .font("Helvetica")
+      .fontSize(7)
+      .text(order.shop_phone || "-", 267, detailsY, {
+        width: 112,
+        ellipsis: true,
+      });
+
+    // -----------------------------------------------------
+    // ADDRESS
+    // -----------------------------------------------------
+
+    const shopAddress = [order.shop_address, order.city, order.state]
+      .filter(Boolean)
+      .join(", ");
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(6.5)
+      .text("Address", MARGIN, detailsY + 13);
+
+    doc
+      .font("Helvetica")
+      .fontSize(7)
+      .text(shopAddress || "-", MARGIN + 40, detailsY + 13, {
+        width: CONTENT_WIDTH - 40,
+        ellipsis: true,
+      });
+
+    // =====================================================
+    // ORDER ITEMS TITLE
     // =====================================================
 
-    doc.fontSize(10).font("Helvetica-Bold").text("Shop Details");
+    const tableTitleY = detailsY + 34;
 
-    doc.fontSize(8).font("Helvetica");
-
-    doc.text(`Shop: ${order.shop_name || "-"}`, {
-      continued: true,
-    });
-
-    doc.text(`Phone: ${order.shop_phone || "-"}`, {
-      align: "right",
-    });
-
-    doc.text(
-      `Address: ${order.shop_address || "-"}, ${
-        order.city || "-"
-      }, ${order.state || "-"}`,
-    );
-
-    doc.moveDown(0.6);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor(PRIMARY)
+      .text("ORDER ITEMS", MARGIN, tableTitleY);
 
     // =====================================================
-    // TABLE
+    // TABLE START
     // =====================================================
 
-    const startX = 30;
-    let y = doc.y;
+    let tableTop = tableTitleY + 17;
 
-    const rowHeight = 18;
-
-    const colWidths = {
-      counter: 105,
-      category: 105,
-      department: 105,
-      sweet: 135,
-      qty: 40,
-      unit: 45,
-    };
-
-    const totalWidth = 535;
-
-    // =====================================================
-    // TABLE HEADER
-    // =====================================================
-
-    doc.rect(startX, y, totalWidth, rowHeight).fill("#e5e5e5");
-
-    doc.fillColor("#000").fontSize(7).font("Helvetica-Bold");
-
-    let x = startX;
-
-    doc.text("Counter", x + 3, y + 5, {
-      width: colWidths.counter,
-    });
-
-    x += colWidths.counter;
-
-    doc.text("Category", x + 3, y + 5, {
-      width: colWidths.category,
-    });
-
-    x += colWidths.category;
-
-    doc.text("Department", x + 3, y + 5, {
-      width: colWidths.department,
-    });
-
-    x += colWidths.department;
-
-    doc.text("Sweet", x + 3, y + 5, {
-      width: colWidths.sweet,
-    });
-
-    x += colWidths.sweet;
-
-    doc.text("Qty", x, y + 5, {
-      width: colWidths.qty,
-      align: "center",
-    });
-
-    x += colWidths.qty;
-
-    doc.text("Unit", x, y + 5, {
-      width: colWidths.unit,
-      align: "center",
-    });
-
-    y += rowHeight;
+    let y = drawTableHeader(tableTop);
 
     // =====================================================
     // ITEMS
@@ -9311,97 +10888,203 @@ async function downloadOrderRequestPDF(req, res) {
 
       grandTotal += qty;
 
-      // Keep single page
-      if (y > 760) {
-        return;
+      // ---------------------------------------------------
+      // PAGE BREAK
+      // ---------------------------------------------------
+
+      const bottomSafeArea = 30;
+
+      if (y + rowHeight > PAGE_HEIGHT - bottomSafeArea) {
+        // Close current table
+
+        doc
+          .rect(MARGIN, tableTop, totalWidth, y - tableTop)
+          .lineWidth(0.5)
+          .stroke(BORDER);
+
+        // New A5 page
+
+        doc.addPage({
+          size: "A5",
+          margin: MARGIN,
+        });
+
+        tableTop = 28;
+
+        y = drawTableHeader(tableTop);
       }
+
+      // ---------------------------------------------------
+      // ALTERNATE ROW
+      // ---------------------------------------------------
 
       if (index % 2 === 0) {
-        doc.rect(startX, y, totalWidth, rowHeight).fill("#fafafa");
+        doc.rect(MARGIN, y, totalWidth, rowHeight).fill("#F9FAFB");
       }
 
-      doc.fillColor("#000").fontSize(7).font("Helvetica");
+      // ---------------------------------------------------
+      // ROW BORDER
+      // ---------------------------------------------------
 
-      let x = startX;
+      doc
+        .moveTo(MARGIN, y + rowHeight)
+        .lineTo(MARGIN + totalWidth, y + rowHeight)
+        .lineWidth(0.3)
+        .stroke(BORDER);
 
-      doc.text(item.counter_name || "-", x + 3, y + 5, {
+      doc.font("Helvetica").fontSize(6.2).fillColor(PRIMARY);
+
+      let x = MARGIN;
+
+      // ---------------------------------------------------
+      // COUNTER
+      // ---------------------------------------------------
+
+      doc.text(item.counter_name || "-", x + 3, y + 6, {
         width: colWidths.counter - 6,
         ellipsis: true,
+        lineBreak: false,
       });
 
       x += colWidths.counter;
 
-      doc.text(item.category_name || "-", x + 3, y + 5, {
+      // ---------------------------------------------------
+      // CATEGORY
+      // ---------------------------------------------------
+
+      doc.text(item.category_name || "-", x + 3, y + 6, {
         width: colWidths.category - 6,
         ellipsis: true,
+        lineBreak: false,
       });
 
       x += colWidths.category;
 
-      doc.text(item.department_name || "-", x + 3, y + 5, {
+      // ---------------------------------------------------
+      // DEPARTMENT
+      // ---------------------------------------------------
+
+      doc.text(item.department_name || "-", x + 3, y + 6, {
         width: colWidths.department - 6,
         ellipsis: true,
+        lineBreak: false,
       });
 
       x += colWidths.department;
 
-      doc.text(item.sweet_name || "-", x + 3, y + 5, {
-        width: colWidths.sweet - 6,
-        ellipsis: true,
-      });
+      // ---------------------------------------------------
+      // SWEET
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.2)
+        .text(item.sweet_name || "-", x + 3, y + 6, {
+          width: colWidths.sweet - 6,
+          ellipsis: true,
+          lineBreak: false,
+        });
 
       x += colWidths.sweet;
 
-      doc.text(qty.toString(), x, y + 5, {
-        width: colWidths.qty,
-        align: "center",
-      });
+      // ---------------------------------------------------
+      // QUANTITY
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(6.5)
+        .text(qty.toString(), x, y + 6, {
+          width: colWidths.qty,
+          align: "center",
+        });
 
       x += colWidths.qty;
 
-      doc.text(item.unit || "-", x, y + 5, {
-        width: colWidths.unit,
-        align: "center",
-      });
+      // ---------------------------------------------------
+      // UNIT
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.2)
+        .text(item.unit || "-", x, y + 6, {
+          width: colWidths.unit,
+          align: "center",
+          ellipsis: true,
+        });
 
       y += rowHeight;
     });
 
     // =====================================================
+    // TOTAL ROW PAGE CHECK
+    // =====================================================
+
+    const totalRowHeight = rowHeight + 2;
+
+    if (y + totalRowHeight > PAGE_HEIGHT - 30) {
+      // Close previous table
+
+      doc
+        .rect(MARGIN, tableTop, totalWidth, y - tableTop)
+        .lineWidth(0.5)
+        .stroke(BORDER);
+
+      // New page
+
+      doc.addPage({
+        size: "A5",
+        margin: MARGIN,
+      });
+
+      tableTop = 28;
+
+      y = drawTableHeader(tableTop);
+    }
+
+    // =====================================================
     // TOTAL
     // =====================================================
 
-    doc.rect(startX, y, totalWidth, rowHeight).fill("#e8f8f5");
+    doc.rect(MARGIN, y, totalWidth, totalRowHeight).fill(TOTAL_BG);
 
-    doc.fillColor("#000").fontSize(8).font("Helvetica-Bold");
+    doc.font("Helvetica-Bold").fontSize(7).fillColor(PRIMARY);
 
-    doc.text("TOTAL", startX + 5, y + 5, {
-      width: 420,
+    doc.text("TOTAL QUANTITY", MARGIN + 5, y + 6, {
+      width:
+        colWidths.counter +
+        colWidths.category +
+        colWidths.department +
+        colWidths.sweet -
+        5,
     });
 
-    doc.text(grandTotal.toString(), startX + 420, y + 5, {
-      width: 60,
+    const totalQtyX =
+      MARGIN +
+      colWidths.counter +
+      colWidths.category +
+      colWidths.department +
+      colWidths.sweet;
+
+    doc.fontSize(8).text(grandTotal.toString(), totalQtyX, y + 5, {
+      width: colWidths.qty,
       align: "center",
     });
 
-    doc.moveDown(2);
+    // =====================================================
+    // FINAL TABLE BORDER
+    // =====================================================
 
-    // =====================================================
-    // FOOTER
-    // =====================================================
+    const tableBottom = y + totalRowHeight;
 
     doc
-      .fontSize(8)
-      .font("Helvetica")
-      .fillColor("gray")
-      .text("System generated order request.", {
-        align: "center",
-      });
-
-    doc.fillColor("#000");
+      .rect(MARGIN, tableTop, totalWidth, tableBottom - tableTop)
+      .lineWidth(0.5)
+      .stroke(BORDER);
 
     // =====================================================
-    // END
+    // END PDF
     // =====================================================
 
     doc.end();
@@ -9412,7 +11095,7 @@ async function downloadOrderRequestPDF(req, res) {
 
     return libFunc.sendResponse(res, {
       status: 0,
-      msg: "Order request PDF generated successfully",
+      msg: "Professional A5 order request PDF generated successfully",
       filePath: serverUrl + fileUrl,
     });
   } catch (error) {
@@ -9421,2206 +11104,6 @@ async function downloadOrderRequestPDF(req, res) {
     return res.status(500).send("Error generating order request PDF");
   }
 }
-
-
-
-// async function downloadOrderRequestPDF(req, res) {
-//   try {
-//     const { order_id } = req.data || {};
-
-//     if (!order_id) {
-//       return res.status(400).send("Order ID required");
-//     }
-
-//     // =====================================================
-//     // TABLES
-//     // =====================================================
-
-//     const orderTable = schema + ".orders";
-//     const itemTable = schema + ".order_items";
-//     const shopTable = schema + ".shops";
-//     const sweetTable = schema + ".sweets";
-//     const counterTable = schema + ".counters";
-//     const categoryTable = schema + ".categories";
-//     const departmentTable = schema + ".departments";
-
-//     // =====================================================
-//     // SAFE ORDER ID
-//     // =====================================================
-
-//     const safeOrderId = String(order_id)
-//       .trim()
-//       .replaceAll("'", "''");
-
-//     // =====================================================
-//     // FETCH ORDER DATA
-//     // =====================================================
-
-//     const result = await db_query.customQuery(`
-//       SELECT
-
-//         -- =================================================
-//         -- ORDER
-//         -- =================================================
-
-//         o.id AS order_serial_id,
-//         o.row_id AS order_id,
-//         o.order_status,
-//         o.order_date,
-//         o.supplier_id,
-
-//         -- =================================================
-//         -- SHOP
-//         -- =================================================
-
-//         sh.row_id AS shop_id,
-//         sh.shop_name,
-//         sh.address AS shop_address,
-//         sh.city,
-//         sh.state,
-//         sh.phone AS shop_phone,
-
-//         -- =================================================
-//         -- ORDER ITEM
-//         -- =================================================
-
-//         oi.row_id AS order_item_id,
-//         oi.request_id,
-//         oi.quantity,
-//         oi.item_status,
-//         oi.counter_id,
-
-//         -- =================================================
-//         -- SWEET
-//         -- =================================================
-
-//         sw.row_id AS sweet_id,
-
-//         COALESCE(
-//           sw.sweet_name,
-//           'Unknown Sweet'
-//         ) AS sweet_name,
-
-//         COALESCE(
-//           sw.unit,
-//           '-'
-//         ) AS unit,
-
-//         -- =================================================
-//         -- COUNTER
-//         -- =================================================
-
-//         c.row_id AS counter_id,
-
-//         COALESCE(
-//           c.counter_name,
-//           'Default Counter'
-//         ) AS counter_name,
-
-//         c.location AS counter_location,
-
-//         -- =================================================
-//         -- CATEGORY
-//         -- =================================================
-
-//         cat.row_id AS category_id,
-
-//         COALESCE(
-//           cat.category_name,
-//           'Others'
-//         ) AS category_name,
-
-//         -- =================================================
-//         -- DEPARTMENT
-//         -- =================================================
-
-//         d.row_id AS department_id,
-
-//         COALESCE(
-//           d.department_name,
-//           'Others'
-//         ) AS department_name
-
-//       FROM ${orderTable} o
-
-//       LEFT JOIN ${shopTable} sh
-//         ON sh.row_id = o.shop_id
-
-//       LEFT JOIN ${itemTable} oi
-//         ON oi.order_id = o.row_id
-
-//       LEFT JOIN ${sweetTable} sw
-//         ON sw.row_id = oi.sweet_id
-
-//       LEFT JOIN ${counterTable} c
-//         ON c.row_id = oi.counter_id
-
-//       LEFT JOIN ${categoryTable} cat
-//         ON cat.row_id = sw.category_id
-
-//       LEFT JOIN ${departmentTable} d
-//         ON d.row_id = cat.department_id
-
-//       WHERE o.row_id = '${safeOrderId}'
-
-//       ORDER BY
-//         c.counter_name ASC,
-//         cat.category_name ASC,
-//         sw.sweet_name ASC
-//     `);
-
-//     // =====================================================
-//     // DATA
-//     // =====================================================
-
-//     const data = result.data || [];
-
-//     if (data.length === 0) {
-//       return res.status(404).send("No order found");
-//     }
-
-//     const order = data[0];
-
-//     // =====================================================
-//     // DISPLAY ORDER ID
-//     // =====================================================
-
-//     const orderDisplayId =
-//       `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
-
-//     // =====================================================
-//     // PATH
-//     // =====================================================
-
-//     const BASE_UPLOAD_PATH = "/home/uploads";
-
-//     const folder = path.join(
-//       BASE_UPLOAD_PATH,
-//       "OrderRequests"
-//     );
-
-//     if (!fs.existsSync(folder)) {
-//       fs.mkdirSync(folder, {
-//         recursive: true,
-//       });
-//     }
-
-//     // =====================================================
-//     // LOGO
-//     // =====================================================
-
-//     const LOGO_PATH = path.join(
-//       BASE_UPLOAD_PATH,
-//       "ShopMedia",
-//       "1789809020026_logo.jpg"
-//     );
-
-//     const hasLogo = fs.existsSync(LOGO_PATH);
-
-//     if (!hasLogo) {
-//       console.log(
-//         "Order request logo not found:",
-//         LOGO_PATH
-//       );
-//     }
-
-//     // =====================================================
-//     // FILE
-//     // =====================================================
-
-//     const fileName =
-//       `OrderRequest_${orderDisplayId}_${Date.now()}.pdf`;
-
-//     const filePath = path.join(
-//       folder,
-//       fileName
-//     );
-
-//     // =====================================================
-//     // A5 SETTINGS
-//     // =====================================================
-
-//     const PAGE_WIDTH = 419.53;
-//     const PAGE_HEIGHT = 595.28;
-
-//     const MARGIN = 22;
-
-//     const CONTENT_WIDTH =
-//       PAGE_WIDTH - MARGIN * 2;
-
-//     // =====================================================
-//     // PDF
-//     // =====================================================
-
-//     const doc = new PDFDocument({
-//       size: "A5",
-//       layout: "portrait",
-
-//       margins: {
-//         top: MARGIN,
-//         bottom: MARGIN,
-//         left: MARGIN,
-//         right: MARGIN,
-//       },
-
-//       autoFirstPage: true,
-//     });
-
-//     const writeStream =
-//       fs.createWriteStream(filePath);
-
-//     doc.pipe(writeStream);
-
-//     // =====================================================
-//     // COLORS
-//     // =====================================================
-
-//     const BRAND_DARK = "#4A2C1F";
-//     const BRAND = "#6B4030";
-//     const BRAND_LIGHT = "#F4EBDD";
-//     const GOLD = "#B68A3A";
-
-//     const BLACK = "#171717";
-//     const GREY = "#666666";
-//     const BORDER = "#D5CEC7";
-//     const LIGHT_ROW = "#FBF9F7";
-//     const WHITE = "#FFFFFF";
-
-//     // =====================================================
-//     // DATE FORMAT
-//     // =====================================================
-
-//     function formatDate(date) {
-//       if (!date) {
-//         return "-";
-//       }
-
-//       const d = new Date(date);
-
-//       if (isNaN(d.getTime())) {
-//         return "-";
-//       }
-
-//       return d.toLocaleDateString(
-//         "en-IN"
-//       );
-//     }
-
-//     // =====================================================
-//     // ROUND LOGO
-//     // =====================================================
-
-//     function drawRoundLogo(x, y, size) {
-//       if (!hasLogo) {
-//         return;
-//       }
-
-//       try {
-//         // Outer circle
-//         doc
-//           .circle(
-//             x + size / 2,
-//             y + size / 2,
-//             size / 2 + 3
-//           )
-//           .fillColor(BRAND_LIGHT)
-//           .fill();
-
-//         // Clip image to circle
-//         doc.save();
-
-//         doc
-//           .circle(
-//             x + size / 2,
-//             y + size / 2,
-//             size / 2
-//           )
-//           .clip();
-
-//         doc.image(
-//           LOGO_PATH,
-//           x,
-//           y,
-//           {
-//             width: size,
-//             height: size,
-//           }
-//         );
-
-//         doc.restore();
-
-//         // Border
-//         doc
-//           .circle(
-//             x + size / 2,
-//             y + size / 2,
-//             size / 2 + 1
-//           )
-//           .lineWidth(1)
-//           .strokeColor(GOLD)
-//           .stroke();
-
-//       } catch (error) {
-//         console.log(
-//           "Round logo error:",
-//           error
-//         );
-//       }
-//     }
-
-//     // =====================================================
-//     // TOP RIGHT DESIGN
-//     // =====================================================
-
-//     function drawTopDesign() {
-//       const designWidth = 125;
-//       const designHeight = 78;
-
-//       const x =
-//         PAGE_WIDTH - designWidth;
-
-//       const y = 0;
-
-//       // Dark curved shape
-//       doc
-//         .moveTo(
-//           x + 32,
-//           y
-//         )
-//         .lineTo(
-//           PAGE_WIDTH,
-//           y
-//         )
-//         .lineTo(
-//           PAGE_WIDTH,
-//           y + designHeight
-//         )
-//         .bezierCurveTo(
-//           PAGE_WIDTH - 25,
-//           y + 75,
-//           PAGE_WIDTH - 70,
-//           y + 72,
-//           x,
-//           y + 50
-//         )
-//         .bezierCurveTo(
-//           x + 15,
-//           y + 28,
-//           x + 25,
-//           y + 12,
-//           x + 32,
-//           y
-//         )
-//         .fillColor(BRAND_DARK)
-//         .fill();
-
-//       // Gold curve
-//       doc
-//         .moveTo(
-//           x + 8,
-//           y + 56
-//         )
-//         .bezierCurveTo(
-//           x + 35,
-//           y + 70,
-//           x + 70,
-//           y + 70,
-//           PAGE_WIDTH,
-//           y + 53
-//         )
-//         .lineWidth(1.8)
-//         .strokeColor(GOLD)
-//         .stroke();
-
-//       // Decorative text
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(5)
-//         .fillColor("#F5E7D0")
-//         .text(
-//           "ORDER REQUEST",
-//           x + 43,
-//           y + 25,
-//           {
-//             width: 70,
-//             align: "center",
-//             lineBreak: false,
-//           }
-//         );
-//     }
-
-//     // =====================================================
-//     // FOOTER
-//     // =====================================================
-//     //
-//     // IMPORTANT:
-//     // Footer is drawn using absolute coordinates and
-//     // lineBreak:false so PDFKit will NOT create another page.
-//     //
-//     // =====================================================
-
-//     function drawFooter() {
-//       const footerLineY =
-//         PAGE_HEIGHT - 30;
-
-//       const footerTextY =
-//         PAGE_HEIGHT - 22;
-
-//       // Separator
-//       doc
-//         .moveTo(
-//           MARGIN,
-//           footerLineY
-//         )
-//         .lineTo(
-//           PAGE_WIDTH - MARGIN,
-//           footerLineY
-//         )
-//         .lineWidth(0.6)
-//         .strokeColor(GOLD)
-//         .stroke();
-
-//       // Existing footer text only
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.5)
-//         .fillColor(GREY)
-//         .text(
-//           "System generated order request.",
-//           MARGIN,
-//           footerTextY,
-//           {
-//             width: CONTENT_WIDTH,
-//             align: "center",
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc.fillColor(BLACK);
-//     }
-
-//     // =====================================================
-//     // BUSINESS HEADER
-//     // =====================================================
-
-//     function drawBusinessHeader() {
-//       const headerY = MARGIN;
-
-//       // Top decoration
-//       drawTopDesign();
-
-//       // ===================================================
-//       // LOGO
-//       // ===================================================
-
-//       const logoSize = 58;
-
-//       drawRoundLogo(
-//         MARGIN,
-//         headerY + 2,
-//         logoSize
-//       );
-
-//       // ===================================================
-//       // SHOP INFORMATION
-//       // ===================================================
-
-//       const shopX =
-//         MARGIN + 70;
-
-//       const shopWidth =
-//         CONTENT_WIDTH - 70;
-
-//       // Shop name
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(14)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           order.shop_name || "-",
-//           shopX,
-//           headerY + 5,
-//           {
-//             width: shopWidth - 70,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Brand line
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(5.2)
-//         .fillColor(GOLD)
-//         .text(
-//           "PURE TASTE • HAPPY MOMENTS",
-//           shopX,
-//           headerY + 22,
-//           {
-//             width: shopWidth - 70,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Address
-//       const address = [
-//         order.shop_address,
-//         order.city,
-//         order.state,
-//       ]
-//         .filter(Boolean)
-//         .join(", ");
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.2)
-//         .fillColor(GREY)
-//         .text(
-//           address || "-",
-//           shopX,
-//           headerY + 33,
-//           {
-//             width: shopWidth - 70,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Phone
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.2)
-//         .fillColor(GREY)
-//         .text(
-//           `Phone: ${order.shop_phone || "-"}`,
-//           shopX,
-//           headerY + 44,
-//           {
-//             width: shopWidth - 70,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // ===================================================
-//       // HEADER LINE
-//       // ===================================================
-
-//       const lineY =
-//         headerY + logoSize + 11;
-
-//       doc
-//         .moveTo(
-//           MARGIN,
-//           lineY
-//         )
-//         .lineTo(
-//           PAGE_WIDTH - MARGIN,
-//           lineY
-//         )
-//         .lineWidth(0.8)
-//         .strokeColor(BRAND)
-//         .stroke();
-
-//       // Gold dot
-//       doc
-//         .circle(
-//           MARGIN,
-//           lineY,
-//           2
-//         )
-//         .fillColor(GOLD)
-//         .fill();
-
-//       doc.y =
-//         lineY + 9;
-
-//       // ===================================================
-//       // ORDER REQUEST TITLE
-//       // ===================================================
-
-//       const titleY = doc.y;
-
-//       const titleHeight = 47;
-
-//       doc
-//         .roundedRect(
-//           MARGIN,
-//           titleY,
-//           CONTENT_WIDTH,
-//           titleHeight,
-//           6
-//         )
-//         .fillColor(BRAND_LIGHT)
-//         .fill();
-
-//       // Left accent
-//       doc
-//         .roundedRect(
-//           MARGIN,
-//           titleY,
-//           5,
-//           titleHeight,
-//           3
-//         )
-//         .fillColor(BRAND)
-//         .fill();
-
-//       // Title
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(14)
-//         .fillColor(BLACK)
-//         .text(
-//           "ORDER REQUEST",
-//           MARGIN + 16,
-//           titleY + 8,
-//           {
-//             width: 190,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Subtitle
-//       doc
-//         .font("Helvetica")
-//         .fontSize(5.5)
-//         .fillColor(BRAND)
-//         .text(
-//           "ORDER DETAILS & ITEMS",
-//           MARGIN + 17,
-//           titleY + 28,
-//           {
-//             width: 190,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // ===================================================
-//       // ORDER ID
-//       // ===================================================
-
-//       const orderBoxX =
-//         PAGE_WIDTH - MARGIN - 108;
-
-//       doc
-//         .moveTo(
-//           orderBoxX - 8,
-//           titleY + 8
-//         )
-//         .lineTo(
-//           orderBoxX - 8,
-//           titleY + 39
-//         )
-//         .lineWidth(0.5)
-//         .strokeColor("#CBBEAF")
-//         .stroke();
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(5.2)
-//         .fillColor(GREY)
-//         .text(
-//           "ORDER ID",
-//           orderBoxX,
-//           titleY + 8,
-//           {
-//             width: 100,
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(9)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           orderDisplayId,
-//           orderBoxX,
-//           titleY + 20,
-//           {
-//             width: 100,
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc.y =
-//         titleY +
-//         titleHeight +
-//         9;
-//     }
-
-//     // =====================================================
-//     // ORDER INFORMATION
-//     // =====================================================
-
-//     function drawOrderInformation() {
-//       const y = doc.y;
-
-//       const boxHeight = 46;
-
-//       doc
-//         .roundedRect(
-//           MARGIN,
-//           y,
-//           CONTENT_WIDTH,
-//           boxHeight,
-//           5
-//         )
-//         .lineWidth(0.6)
-//         .strokeColor(BORDER)
-//         .stroke();
-
-//       const colWidth =
-//         CONTENT_WIDTH / 3;
-
-//       // Separators
-//       doc
-//         .moveTo(
-//           MARGIN + colWidth,
-//           y + 7
-//         )
-//         .lineTo(
-//           MARGIN + colWidth,
-//           y + boxHeight - 7
-//         )
-//         .lineWidth(0.4)
-//         .strokeColor(BORDER)
-//         .stroke();
-
-//       doc
-//         .moveTo(
-//           MARGIN + colWidth * 2,
-//           y + 7
-//         )
-//         .lineTo(
-//           MARGIN + colWidth * 2,
-//           y + boxHeight - 7
-//         )
-//         .lineWidth(0.4)
-//         .strokeColor(BORDER)
-//         .stroke();
-
-//       // ===================================================
-//       // ORDER ID
-//       // ===================================================
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(5.2)
-//         .fillColor(GREY)
-//         .text(
-//           "ORDER ID",
-//           MARGIN + 8,
-//           y + 8,
-//           {
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(7)
-//         .fillColor(BLACK)
-//         .text(
-//           orderDisplayId,
-//           MARGIN + 8,
-//           y + 21,
-//           {
-//             width: colWidth - 15,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // ===================================================
-//       // STATUS
-//       // ===================================================
-
-//       const statusX =
-//         MARGIN + colWidth;
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(5.2)
-//         .fillColor(GREY)
-//         .text(
-//           "STATUS",
-//           statusX + 8,
-//           y + 8,
-//           {
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(7)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           order.order_status || "-",
-//           statusX + 8,
-//           y + 21,
-//           {
-//             width: colWidth - 15,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // ===================================================
-//       // ORDER DATE
-//       // ===================================================
-
-//       const dateX =
-//         MARGIN + colWidth * 2;
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(5.2)
-//         .fillColor(GREY)
-//         .text(
-//           "ORDER DATE",
-//           dateX + 8,
-//           y + 8,
-//           {
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(7)
-//         .fillColor(BLACK)
-//         .text(
-//           formatDate(order.order_date),
-//           dateX + 8,
-//           y + 21,
-//           {
-//             width: colWidth - 15,
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc.y =
-//         y +
-//         boxHeight +
-//         9;
-//     }
-
-//     // =====================================================
-//     // SHOP DETAILS
-//     // =====================================================
-
-//     function drawShopDetails() {
-//       const y = doc.y;
-
-//       // Heading
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(7)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           "SHOP DETAILS",
-//           MARGIN,
-//           y,
-//           {
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Underline
-//       doc
-//         .moveTo(
-//           MARGIN,
-//           y + 11
-//         )
-//         .lineTo(
-//           MARGIN + 45,
-//           y + 11
-//         )
-//         .lineWidth(1)
-//         .strokeColor(GOLD)
-//         .stroke();
-
-//       // Shop
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(7)
-//         .fillColor(BLACK)
-//         .text(
-//           `Shop: ${order.shop_name || "-"}`,
-//           MARGIN,
-//           y + 18,
-//           {
-//             width:
-//               CONTENT_WIDTH / 2 - 5,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Phone
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.5)
-//         .fillColor(GREY)
-//         .text(
-//           `Phone: ${order.shop_phone || "-"}`,
-//           MARGIN + CONTENT_WIDTH / 2,
-//           y + 18,
-//           {
-//             width:
-//               CONTENT_WIDTH / 2,
-//             align: "right",
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Address
-//       const address = [
-//         order.shop_address,
-//         order.city,
-//         order.state,
-//       ]
-//         .filter(Boolean)
-//         .join(", ");
-
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.2)
-//         .fillColor(GREY)
-//         .text(
-//           `Address: ${address || "-"}`,
-//           MARGIN,
-//           y + 30,
-//           {
-//             width: CONTENT_WIDTH,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc.y =
-//         y + 41;
-//     }
-
-//     // =====================================================
-//     // TABLE
-//     // =====================================================
-
-//     const rowHeight = 22;
-
-//     const colWidths = {
-//       counter: 58,
-//       category: 55,
-//       department: 55,
-//       sweet: 105,
-//       qty: 40,
-//       unit: 58,
-//     };
-
-//     const totalWidth =
-//       colWidths.counter +
-//       colWidths.category +
-//       colWidths.department +
-//       colWidths.sweet +
-//       colWidths.qty +
-//       colWidths.unit;
-
-//     // =====================================================
-//     // TABLE HEADER
-//     // =====================================================
-
-//     function drawTableHeader() {
-//       const y = doc.y;
-
-//       let x = MARGIN;
-
-//       // Header background
-//       doc
-//         .rect(
-//           MARGIN,
-//           y,
-//           totalWidth,
-//           rowHeight
-//         )
-//         .fillColor(BRAND_DARK)
-//         .fill();
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(5.8)
-//         .fillColor(WHITE);
-
-//       // Counter
-//       doc.text(
-//         "COUNTER",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.counter - 6,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.counter;
-
-//       // Category
-//       doc.text(
-//         "CATEGORY",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.category - 6,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.category;
-
-//       // Department
-//       doc.text(
-//         "DEPARTMENT",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.department - 6,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.department;
-
-//       // Sweet
-//       doc.text(
-//         "SWEET",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.sweet - 6,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.sweet;
-
-//       // Qty
-//       doc.text(
-//         "QTY",
-//         x,
-//         y + 7,
-//         {
-//           width: colWidths.qty,
-//           align: "center",
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.qty;
-
-//       // Unit
-//       doc.text(
-//         "UNIT",
-//         x,
-//         y + 7,
-//         {
-//           width: colWidths.unit,
-//           align: "center",
-//           lineBreak: false,
-//         }
-//       );
-
-//       // Border
-//       doc
-//         .rect(
-//           MARGIN,
-//           y,
-//           totalWidth,
-//           rowHeight
-//         )
-//         .lineWidth(0.4)
-//         .strokeColor(BRAND_DARK)
-//         .stroke();
-
-//       doc.y =
-//         y +
-//         rowHeight;
-//     }
-
-//     // =====================================================
-//     // TABLE ITEM
-//     // =====================================================
-
-//     function drawItem(item, index) {
-//       const y = doc.y;
-
-//       let x = MARGIN;
-
-//       const qty =
-//         Number(item.quantity || 0);
-
-//       // Alternate background
-//       if (index % 2 === 0) {
-//         doc
-//           .rect(
-//             MARGIN,
-//             y,
-//             totalWidth,
-//             rowHeight
-//           )
-//           .fillColor(LIGHT_ROW)
-//           .fill();
-//       }
-
-//       // Text
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.1)
-//         .fillColor(BLACK);
-
-//       // Counter
-//       doc.text(
-//         item.counter_name || "-",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.counter - 6,
-//           ellipsis: true,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.counter;
-
-//       // Category
-//       doc.text(
-//         item.category_name || "-",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.category - 6,
-//           ellipsis: true,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.category;
-
-//       // Department
-//       doc.text(
-//         item.department_name || "-",
-//         x + 3,
-//         y + 7,
-//         {
-//           width:
-//             colWidths.department - 6,
-//           ellipsis: true,
-//           lineBreak: false,
-//         }
-//       );
-
-//       x += colWidths.department;
-
-//       // Sweet
-//       doc
-//         .font("Helvetica-Bold")
-//         .text(
-//           item.sweet_name || "-",
-//           x + 3,
-//           y + 7,
-//           {
-//             width:
-//               colWidths.sweet - 6,
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       x += colWidths.sweet;
-
-//       // Quantity
-//       doc
-//         .font("Helvetica-Bold")
-//         .text(
-//           qty.toString(),
-//           x,
-//           y + 7,
-//           {
-//             width: colWidths.qty,
-//             align: "center",
-//             lineBreak: false,
-//           }
-//         );
-
-//       x += colWidths.qty;
-
-//       // Unit
-//       doc
-//         .font("Helvetica")
-//         .text(
-//           item.unit || "-",
-//           x,
-//           y + 7,
-//           {
-//             width: colWidths.unit,
-//             align: "center",
-//             ellipsis: true,
-//             lineBreak: false,
-//           }
-//         );
-
-//       // Row border
-//       doc
-//         .rect(
-//           MARGIN,
-//           y,
-//           totalWidth,
-//           rowHeight
-//         )
-//         .lineWidth(0.3)
-//         .strokeColor(BORDER)
-//         .stroke();
-
-//       // Vertical lines
-//       let separatorX =
-//         MARGIN;
-
-//       const widths = [
-//         colWidths.counter,
-//         colWidths.category,
-//         colWidths.department,
-//         colWidths.sweet,
-//         colWidths.qty,
-//         colWidths.unit,
-//       ];
-
-//       widths.forEach(
-//         (width, index) => {
-//           separatorX += width;
-
-//           if (
-//             index <
-//             widths.length - 1
-//           ) {
-//             doc
-//               .moveTo(
-//                 separatorX,
-//                 y
-//               )
-//               .lineTo(
-//                 separatorX,
-//                 y + rowHeight
-//               )
-//               .lineWidth(0.25)
-//               .strokeColor(BORDER)
-//               .stroke();
-//           }
-//         }
-//       );
-
-//       doc.y =
-//         y +
-//         rowHeight;
-//     }
-
-//     // =====================================================
-//     // TOTAL
-//     // =====================================================
-
-//     function drawTotal(grandTotal) {
-//       const y = doc.y;
-
-//       const height = 28;
-
-//       doc
-//         .rect(
-//           MARGIN,
-//           y,
-//           totalWidth,
-//           height
-//         )
-//         .fillColor(BRAND_LIGHT)
-//         .fill();
-
-//       doc
-//         .rect(
-//           MARGIN,
-//           y,
-//           totalWidth,
-//           height
-//         )
-//         .lineWidth(0.5)
-//         .strokeColor("#D2C0A7")
-//         .stroke();
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(8)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           "TOTAL",
-//           MARGIN + 7,
-//           y + 8,
-//           {
-//             width:
-//               totalWidth - 80,
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(9)
-//         .fillColor(BRAND_DARK)
-//         .text(
-//           grandTotal.toString(),
-//           MARGIN + totalWidth - 65,
-//           y + 7,
-//           {
-//             width: 45,
-//             align: "center",
-//             lineBreak: false,
-//           }
-//         );
-
-//       doc.y =
-//         y +
-//         height +
-//         8;
-//     }
-
-//     // =====================================================
-//     // FIRST PAGE HEADER
-//     // =====================================================
-
-//     drawBusinessHeader();
-
-//     drawOrderInformation();
-
-//     drawShopDetails();
-
-//     drawTableHeader();
-
-//     // =====================================================
-//     // ITEMS
-//     // =====================================================
-
-//     let grandTotal = 0;
-
-//     let itemIndex = 0;
-
-//     /*
-//      * Bottom safe area.
-//      *
-//      * Footer starts around PAGE_HEIGHT - 30.
-//      * We keep 42px safe space before it.
-//      */
-
-//     const BOTTOM_SAFE_SPACE = 48;
-
-//     data.forEach((item) => {
-//       const qty =
-//         Number(item.quantity || 0);
-
-//       grandTotal += qty;
-
-//       /*
-//        * IMPORTANT:
-//        *
-//        * Check BEFORE drawing the row.
-//        * This prevents PDFKit from automatically
-//        * creating an unwanted page.
-//        */
-
-//       if (
-//         doc.y + rowHeight >
-//         PAGE_HEIGHT - BOTTOM_SAFE_SPACE
-//       ) {
-//         // Footer current page
-//         drawFooter();
-
-//         // New page
-//         doc.addPage({
-//           size: "A5",
-//           layout: "portrait",
-
-//           margins: {
-//             top: MARGIN,
-//             bottom: MARGIN,
-//             left: MARGIN,
-//             right: MARGIN,
-//           },
-//         });
-
-//         // Header on new page
-//         drawBusinessHeader();
-
-//         // Only table header on continuation
-//         drawTableHeader();
-
-//         itemIndex = 0;
-//       }
-
-//       drawItem(
-//         item,
-//         itemIndex
-//       );
-
-//       itemIndex++;
-//     });
-
-//     // =====================================================
-//     // TOTAL
-//     // =====================================================
-
-//     const TOTAL_HEIGHT = 36;
-
-//     /*
-//      * If total cannot fit on current page,
-//      * create a new page BEFORE drawing total.
-//      */
-
-//     if (
-//       doc.y + TOTAL_HEIGHT >
-//       PAGE_HEIGHT - BOTTOM_SAFE_SPACE
-//     ) {
-//       drawFooter();
-
-//       doc.addPage({
-//         size: "A5",
-//         layout: "portrait",
-
-//         margins: {
-//           top: MARGIN,
-//           bottom: MARGIN,
-//           left: MARGIN,
-//           right: MARGIN,
-//         },
-//       });
-
-//       drawBusinessHeader();
-
-//       drawTableHeader();
-//     }
-
-//     drawTotal(
-//       grandTotal
-//     );
-
-//     // =====================================================
-//     // FINAL FOOTER
-//     // =====================================================
-
-//     drawFooter();
-
-//     // =====================================================
-//     // END PDF
-//     // =====================================================
-
-//     doc.end();
-
-//     // =====================================================
-//     // WAIT FOR PDF WRITE
-//     // =====================================================
-
-//     await new Promise(
-//       (resolve, reject) => {
-//         writeStream.on(
-//           "finish",
-//           resolve
-//         );
-
-//         writeStream.on(
-//           "error",
-//           reject
-//         );
-//       }
-//     );
-
-//     // =====================================================
-//     // FILE URL
-//     // =====================================================
-
-//     const fileUrl =
-//       `/uploads/OrderRequests/${fileName}`;
-
-//     const serverUrl =
-//       "https://api.joswee.cloud";
-
-//     // =====================================================
-//     // RESPONSE
-//     // =====================================================
-
-//     return libFunc.sendResponse(res, {
-//       status: 0,
-
-//       msg:
-//         "Order request A5 PDF generated successfully",
-
-//       filePath:
-//         serverUrl + fileUrl,
-//     });
-
-//   } catch (error) {
-//     console.log(
-//       "downloadOrderRequestPDF error:",
-//       error
-//     );
-
-//     if (!res.headersSent) {
-//       return res
-//         .status(500)
-//         .send(
-//           "Error generating order request PDF"
-//         );
-//     }
-//   }
-// }
-
-
-
-
-
-
-
-
-// async function downloadOrderRequestPDF(req, res) {
-//   try {
-//     const { order_id } = req.data || {};
-
-//     if (!order_id) {
-//       return res.status(400).send("Order ID required");
-//     }
-
-//     const orderTable = schema + ".orders";
-//     const itemTable = schema + ".order_items";
-//     const shopTable = schema + ".shops";
-//     const sweetTable = schema + ".sweets";
-//     const counterTable = schema + ".counters";
-//     const categoryTable = schema + ".categories";
-//     const departmentTable = schema + ".departments";
-
-//     const safeOrderId = String(order_id).trim().replaceAll("'", "''");
-
-//     // =====================================================
-//     // FETCH ORDER DATA
-//     // =====================================================
-
-//     const result = await db_query.customQuery(`
-//       SELECT
-
-//         -- Order
-//         o.id AS order_serial_id,
-//         o.row_id AS order_id,
-//         o.order_status,
-//         o.order_date,
-//         o.supplier_id,
-
-//         -- Shop
-//         sh.row_id AS shop_id,
-//         sh.shop_name,
-//         sh.address AS shop_address,
-//         sh.city,
-//         sh.state,
-//         sh.phone AS shop_phone,
-
-//         -- Order Item
-//         oi.row_id AS order_item_id,
-//         oi.request_id,
-//         oi.quantity,
-//         oi.item_status,
-//         oi.counter_id,
-
-//         -- Sweet
-//         sw.row_id AS sweet_id,
-//         COALESCE(
-//           sw.sweet_name,
-//           'Unknown Sweet'
-//         ) AS sweet_name,
-
-//         COALESCE(
-//           sw.unit,
-//           '-'
-//         ) AS unit,
-
-//         -- Counter
-//         c.row_id AS counter_id,
-//         COALESCE(
-//           c.counter_name,
-//           'Default Counter'
-//         ) AS counter_name,
-
-//         c.location AS counter_location,
-
-//         -- Category
-//         cat.row_id AS category_id,
-//         COALESCE(
-//           cat.category_name,
-//           'Others'
-//         ) AS category_name,
-
-//         -- Department
-//         d.row_id AS department_id,
-//         COALESCE(
-//           d.department_name,
-//           'Others'
-//         ) AS department_name
-
-//       FROM ${orderTable} o
-
-//       LEFT JOIN ${shopTable} sh
-//         ON sh.row_id = o.shop_id
-
-//       LEFT JOIN ${itemTable} oi
-//         ON oi.order_id = o.row_id
-
-//       LEFT JOIN ${sweetTable} sw
-//         ON sw.row_id = oi.sweet_id
-
-//       LEFT JOIN ${counterTable} c
-//         ON c.row_id = oi.counter_id
-
-//       LEFT JOIN ${categoryTable} cat
-//         ON cat.row_id = sw.category_id
-
-//       LEFT JOIN ${departmentTable} d
-//         ON d.row_id = cat.department_id
-
-//       WHERE o.row_id = '${safeOrderId}'
-
-//       ORDER BY
-//         c.counter_name ASC,
-//         cat.category_name ASC,
-//         d.department_name ASC,
-//         sw.sweet_name ASC
-//     `);
-
-//     const data = result.data || [];
-
-//     if (data.length === 0) {
-//       return res.status(404).send("No order found");
-//     }
-
-//     const order = data[0];
-
-//     // =====================================================
-//     // DISPLAY ORDER ID
-//     // =====================================================
-
-//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
-//       6,
-//       "0",
-//     )}`;
-
-//     // =====================================================
-//     // FILE SETUP
-//     // =====================================================
-
-//     const BASE_UPLOAD_PATH = "./public/uploads";
-
-//     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
-
-//     if (!fs.existsSync(folder)) {
-//       fs.mkdirSync(folder, {
-//         recursive: true,
-//       });
-//     }
-
-//     const fileName = `OrderRequest_${Date.now()}.pdf`;
-
-//     const filePath = path.join(folder, fileName);
-
-//     // =====================================================
-//     // A5 SETTINGS
-//     // =====================================================
-
-//     /*
-//       A5:
-//       148mm × 210mm
-
-//       PDF points:
-//       419.53 × 595.28
-//     */
-
-//     const PAGE_WIDTH = 419.53;
-//     const PAGE_HEIGHT = 595.28;
-
-//     const MARGIN = 25;
-
-//     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-
-//     // =====================================================
-//     // PDF
-//     // =====================================================
-
-//     const doc = new PDFDocument({
-//       size: "A5",
-//       margins: {
-//         top: MARGIN,
-//         bottom: MARGIN,
-//         left: MARGIN,
-//         right: MARGIN,
-//       },
-//       autoFirstPage: true,
-//     });
-
-//     const writeStream = fs.createWriteStream(filePath);
-
-//     doc.pipe(writeStream);
-
-//     // =====================================================
-//     // LOGO
-//     // =====================================================
-
-//     const LOGO_PATH = "./public/uploads/logo.jpg";
-
-//     function drawRoundLogo() {
-//       if (!fs.existsSync(LOGO_PATH)) {
-//         console.log("Logo not found:", LOGO_PATH);
-
-//         return;
-//       }
-
-//       const logoSize = 48;
-
-//       const x = (PAGE_WIDTH - logoSize) / 2;
-
-//       const y = 18;
-
-//       doc.save();
-
-//       // Circular clipping
-//       doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2).clip();
-
-//       doc.image(LOGO_PATH, x, y, {
-//         width: logoSize,
-//         height: logoSize,
-//       });
-
-//       doc.restore();
-
-//       // Circular border
-//       doc
-//         .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
-//         .lineWidth(0.7)
-//         .stroke();
-
-//       doc.y = y + logoSize + 8;
-//     }
-
-//     // =====================================================
-//     // PAGE HEADER
-//     // =====================================================
-
-//     function drawPageHeader(continuation = false) {
-//       // Logo
-//       drawRoundLogo();
-
-//       // -----------------------------------------------
-//       // TITLE
-//       // -----------------------------------------------
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(16)
-//         .fillColor("#000000")
-//         .text(continuation ? "ORDER REQUEST - CONTINUED" : "ORDER REQUEST", {
-//           align: "center",
-//           width: CONTENT_WIDTH,
-//         });
-
-//       doc.moveDown(0.35);
-
-//       // Small separator
-//       doc
-//         .moveTo(MARGIN, doc.y)
-//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
-//         .lineWidth(0.8)
-//         .stroke();
-
-//       doc.moveDown(0.6);
-//     }
-
-//     // =====================================================
-//     // ORDER INFORMATION
-//     // =====================================================
-
-//     function drawOrderInfo() {
-//       const boxY = doc.y;
-
-//       const boxHeight = 73;
-
-//       // Outer box
-//       doc
-//         .roundedRect(MARGIN, boxY, CONTENT_WIDTH, boxHeight, 5)
-//         .lineWidth(0.7)
-//         .stroke();
-
-//       // Title
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(9)
-//         .fillColor("#000000")
-//         .text("ORDER INFORMATION", MARGIN + 10, boxY + 8);
-
-//       // Left column
-//       doc.font("Helvetica").fontSize(7.5);
-
-//       doc.text(`Order ID: ${orderDisplayId}`, MARGIN + 10, boxY + 25);
-
-//       doc.text(
-//         `Date: ${
-//           order.order_date
-//             ? new Date(order.order_date).toLocaleDateString("en-IN")
-//             : "-"
-//         }`,
-//         MARGIN + 10,
-//         boxY + 40,
-//       );
-
-//       doc.text(`Status: ${order.order_status || "-"}`, MARGIN + 10, boxY + 55);
-
-//       // Right column
-//       const rightX = MARGIN + 205;
-
-//       doc
-//         .font("Helvetica-Bold")
-//         .fontSize(8)
-//         .text("SHOP", rightX, boxY + 8);
-
-//       doc.font("Helvetica").fontSize(7.5);
-
-//       doc.text(order.shop_name || "-", rightX, boxY + 25, {
-//         width: 155,
-//         ellipsis: true,
-//       });
-
-//       doc.text(`Phone: ${order.shop_phone || "-"}`, rightX, boxY + 40, {
-//         width: 155,
-//         ellipsis: true,
-//       });
-
-//       const address = [order.shop_address, order.city, order.state]
-//         .filter(Boolean)
-//         .join(", ");
-
-//       doc.text(`Address: ${address || "-"}`, rightX, boxY + 55, {
-//         width: 155,
-//         ellipsis: true,
-//       });
-
-//       doc.y = boxY + boxHeight + 12;
-//     }
-
-//     // =====================================================
-//     // TABLE SETTINGS
-//     // =====================================================
-
-//     const rowHeight = 21;
-
-//     const colWidths = {
-//       counter: 65,
-//       category: 60,
-//       department: 60,
-//       sweet: 90,
-//       qty: 40,
-//       unit: 34,
-//     };
-
-//     // =====================================================
-//     // TABLE HEADER
-//     // =====================================================
-
-//     function drawTableHeader() {
-//       const y = doc.y;
-
-//       let x = MARGIN;
-
-//       // Background
-//       doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill("#eeeeee");
-
-//       doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.5);
-
-//       doc.text("COUNTER", x + 3, y + 7, {
-//         width: colWidths.counter - 6,
-//       });
-
-//       x += colWidths.counter;
-
-//       doc.text("CATEGORY", x + 3, y + 7, {
-//         width: colWidths.category - 6,
-//       });
-
-//       x += colWidths.category;
-
-//       doc.text("DEPARTMENT", x + 3, y + 7, {
-//         width: colWidths.department - 6,
-//       });
-
-//       x += colWidths.department;
-
-//       doc.text("SWEET", x + 3, y + 7, {
-//         width: colWidths.sweet - 6,
-//       });
-
-//       x += colWidths.sweet;
-
-//       doc.text("QTY", x, y + 7, {
-//         width: colWidths.qty,
-//         align: "center",
-//       });
-
-//       x += colWidths.qty;
-
-//       doc.text("UNIT", x, y + 7, {
-//         width: colWidths.unit,
-//         align: "center",
-//       });
-
-//       doc.y = y + rowHeight;
-
-//       // Bottom line
-//       doc
-//         .moveTo(MARGIN, doc.y)
-//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
-//         .lineWidth(0.5)
-//         .stroke();
-//     }
-
-//     // =====================================================
-//     // DRAW ITEM
-//     // =====================================================
-
-//     function drawItem(item, index) {
-//       const y = doc.y;
-
-//       if (index % 2 === 0) {
-//         doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill("#fafafa");
-//       }
-
-//       doc.fillColor("#000000").font("Helvetica").fontSize(6.8);
-
-//       let x = MARGIN;
-
-//       doc.text(item.counter_name || "-", x + 3, y + 7, {
-//         width: colWidths.counter - 6,
-//         ellipsis: true,
-//       });
-
-//       x += colWidths.counter;
-
-//       doc.text(item.category_name || "-", x + 3, y + 7, {
-//         width: colWidths.category - 6,
-//         ellipsis: true,
-//       });
-
-//       x += colWidths.category;
-
-//       doc.text(item.department_name || "-", x + 3, y + 7, {
-//         width: colWidths.department - 6,
-//         ellipsis: true,
-//       });
-
-//       x += colWidths.department;
-
-//       doc.text(item.sweet_name || "-", x + 3, y + 7, {
-//         width: colWidths.sweet - 6,
-//         ellipsis: true,
-//       });
-
-//       x += colWidths.sweet;
-
-//       const qty = Number(item.quantity || 0);
-
-//       doc.text(String(qty), x, y + 7, {
-//         width: colWidths.qty,
-//         align: "center",
-//       });
-
-//       x += colWidths.qty;
-
-//       doc.text(item.unit || "-", x, y + 7, {
-//         width: colWidths.unit,
-//         align: "center",
-//       });
-
-//       doc.y = y + rowHeight;
-
-//       // Row separator
-//       doc
-//         .moveTo(MARGIN, doc.y)
-//         .lineTo(PAGE_WIDTH - MARGIN, doc.y)
-//         .lineWidth(0.25)
-//         .stroke();
-//     }
-
-//     // =====================================================
-//     // DRAW TOTAL
-//     // =====================================================
-
-//     function drawTotal(total) {
-//       const y = doc.y;
-
-//       doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight + 2).fill("#eeeeee");
-
-//       doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8);
-
-//       doc.text("TOTAL QUANTITY", MARGIN + 8, y + 7, {
-//         width: CONTENT_WIDTH - 70,
-//       });
-
-//       doc.text(String(total), PAGE_WIDTH - MARGIN - 50, y + 7, {
-//         width: 40,
-//         align: "right",
-//       });
-
-//       doc.y = y + rowHeight + 12;
-//     }
-
-//     // =====================================================
-//     // FOOTER
-//     // =====================================================
-
-//     function drawFooter() {
-//       doc
-//         .font("Helvetica")
-//         .fontSize(6.5)
-//         .fillColor("#666666")
-//         .text("System generated order request", {
-//           align: "center",
-//           width: CONTENT_WIDTH,
-//         });
-
-//       doc.fillColor("#000000");
-//     }
-
-//     // =====================================================
-//     // FIRST PAGE HEADER
-//     // =====================================================
-
-//     drawPageHeader(false);
-
-//     drawOrderInfo();
-
-//     drawTableHeader();
-
-//     // =====================================================
-//     // ITEMS + PAGE BREAK
-//     // =====================================================
-
-//     let grandTotal = 0;
-
-//     let itemIndex = 0;
-
-//     data.forEach((item) => {
-//       const qty = Number(item.quantity || 0);
-
-//       grandTotal += qty;
-
-//       /*
-//        * A5 usable area:
-//        * If current row is too close to bottom,
-//        * create a new A5 page.
-//        */
-
-//       if (doc.y > PAGE_HEIGHT - 65) {
-//         doc.addPage({
-//           size: "A5",
-//           margins: {
-//             top: MARGIN,
-//             bottom: MARGIN,
-//             left: MARGIN,
-//             right: MARGIN,
-//           },
-//         });
-
-//         drawPageHeader(true);
-
-//         drawOrderInfo();
-
-//         drawTableHeader();
-
-//         itemIndex = 0;
-//       }
-
-//       drawItem(item, itemIndex);
-
-//       itemIndex++;
-//     });
-
-//     // =====================================================
-//     // TOTAL
-//     // =====================================================
-
-//     /*
-//      * Make sure total does not get pushed
-//      * outside the A5 page.
-//      */
-
-//     if (doc.y > PAGE_HEIGHT - 45) {
-//       doc.addPage({
-//         size: "A5",
-//         margins: {
-//           top: MARGIN,
-//           bottom: MARGIN,
-//           left: MARGIN,
-//           right: MARGIN,
-//         },
-//       });
-
-//       drawPageHeader(true);
-//     }
-
-//     drawTotal(grandTotal);
-
-//     drawFooter();
-
-//     // =====================================================
-//     // END PDF
-//     // =====================================================
-
-//     doc.end();
-
-//     // =====================================================
-//     // RESPONSE AFTER FILE CREATION
-//     // =====================================================
-
-//     writeStream.on("finish", () => {
-//       // IMPORTANT: leading /
-//       const fileUrl = `/public/uploads/OrderRequests/${fileName}`;
-
-//       const serverUrl = "https://api.joswee.cloud";
-
-//       return libFunc.sendResponse(res, {
-//         status: 0,
-//         msg: "Order request PDF generated successfully",
-//         filePath: serverUrl + fileUrl,
-//       });
-//     });
-
-//     writeStream.on("error", (error) => {
-//       console.log("Order PDF write error:", error);
-
-//       if (!res.headersSent) {
-//         return res.status(500).send("Error writing order request PDF");
-//       }
-//     });
-//   } catch (error) {
-//     console.log("downloadOrderRequestPDF error:", error);
-
-//     if (!res.headersSent) {
-//       return res.status(500).send("Error generating order request PDF");
-//     }
-//   }
-// }
-
 
 async function getDashboardData(req, res) {
   try {
@@ -18366,7 +17849,9 @@ async function downloadDepartmentSlipPDF(req, res) {
         return res.status(404).send("Order not found");
       }
 
-      if (orderData[0].order_status !== "ACCEPTED") {
+      console.log("orderData[0].order_status", orderData[0].order_status);
+
+      if (!["ACCEPTED", "PARTIAL"].includes(orderData[0].order_status)) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Department slip is not available. Supplier must accept the order first.",
@@ -18436,7 +17921,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     // FILE SETUP
     // =====================================================
 
-    const BASE_UPLOAD_PATH = "./public/uploads";
+    const BASE_UPLOAD_PATH = "/home/uploads";
 
     const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
 
@@ -18480,7 +17965,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     // ROUND LOGO
     // =====================================================
 
-    const LOGO_PATH = "./public/uploads/logo.jpg";
+    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
 
     function drawRoundLogo(doc) {
       if (!fs.existsSync(LOGO_PATH)) {

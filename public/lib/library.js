@@ -17823,7 +17823,7 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       WHERE
         o.row_id = '${safeOrderId}'
-        AND o.order_status = 'ACCEPTED'
+        AND o.order_status IN ('ACCEPTED', 'PARTIAL', 'DISPATCHED', 'DELIVERED')
 
       ORDER BY
         d.department_name ASC,
@@ -17855,7 +17855,7 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       console.log("orderData[0].order_status", orderData[0].order_status);
 
-      if (!["ACCEPTED", "PARTIAL"].includes(orderData[0].order_status)) {
+   if (!["ACCEPTED", "PARTIAL", "DISPATCHED", "DELIVERED"].includes(orderData[0].order_status)) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Department slip is not available. Supplier must accept the order first.",

@@ -8322,11 +8322,13 @@ async function downloadChalanPDF(req, res) {
     // LOGO
     // =====================================================
 
-    const LOGO_PATH = path.join(
-      process.cwd(),
-      "public",
-      "uploads/ShopMedia/1789809020026_logo.jpg",
-    );
+    // const LOGO_PATH = path.join(
+    //   process.cwd(),
+    //   "public",
+    //   "uploads/ShopMedia/1789809020026_logo.jpg",
+    // );
+
+    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
 
     // =====================================================
     // A5 PDF
@@ -10496,8 +10498,7 @@ async function downloadOrderRequestPDF(req, res) {
     //   "uploads/ShopMedia/1789809020026_logo.jpg",
     // );
 
-    const LOGO_PATH =
-      "https://api.joswee.cloud/uploads/ShopMedia/1789809020026_logo.jpg";
+    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
 
     // =====================================================
     // A5 PDF
@@ -18420,7 +18421,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     // =====================================================
 
     writeStream.on("finish", () => {
-      const fileUrl = `/public/uploads/DepartmentSlips/${fileName}`;
+      const fileUrl = `/uploads/DepartmentSlips/${fileName}`;
 
       const serverUrl = "https://api.joswee.cloud";
 

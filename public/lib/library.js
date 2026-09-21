@@ -12716,12 +12716,254 @@ async function createNotification(user_id, title, message) {
 //   }
 // }
 
+// old
+// async function getAllCounterRequestsByShop(req, res) {
+//   try {
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderItemTable = schema + ".order_items";
+
+//     const user = req.data;
+
+//     // Filters
+//     const { status, shop_id } = req.data || {};
+
+//     // =====================================
+//     // ROLE VALIDATION
+//     // =====================================
+
+//     if (user.user_role !== "SHOP_ADMIN" && user.user_role !== "ADMIN") {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     // =====================================
+//     // DYNAMIC WHERE
+//     // =====================================
+
+//     let conditions = [];
+
+//     // =====================================
+//     // SHOP_ADMIN
+//     // Only own shop
+//     // =====================================
+
+//     if (user.user_role === "SHOP_ADMIN") {
+//       const shopId = user.shopId;
+
+//       if (!shopId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Shop ID not found in token",
+//         });
+//       }
+
+//       conditions.push(`c.shop_id = '${shopId}'`);
+//     }
+
+//     // =====================================
+//     // ADMIN
+//     // Shop wise data
+//     // =====================================
+
+//     if (user.user_role === "ADMIN") {
+//       if (!shop_id) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "shop_id is required",
+//         });
+//       }
+
+//       conditions.push(`c.shop_id = '${shop_id.trim()}'`);
+//     }
+
+//     // =====================================
+//     // STATUS FILTER
+//     // =====================================
+
+//     if (status) {
+//       conditions.push(`r.status = '${status.trim()}'`);
+//     }
+
+//     const whereClause =
+//       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+//     // =====================================
+//     // FETCH REQUESTS
+//     // =====================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         r.row_id,
+
+//         CONCAT('REQ-', r.id) AS requested_order,
+
+//         -- Request details
+//         r.quantity AS requested_quantity,
+
+//         r.status AS request_status,
+
+//         -- Order item details
+//         COALESCE(
+//           oi.item_status,
+//           'PENDING'
+//         ) AS item_status,
+
+//         COALESCE(
+//           oi.supplied_quantity,
+//           0
+//         ) AS supplied_quantity,
+
+//         GREATEST(
+//           r.quantity -
+//           COALESCE(oi.supplied_quantity, 0),
+//           0
+//         ) AS pending_quantity,
+
+//         oi.order_id,
+
+//         oi.reject_reason,
+
+//         -- Request dates
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI'
+//         ) AS request_group,
+
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         -- Sweet
+//         s.row_id AS sweet_id,
+//         s.sweet_name,
+//         s.unit,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         c.counter_name,
+//         c.location,
+
+//         -- Shop
+//         c.shop_id
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       -- IMPORTANT:
+//       -- Exact request → exact order item
+//       LEFT JOIN ${orderItemTable} oi
+//         ON oi.request_id = r.row_id
+
+//       ${whereClause}
+
+//       ORDER BY r.cr_on DESC
+//     `);
+
+//     console.log("getAllCounterRequestsByShop result:", result);
+
+//     const requests = result.data || [];
+
+//     // =====================================
+//     // GROUP BY REQUEST TIME
+//     // =====================================
+
+//     const groupedRequests = {};
+
+//     requests.forEach((item) => {
+//       const groupKey = item.request_group;
+
+//       if (!groupedRequests[groupKey]) {
+//         groupedRequests[groupKey] = {
+//           request_group: groupKey,
+
+//           cr_on: groupKey,
+
+//           total_requests: 0,
+
+//           total_requested_quantity: 0,
+
+//           total_supplied_quantity: 0,
+
+//           total_pending_quantity: 0,
+
+//           requests: [],
+//         };
+//       }
+
+//       // Total requests
+//       groupedRequests[groupKey].total_requests += 1;
+
+//       // Requested quantity
+//       groupedRequests[groupKey].total_requested_quantity += Number(
+//         item.requested_quantity || 0,
+//       );
+
+//       // Supplied quantity
+//       groupedRequests[groupKey].total_supplied_quantity += Number(
+//         item.supplied_quantity || 0,
+//       );
+
+//       // Pending quantity
+//       groupedRequests[groupKey].total_pending_quantity += Number(
+//         item.pending_quantity || 0,
+//       );
+
+//       // Individual request
+//       groupedRequests[groupKey].requests.push(item);
+//     });
+
+//     // =====================================
+//     // OBJECT → ARRAY
+//     // =====================================
+
+//     const data = Object.values(groupedRequests);
+
+//     console.log("Grouped request data:", data);
+
+//     // =====================================
+//     // RESPONSE
+//     // =====================================
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+
+//       msg: "Shop counter requests fetched successfully",
+
+//       data,
+//     });
+//   } catch (error) {
+//     console.log("getAllCounterRequestsByShop error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+
+//       msg: "Something went wrong",
+
+//       error: error.message,
+//     });
+//   }
+// }
+
+
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
     const counterTable = schema + ".counters";
     const sweetTable = schema + ".sweets";
     const orderItemTable = schema + ".order_items";
+    const orderTable = schema + ".orders";
+    const chalanTable = schema + ".chalans";
 
     const user = req.data;
 
@@ -12747,7 +12989,6 @@ async function getAllCounterRequestsByShop(req, res) {
 
     // =====================================
     // SHOP_ADMIN
-    // Only own shop
     // =====================================
 
     if (user.user_role === "SHOP_ADMIN") {
@@ -12765,7 +13006,6 @@ async function getAllCounterRequestsByShop(req, res) {
 
     // =====================================
     // ADMIN
-    // Shop wise data
     // =====================================
 
     if (user.user_role === "ADMIN") {
@@ -12788,7 +13028,9 @@ async function getAllCounterRequestsByShop(req, res) {
     }
 
     const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      conditions.length > 0
+        ? `WHERE ${conditions.join(" AND ")}`
+        : "";
 
     // =====================================
     // FETCH REQUESTS
@@ -12801,33 +13043,284 @@ async function getAllCounterRequestsByShop(req, res) {
 
         CONCAT('REQ-', r.id) AS requested_order,
 
-        -- Request details
+        -- =====================================
+        -- REQUEST DETAILS
+        -- =====================================
+
         r.quantity AS requested_quantity,
 
         r.status AS request_status,
 
-        -- Order item details
-        COALESCE(
-          oi.item_status,
-          'PENDING'
-        ) AS item_status,
+        -- =====================================
+        -- ORIGINAL ORDER ITEM
+        -- =====================================
+
+        original_item.order_id,
+
+        original_item.item_status,
+
+        original_item.reject_reason,
+
+        -- =====================================
+        -- ORIGINAL VERIFIED SUPPLIED
+        -- =====================================
 
         COALESCE(
-          oi.supplied_quantity,
+          original_item.verified_supplied_quantity,
           0
+        ) AS verified_supplied_quantity,
+
+        -- =====================================
+        -- REORDER REQUESTED
+        -- =====================================
+
+        COALESCE(
+          reorder_data.reorder_requested_quantity,
+          0
+        ) AS reorder_requested_quantity,
+
+        -- =====================================
+        -- REORDER COUNT
+        -- =====================================
+
+        COALESCE(
+          reorder_data.reorder_count,
+          0
+        ) AS reorder_count,
+
+        -- =====================================
+        -- REORDER SUPPLIED
+        -- =====================================
+
+        COALESCE(
+          reorder_data.reorder_supplied_quantity,
+          0
+        ) AS reorder_supplied_quantity,
+
+        -- =====================================
+        -- ORIGINAL CANCELLED
+        -- =====================================
+
+        COALESCE(
+          original_item.cancelled_quantity,
+          0
+        ) AS cancelled_quantity,
+
+        -- =====================================
+        -- TOTAL CANCELLED
+        -- =====================================
+
+        (
+          COALESCE(
+            original_item.cancelled_quantity,
+            0
+          )
+          +
+          COALESCE(
+            reorder_data.reorder_cancelled_quantity,
+            0
+          )
+        ) AS total_cancelled_quantity,
+
+        -- =====================================
+        -- TOTAL SUPPLIED
+        -- Original verified + Reorder verified
+        -- =====================================
+
+        (
+          COALESCE(
+            original_item.verified_supplied_quantity,
+            0
+          )
+          +
+          COALESCE(
+            reorder_data.reorder_supplied_quantity,
+            0
+          )
         ) AS supplied_quantity,
 
+        -- =====================================
+        -- PENDING
+        -- =====================================
+
         GREATEST(
-          r.quantity -
-          COALESCE(oi.supplied_quantity, 0),
+          r.quantity
+          -
+          (
+            COALESCE(
+              original_item.verified_supplied_quantity,
+              0
+            )
+            +
+            COALESCE(
+              reorder_data.reorder_supplied_quantity,
+              0
+            )
+          )
+          -
+          (
+            COALESCE(
+              original_item.cancelled_quantity,
+              0
+            )
+            +
+            COALESCE(
+              reorder_data.reorder_cancelled_quantity,
+              0
+            )
+          ),
           0
         ) AS pending_quantity,
 
-        oi.order_id,
+        -- =====================================
+        -- FINAL STATUS
+        -- =====================================
 
-        oi.reject_reason,
+        CASE
 
-        -- Request dates
+          -- Fully completed
+          WHEN
+            GREATEST(
+              r.quantity
+              -
+              (
+                COALESCE(
+                  original_item.verified_supplied_quantity,
+                  0
+                )
+                +
+                COALESCE(
+                  reorder_data.reorder_supplied_quantity,
+                  0
+                )
+              )
+              -
+              (
+                COALESCE(
+                  original_item.cancelled_quantity,
+                  0
+                )
+                +
+                COALESCE(
+                  reorder_data.reorder_cancelled_quantity,
+                  0
+                )
+              ),
+              0
+            ) = 0
+
+            AND
+
+            (
+              COALESCE(
+                original_item.verified_supplied_quantity,
+                0
+              )
+              +
+              COALESCE(
+                reorder_data.reorder_supplied_quantity,
+                0
+              )
+            ) > 0
+
+          THEN 'COMPLETED'
+
+          -- Fully cancelled
+          WHEN
+            (
+              COALESCE(
+                original_item.cancelled_quantity,
+                0
+              )
+              +
+              COALESCE(
+                reorder_data.reorder_cancelled_quantity,
+                0
+              )
+            ) >= r.quantity
+
+          THEN 'CANCELLED'
+
+          -- Reorder exists but quantity is still pending
+          WHEN
+            COALESCE(
+              reorder_data.reorder_count,
+              0
+            ) > 0
+
+            AND
+
+            GREATEST(
+              r.quantity
+              -
+              (
+                COALESCE(
+                  original_item.verified_supplied_quantity,
+                  0
+                )
+                +
+                COALESCE(
+                  reorder_data.reorder_supplied_quantity,
+                  0
+                )
+              )
+              -
+              (
+                COALESCE(
+                  original_item.cancelled_quantity,
+                  0
+                )
+                +
+                COALESCE(
+                  reorder_data.reorder_cancelled_quantity,
+                  0
+                )
+              ),
+              0
+            ) > 0
+
+          THEN 'REORDER_PENDING'
+
+          -- Original partially supplied
+          WHEN
+            COALESCE(
+              original_item.verified_supplied_quantity,
+              0
+            ) > 0
+
+          THEN 'PARTIAL'
+
+          ELSE 'PENDING'
+
+        END AS final_status,
+
+        -- =====================================
+        -- ORDER DETAILS
+        -- orders table does NOT have order_number
+        -- =====================================
+
+        original_item.order_number,
+
+        original_item.order_type,
+
+        original_item.parent_order_id,
+
+        original_item.order_status,
+
+        original_item.resolution_status,
+
+        -- =====================================
+        -- ROOT ORDER
+        -- =====================================
+
+        original_item.root_order_id,
+
+        original_item.root_order_number,
+
+        -- =====================================
+        -- REQUEST DATES
+        -- =====================================
+
         TO_CHAR(
           r.cr_on,
           'YYYY-MM-DD HH24:MI'
@@ -12838,40 +13331,599 @@ async function getAllCounterRequestsByShop(req, res) {
           'YYYY-MM-DD HH24:MI:SS'
         ) AS cr_on,
 
-        -- Sweet
+        -- =====================================
+        -- SWEET
+        -- =====================================
+
         s.row_id AS sweet_id,
+
         s.sweet_name,
+
         s.unit,
 
-        -- Counter
+        -- =====================================
+        -- COUNTER
+        -- =====================================
+
         c.row_id AS counter_id,
+
         c.counter_name,
+
         c.location,
 
-        -- Shop
-        c.shop_id
+        -- =====================================
+        -- SHOP
+        -- =====================================
+
+        c.shop_id,
+
+        -- =====================================
+        -- REORDER ORDERS
+        -- =====================================
+
+        COALESCE(
+          reorder_data.reorder_orders,
+          '[]'::json
+        ) AS reorder_orders,
+
+        -- =====================================
+        -- ORIGINAL CHALAN
+        -- =====================================
+
+        original_item.chalan_id,
+
+        original_item.challan_created,
+
+        original_item.challan_verified,
+
+        original_item.challan_status,
+
+        original_item.dispatch_date,
+
+        -- =====================================
+        -- ORDER DATES
+        -- =====================================
+
+        original_item.order_created_at,
+
+        original_item.order_updated_at,
+
+        -- =====================================
+        -- REMAINING ACTION
+        -- =====================================
+
+        original_item.remaining_action,
+
+        original_item.remaining_action_on
 
       FROM ${requestTable} r
+
+      -- =====================================
+      -- COUNTER
+      -- =====================================
 
       LEFT JOIN ${counterTable} c
         ON c.row_id = r.counter_id
 
+      -- =====================================
+      -- SWEET
+      -- =====================================
+
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
-      -- IMPORTANT:
-      -- Exact request → exact order item
-      LEFT JOIN ${orderItemTable} oi
-        ON oi.request_id = r.row_id
+      -- =====================================
+      -- ORIGINAL ORDER ITEM
+      -- =====================================
+
+      LEFT JOIN LATERAL (
+
+        SELECT
+
+          oi.row_id AS order_item_id,
+
+          oi.order_id,
+
+          oi.item_status,
+
+          oi.reject_reason,
+
+          COALESCE(
+            oi.supplied_quantity,
+            0
+          ) AS raw_supplied_quantity,
+
+          COALESCE(
+            oi.cancelled_quantity,
+            0
+          ) AS cancelled_quantity,
+
+          oi.remaining_action,
+
+          oi.remaining_action_on,
+
+          -- =====================================
+          -- ORDER ID AS ORDER NUMBER
+          -- Because orders.order_number does not exist
+          -- =====================================
+
+          o.row_id AS order_number,
+
+          o.order_type,
+
+          o.parent_order_id,
+
+          o.order_status,
+
+          o.resolution_status,
+
+          o.cr_on AS order_created_at,
+
+          o.up_on AS order_updated_at,
+
+          -- =====================================
+          -- ROOT ORDER ID
+          -- =====================================
+
+          CASE
+            WHEN o.order_type = 'REORDER'
+              THEN o.parent_order_id
+            ELSE o.row_id
+          END AS root_order_id,
+
+          -- =====================================
+          -- ROOT ORDER NUMBER
+          -- =====================================
+
+          CASE
+            WHEN o.order_type = 'REORDER'
+              THEN parent_order.row_id
+            ELSE o.row_id
+          END AS root_order_number,
+
+          -- =====================================
+          -- LATEST CHALAN
+          -- =====================================
+
+          latest_chalan.row_id AS chalan_id,
+
+          CASE
+            WHEN latest_chalan.row_id IS NOT NULL
+              THEN TRUE
+            ELSE FALSE
+          END AS challan_created,
+
+          COALESCE(
+            latest_chalan.is_verified,
+            FALSE
+          ) AS challan_verified,
+
+          CASE
+            WHEN latest_chalan.row_id IS NULL
+              THEN 'NOT_CREATED'
+
+            WHEN latest_chalan.is_verified = TRUE
+              THEN 'VERIFIED'
+
+            ELSE 'PENDING'
+          END AS challan_status,
+
+          latest_chalan.dispatch_date,
+
+          -- =====================================
+          -- VERIFIED ORIGINAL SUPPLIED
+          -- =====================================
+
+          CASE
+            WHEN latest_chalan.is_verified = TRUE
+              THEN COALESCE(
+                oi.supplied_quantity,
+                0
+              )
+            ELSE 0
+          END AS verified_supplied_quantity
+
+        FROM ${orderItemTable} oi
+
+        INNER JOIN ${orderTable} o
+          ON o.row_id = oi.order_id
+
+        -- =====================================
+        -- PARENT ORDER
+        -- =====================================
+
+        LEFT JOIN ${orderTable} parent_order
+          ON parent_order.row_id = o.parent_order_id
+
+        -- =====================================
+        -- LATEST CHALAN
+        -- =====================================
+
+        LEFT JOIN LATERAL (
+
+          SELECT
+
+            ch.row_id,
+
+            ch.is_verified,
+
+            ch.dispatch_date
+
+          FROM ${chalanTable} ch
+
+          WHERE ch.order_id = oi.order_id
+
+          ORDER BY
+            ch.dispatch_date DESC NULLS LAST,
+            ch.row_id DESC
+
+          LIMIT 1
+
+        ) latest_chalan
+          ON TRUE
+
+        WHERE
+          oi.request_id = r.row_id
+
+          AND (
+            o.order_type = 'NORMAL'
+            OR o.order_type IS NULL
+          )
+
+        ORDER BY oi.cr_on ASC
+
+        LIMIT 1
+
+      ) original_item
+        ON TRUE
+
+      -- =====================================
+      -- REORDER DATA
+      -- =====================================
+
+      LEFT JOIN LATERAL (
+
+        SELECT
+
+          -- =====================================
+          -- REORDER REQUESTED
+          -- order_items.quantity is TEXT
+          -- =====================================
+
+          COALESCE(
+            SUM(
+              COALESCE(
+                child.quantity,
+                '0'
+              )::numeric
+            ),
+            0
+          ) AS reorder_requested_quantity,
+
+          -- =====================================
+          -- REORDER COUNT
+          -- =====================================
+
+          COUNT(
+            child.row_id
+          ) AS reorder_count,
+
+          -- =====================================
+          -- VERIFIED REORDER SUPPLIED
+          -- =====================================
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN child_chalan.is_verified = TRUE
+                  THEN COALESCE(
+                    child.supplied_quantity,
+                    0
+                  )
+                ELSE 0
+              END
+            ),
+            0
+          ) AS reorder_supplied_quantity,
+
+          -- =====================================
+          -- REORDER CANCELLED
+          -- =====================================
+
+          COALESCE(
+            SUM(
+              COALESCE(
+                child.cancelled_quantity,
+                0
+              )
+            ),
+            0
+          ) AS reorder_cancelled_quantity,
+
+          -- =====================================
+          -- REORDER ORDERS
+          -- =====================================
+
+          COALESCE(
+
+            JSON_AGG(
+
+              JSON_BUILD_OBJECT(
+
+                'order_id',
+                child.order_id,
+
+                -- orders.order_number does not exist
+                'order_number',
+                child_order.row_id,
+
+                'order_type',
+                child_order.order_type,
+
+                'parent_order_id',
+                child_order.parent_order_id,
+
+                'order_status',
+                child_order.order_status,
+
+                'resolution_status',
+                child_order.resolution_status,
+
+                'requested_quantity',
+                COALESCE(
+                  child.quantity,
+                  '0'
+                )::numeric,
+
+                'supplied_quantity',
+                CASE
+                  WHEN child_chalan.is_verified = TRUE
+                    THEN COALESCE(
+                      child.supplied_quantity,
+                      0
+                    )
+                  ELSE 0
+                END,
+
+                'cancelled_quantity',
+                COALESCE(
+                  child.cancelled_quantity,
+                  0
+                ),
+
+                'remaining_quantity',
+
+                GREATEST(
+
+                  COALESCE(
+                    child.quantity,
+                    '0'
+                  )::numeric
+
+                  -
+
+                  CASE
+                    WHEN child_chalan.is_verified = TRUE
+                      THEN COALESCE(
+                        child.supplied_quantity,
+                        0
+                      )
+                    ELSE 0
+                  END
+
+                  -
+
+                  COALESCE(
+                    child.cancelled_quantity,
+                    0
+                  ),
+
+                  0
+
+                ),
+
+                'item_status',
+                child.item_status,
+
+                'remaining_action',
+                child.remaining_action,
+
+                'chalan_id',
+                child_chalan.row_id,
+
+                'challan_status',
+
+                CASE
+                  WHEN child_chalan.row_id IS NULL
+                    THEN 'NOT_CREATED'
+
+                  WHEN child_chalan.is_verified = TRUE
+                    THEN 'VERIFIED'
+
+                  ELSE 'PENDING'
+                END,
+
+                'dispatch_date',
+                child_chalan.dispatch_date,
+
+                'created_at',
+                child_order.cr_on
+
+              )
+
+              ORDER BY child_order.cr_on ASC
+
+            ),
+
+            '[]'::json
+
+          ) AS reorder_orders
+
+        FROM ${orderItemTable} child
+
+        INNER JOIN ${orderTable} child_order
+          ON child_order.row_id = child.order_id
+
+        -- =====================================
+        -- LATEST REORDER CHALAN
+        -- =====================================
+
+        LEFT JOIN LATERAL (
+
+          SELECT
+
+            ch.row_id,
+
+            ch.is_verified,
+
+            ch.dispatch_date
+
+          FROM ${chalanTable} ch
+
+          WHERE ch.order_id = child.order_id
+
+          ORDER BY
+            ch.dispatch_date DESC NULLS LAST,
+            ch.row_id DESC
+
+          LIMIT 1
+
+        ) child_chalan
+          ON TRUE
+
+        WHERE
+
+          child_order.order_type = 'REORDER'
+
+          AND original_item.order_item_id IS NOT NULL
+
+          AND child.parent_order_item_id =
+              original_item.order_item_id
+
+      ) reorder_data
+        ON TRUE
 
       ${whereClause}
 
       ORDER BY r.cr_on DESC
     `);
 
-    console.log("getAllCounterRequestsByShop result:", result);
+    // =====================================
+    // DATABASE DEBUG
+    // =====================================
+
+    console.log(
+      "getAllCounterRequestsByShop result:",
+      result
+    );
 
     const requests = result.data || [];
+
+    // =====================================
+    // REQUEST DEBUG
+    // =====================================
+
+    requests.forEach((item, index) => {
+      console.log(
+        "\n=============================================="
+      );
+
+      console.log(
+        `SHOP REQUEST DEBUG #${index + 1}`
+      );
+
+      console.log(
+        "=============================================="
+      );
+
+      console.log(
+        "Request ID             :",
+        item.row_id
+      );
+
+      console.log(
+        "Requested Quantity     :",
+        item.requested_quantity
+      );
+
+      console.log(
+        "Order ID               :",
+        item.order_id
+      );
+
+      console.log(
+        "Order Number           :",
+        item.order_number
+      );
+
+      console.log(
+        "Order Status           :",
+        item.order_status
+      );
+
+      console.log(
+        "Chalan Verified        :",
+        item.challan_verified
+      );
+
+      console.log(
+        "Original Verified Qty  :",
+        item.verified_supplied_quantity
+      );
+
+      console.log(
+        "Reorder Requested Qty  :",
+        item.reorder_requested_quantity
+      );
+
+      console.log(
+        "Reorder Supplied Qty   :",
+        item.reorder_supplied_quantity
+      );
+
+      console.log(
+        "Reorder Count          :",
+        item.reorder_count
+      );
+
+      console.log(
+        "Total Supplied Qty     :",
+        item.supplied_quantity
+      );
+
+      console.log(
+        "Cancelled Qty          :",
+        item.cancelled_quantity
+      );
+
+      console.log(
+        "Total Cancelled Qty    :",
+        item.total_cancelled_quantity
+      );
+
+      console.log(
+        "Pending Qty            :",
+        item.pending_quantity
+      );
+
+      console.log(
+        "Final Status            :",
+        item.final_status
+      );
+
+      console.log(
+        "Reorder Orders         :",
+        JSON.stringify(
+          item.reorder_orders,
+          null,
+          2
+        )
+      );
+
+      console.log(
+        "==============================================\n"
+      );
+    });
 
     // =====================================
     // GROUP BY REQUEST TIME
@@ -12900,25 +13952,37 @@ async function getAllCounterRequestsByShop(req, res) {
         };
       }
 
-      // Total requests
+      // =====================================
+      // TOTAL REQUESTS
+      // =====================================
+
       groupedRequests[groupKey].total_requests += 1;
 
-      // Requested quantity
-      groupedRequests[groupKey].total_requested_quantity += Number(
-        item.requested_quantity || 0,
-      );
+      // =====================================
+      // REQUESTED
+      // =====================================
 
-      // Supplied quantity
-      groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.supplied_quantity || 0,
-      );
+      groupedRequests[groupKey].total_requested_quantity +=
+        Number(item.requested_quantity || 0);
 
-      // Pending quantity
-      groupedRequests[groupKey].total_pending_quantity += Number(
-        item.pending_quantity || 0,
-      );
+      // =====================================
+      // SUPPLIED
+      // =====================================
 
-      // Individual request
+      groupedRequests[groupKey].total_supplied_quantity +=
+        Number(item.supplied_quantity || 0);
+
+      // =====================================
+      // PENDING
+      // =====================================
+
+      groupedRequests[groupKey].total_pending_quantity +=
+        Number(item.pending_quantity || 0);
+
+      // =====================================
+      // REQUEST
+      // =====================================
+
       groupedRequests[groupKey].requests.push(item);
     });
 
@@ -12928,7 +13992,33 @@ async function getAllCounterRequestsByShop(req, res) {
 
     const data = Object.values(groupedRequests);
 
-    console.log("Grouped request data:", data);
+    // =====================================
+    // FINAL DEBUG
+    // =====================================
+
+    console.log(
+      "\n================================================="
+    );
+
+    console.log(
+      "FINAL SHOP COUNTER REQUEST RESPONSE"
+    );
+
+    console.log(
+      "================================================="
+    );
+
+    console.log(
+      JSON.stringify(
+        data,
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "=================================================\n"
+    );
 
     // =====================================
     // RESPONSE
@@ -12941,8 +14031,13 @@ async function getAllCounterRequestsByShop(req, res) {
 
       data,
     });
+
   } catch (error) {
-    console.log("getAllCounterRequestsByShop error:", error);
+
+    console.log(
+      "getAllCounterRequestsByShop error:",
+      error
+    );
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -12953,6 +14048,9 @@ async function getAllCounterRequestsByShop(req, res) {
     });
   }
 }
+
+
+
 
 async function getProfile(req, res) {
   try {

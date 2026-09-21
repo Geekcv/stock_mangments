@@ -4617,6 +4617,678 @@ async function getShopOrders(req, res) {
 //   }
 // }
 
+// old 
+// async function getCounterRequests(req, res) {
+//   try {
+//     const user = req.data;
+
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const sweetTable = schema + ".sweets";
+//     const orderTable = schema + ".orders";
+//     const orderItemTable = schema + ".order_items";
+//     const supplierTable = schema + ".suppliers";
+//     const chalanTable = schema + ".chalans";
+
+//     // =====================================================
+//     // ROLE CONDITIONS
+//     // =====================================================
+
+//     let conditions = ["1=1"];
+
+//     // COUNTER USER → OWN REQUESTS
+//     if (user.user_role === "COUNTER_USER") {
+//       if (!user.counterId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Counter ID not found",
+//         });
+//       }
+
+//       conditions.push(`r.counter_id = '${user.counterId}'`);
+//     }
+
+//     // SHOP ADMIN → ALL COUNTERS OF SHOP
+//     if (user.user_role === "SHOP_ADMIN") {
+//       if (!user.shopId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Shop ID not found",
+//         });
+//       }
+
+//       conditions.push(`c.shop_id = '${user.shopId}'`);
+//     }
+
+//     // ADMIN → ALL REQUESTS
+
+//     const whereClause = `
+//       WHERE ${conditions.join(" AND ")}
+//     `;
+
+//     // =====================================================
+//     // MAIN QUERY
+//     // =====================================================
+
+//     const query = `
+//       SELECT
+
+//         /* =================================================
+//            REQUEST DETAILS
+//         ================================================= */
+
+//         r.row_id,
+
+//         CONCAT(
+//           'REQ-',
+//           r.id
+//         ) AS requested_order,
+
+//         r.quantity::numeric AS requested_quantity,
+
+//         r.status AS shop_status,
+
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS cr_on,
+
+//         TO_CHAR(
+//           r.cr_on,
+//           'YYYY-MM-DD HH24:MI'
+//         ) AS request_group,
+
+
+//         /* =================================================
+//            COUNTER
+//         ================================================= */
+
+//         c.row_id AS counter_id,
+
+//         c.counter_name,
+
+
+//         /* =================================================
+//            SWEET
+//         ================================================= */
+
+//         s.row_id AS sweet_id,
+
+//         s.sweet_name,
+
+//         s.unit,
+
+
+//         /* =================================================
+//            ORDER DETAILS
+//         ================================================= */
+
+//         oi.order_id,
+
+//         CASE
+//           WHEN o.id IS NOT NULL
+//           THEN CONCAT('ORD-', o.id)
+//           ELSE NULL
+//         END AS order_number,
+
+//         o.order_type,
+
+//         o.parent_order_id,
+
+//         o.order_status,
+
+//         o.resolution_status,
+
+
+//         /* =================================================
+//            SUPPLIER
+//         ================================================= */
+
+//         sup.row_id AS supplier_id,
+
+//         sup.supplier_name,
+
+
+//         /* =================================================
+//            CURRENT ORDER ITEM STATUS
+//         ================================================= */
+
+//         COALESCE(
+//           oi.item_status,
+//           'PENDING'
+//         ) AS supplier_status,
+
+//         COALESCE(
+//           oi.supplied_quantity,
+//           0
+//         )::numeric AS supplied_quantity,
+
+
+//         /* =================================================
+//            CANCELLED QUANTITY
+//         ================================================= */
+
+//         COALESCE(
+//           oi.cancelled_quantity,
+//           0
+//         )::numeric AS cancelled_quantity,
+
+
+//         /* =================================================
+//            REORDER SUPPLIED QUANTITY
+
+//            Original item ke against jitne bhi
+//            reorder items hain unka total
+//         ================================================= */
+
+//         COALESCE(
+//           (
+//             SELECT SUM(
+//               COALESCE(
+//                 child.supplied_quantity,
+//                 0
+//               )::numeric
+//             )
+//             FROM ${orderItemTable} child
+//             WHERE child.parent_order_item_id = oi.row_id
+//           ),
+//           0
+//         )::numeric AS reorder_supplied_quantity,
+
+
+//         /* =================================================
+//            TOTAL SUPPLIED
+
+//            Original supplied
+//            +
+//            Reorder supplied
+//         ================================================= */
+
+//         (
+//           COALESCE(
+//             oi.supplied_quantity,
+//             0
+//           )::numeric
+
+//           +
+
+//           COALESCE(
+//             (
+//               SELECT SUM(
+//                 COALESCE(
+//                   child.supplied_quantity,
+//                   0
+//                 )::numeric
+//               )
+//               FROM ${orderItemTable} child
+//               WHERE child.parent_order_item_id = oi.row_id
+//             ),
+//             0
+//           )::numeric
+//         ) AS total_supplied_quantity,
+
+
+//         /* =================================================
+//            REMAINING QUANTITY
+
+//            Requested
+//            - Original supplied
+//            - Reorder supplied
+//            - Cancelled
+//         ================================================= */
+
+//         GREATEST(
+
+//           r.quantity::numeric
+
+//           -
+
+//           COALESCE(
+//             oi.supplied_quantity,
+//             0
+//           )::numeric
+
+//           -
+
+//           COALESCE(
+//             (
+//               SELECT SUM(
+//                 COALESCE(
+//                   child.supplied_quantity,
+//                   0
+//                 )::numeric
+//               )
+//               FROM ${orderItemTable} child
+//               WHERE child.parent_order_item_id = oi.row_id
+//             ),
+//             0
+//           )::numeric
+
+//           -
+
+//           COALESCE(
+//             oi.cancelled_quantity,
+//             0
+//           )::numeric,
+
+//           0
+
+//         ) AS remaining_quantity,
+
+
+//         /* =================================================
+//            REMAINING ACTION
+//         ================================================= */
+
+//         COALESCE(
+//           oi.remaining_action,
+//           'PENDING'
+//         ) AS remaining_action,
+
+//         TO_CHAR(
+//           oi.remaining_action_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS remaining_action_on,
+
+
+//         /* =================================================
+//            CURRENT ORDER CHALLAN
+//         ================================================= */
+
+//         ch.row_id AS chalan_id,
+
+//         CASE
+//           WHEN ch.row_id IS NOT NULL
+//           THEN TRUE
+//           ELSE FALSE
+//         END AS challan_created,
+
+//         COALESCE(
+//           ch.is_verified,
+//           FALSE
+//         ) AS challan_verified,
+
+//         CASE
+
+//           WHEN ch.row_id IS NULL
+//             THEN 'NOT_CREATED'
+
+//           WHEN ch.is_verified = TRUE
+//             THEN 'VERIFIED'
+
+//           ELSE 'PENDING_VERIFICATION'
+
+//         END AS challan_status,
+
+//         TO_CHAR(
+//           ch.dispatch_date,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS dispatch_date,
+
+
+//         /* =================================================
+//            REORDER ORDERS
+
+//            Original/root item ke against
+//            saare reorder orders
+//         ================================================= */
+
+//         COALESCE(
+
+//           (
+//             SELECT json_agg(
+
+//               json_build_object(
+
+//                 'order_id',
+//                 child_order.row_id,
+
+//                 'order_number',
+//                 CONCAT(
+//                   'ORD-',
+//                   child_order.id
+//                 ),
+
+//                 'order_type',
+//                 child_order.order_type,
+
+//                 'parent_order_id',
+//                 child_order.parent_order_id,
+
+//                 'order_status',
+//                 child_order.order_status,
+
+//                 'resolution_status',
+//                 child_order.resolution_status,
+
+//                 'requested_quantity',
+//                 child_item.quantity::numeric,
+
+//                 'supplied_quantity',
+//                 COALESCE(
+//                   child_item.supplied_quantity,
+//                   0
+//                 )::numeric,
+
+//                 'cancelled_quantity',
+//                 COALESCE(
+//                   child_item.cancelled_quantity,
+//                   0
+//                 )::numeric,
+
+//                 'remaining_quantity',
+
+//                 GREATEST(
+
+//                   child_item.quantity::numeric
+
+//                   -
+
+//                   COALESCE(
+//                     child_item.supplied_quantity,
+//                     0
+//                   )::numeric
+
+//                   -
+
+//                   COALESCE(
+//                     child_item.cancelled_quantity,
+//                     0
+//                   )::numeric,
+
+//                   0
+
+//                 ),
+
+//                 'item_status',
+//                 COALESCE(
+//                   child_item.item_status,
+//                   'PENDING'
+//                 ),
+
+//                 'remaining_action',
+//                 COALESCE(
+//                   child_item.remaining_action,
+//                   'PENDING'
+//                 ),
+
+//                 'chalan_id',
+//                 child_ch.row_id,
+
+//                 'challan_status',
+
+//                 CASE
+
+//                   WHEN child_ch.row_id IS NULL
+//                     THEN 'NOT_CREATED'
+
+//                   WHEN child_ch.is_verified = TRUE
+//                     THEN 'VERIFIED'
+
+//                   ELSE 'PENDING_VERIFICATION'
+
+//                 END,
+
+//                 'dispatch_date',
+//                 TO_CHAR(
+//                   child_ch.dispatch_date,
+//                   'YYYY-MM-DD HH24:MI:SS'
+//                 ),
+
+//                 'created_at',
+//                 TO_CHAR(
+//                   child_order.cr_on,
+//                   'YYYY-MM-DD HH24:MI:SS'
+//                 )
+
+//               )
+
+//               ORDER BY child_order.cr_on DESC
+
+//             )
+
+//             FROM ${orderItemTable} child_item
+
+//             INNER JOIN ${orderTable} child_order
+
+//               ON child_order.row_id =
+//                  child_item.order_id
+
+//             LEFT JOIN LATERAL (
+
+//               SELECT
+
+//                 ch2.row_id,
+
+//                 ch2.is_verified,
+
+//                 ch2.dispatch_date
+
+//               FROM ${chalanTable} ch2
+
+//               WHERE ch2.order_id =
+//                     child_order.row_id
+
+//               ORDER BY ch2.cr_on DESC
+
+//               LIMIT 1
+
+//             ) child_ch ON TRUE
+
+//             WHERE child_item.parent_order_item_id =
+//                   oi.row_id
+
+//           ),
+
+//           '[]'::json
+
+//         ) AS reorder_orders,
+
+
+//         /* =================================================
+//            ORDER DATES
+//         ================================================= */
+
+//         TO_CHAR(
+//           o.cr_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS order_created_at,
+
+//         TO_CHAR(
+//           o.up_on,
+//           'YYYY-MM-DD HH24:MI:SS'
+//         ) AS order_updated_at
+
+
+//       /* ===================================================
+//          TABLES
+//       =================================================== */
+
+//       FROM ${requestTable} r
+
+
+//       /* COUNTER */
+
+//       LEFT JOIN ${counterTable} c
+
+//         ON c.row_id =
+//            r.counter_id
+
+
+//       /* SWEET */
+
+//       LEFT JOIN ${sweetTable} s
+
+//         ON s.row_id =
+//            r.sweet_id
+
+
+//       /* ===================================================
+//          IMPORTANT
+
+//          Exact request → order_item
+
+//          Isse previous request ka supplier status
+//          new request mein nahi aayega.
+//       =================================================== */
+
+//       LEFT JOIN ${orderItemTable} oi
+
+//         ON oi.request_id =
+//            r.row_id
+
+
+//       /* ORDER */
+
+//       LEFT JOIN ${orderTable} o
+
+//         ON o.row_id =
+//            oi.order_id
+
+
+//       /* SUPPLIER */
+
+//       LEFT JOIN ${supplierTable} sup
+
+//         ON sup.row_id =
+//            o.supplier_id
+
+
+//       /* ===================================================
+//          LATEST CHALLAN OF CURRENT ORDER
+//       =================================================== */
+
+//       LEFT JOIN LATERAL (
+
+//         SELECT
+
+//           ch1.row_id,
+
+//           ch1.is_verified,
+
+//           ch1.dispatch_date
+
+//         FROM ${chalanTable} ch1
+
+//         WHERE ch1.order_id =
+//               o.row_id
+
+//         ORDER BY ch1.cr_on DESC
+
+//         LIMIT 1
+
+//       ) ch ON TRUE
+
+
+//       ${whereClause}
+
+
+//       ORDER BY r.cr_on DESC
+//     `;
+
+//     console.log("getCounterRequests query:", query);
+
+//     // =====================================================
+//     // EXECUTE
+//     // =====================================================
+
+//     const result = await db_query.customQuery(query, "Get Counter Requests");
+
+//     console.log("getCounterRequests result:", result);
+
+//     const requests = result.data || [];
+
+//     // =====================================================
+//     // GROUP REQUESTS
+//     // =====================================================
+
+//     const groupedRequests = {};
+
+//     requests.forEach((item) => {
+//       const groupKey = item.request_group;
+
+//       if (!groupedRequests[groupKey]) {
+//         groupedRequests[groupKey] = {
+//           request_group: groupKey,
+
+//           cr_on: groupKey,
+
+//           total_requests: 0,
+
+//           total_requested_quantity: 0,
+
+//           total_supplied_quantity: 0,
+
+//           total_pending_quantity: 0,
+
+//           requests: [],
+//         };
+//       }
+
+//       // ===================================================
+//       // REQUEST COUNT
+//       // ===================================================
+
+//       groupedRequests[groupKey].total_requests += 1;
+
+//       // ===================================================
+//       // REQUESTED
+//       // ===================================================
+
+//       groupedRequests[groupKey].total_requested_quantity += Number(
+//         item.requested_quantity || 0,
+//       );
+
+//       // ===================================================
+//       // TOTAL SUPPLIED
+//       // ===================================================
+
+//       groupedRequests[groupKey].total_supplied_quantity += Number(
+//         item.total_supplied_quantity || 0,
+//       );
+
+//       // ===================================================
+//       // TOTAL REMAINING
+//       // ===================================================
+
+//       groupedRequests[groupKey].total_pending_quantity += Number(
+//         item.remaining_quantity || 0,
+//       );
+
+//       // ===================================================
+//       // INDIVIDUAL REQUEST
+//       // ===================================================
+
+//       groupedRequests[groupKey].requests.push(item);
+//     });
+
+//     // =====================================================
+//     // FINAL DATA
+//     // =====================================================
+
+//     const data = Object.values(groupedRequests);
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+
+//       msg: "Counter requests fetched successfully",
+
+//       data,
+//     });
+//   } catch (error) {
+//     console.log("getCounterRequests error:", error);
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+
+//       msg: "Something went wrong",
+
+//       error: error.message,
+//     });
+//   }
+// }
+
+
 async function getCounterRequests(req, res) {
   try {
     const user = req.data;
@@ -4740,6 +5412,28 @@ async function getCounterRequests(req, res) {
 
 
         /* =================================================
+           NEW: ROOT ORDER TRACKING
+        ================================================= */
+
+        CASE
+          WHEN o.order_type = 'REORDER'
+          THEN root_order.row_id
+          ELSE o.row_id
+        END AS root_order_id,
+
+        CASE
+          WHEN o.order_type = 'REORDER'
+               AND root_order.id IS NOT NULL
+          THEN CONCAT('ORD-', root_order.id)
+
+          WHEN o.id IS NOT NULL
+          THEN CONCAT('ORD-', o.id)
+
+          ELSE NULL
+        END AS root_order_number,
+
+
+        /* =================================================
            SUPPLIER
         ================================================= */
 
@@ -4750,6 +5444,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            CURRENT ORDER ITEM STATUS
+           EXISTING KEYS
         ================================================= */
 
         COALESCE(
@@ -4764,7 +5459,22 @@ async function getCounterRequests(req, res) {
 
 
         /* =================================================
+           NEW: VERIFIED SUPPLIED QUANTITY
+        ================================================= */
+
+        CASE
+          WHEN ch.is_verified = TRUE
+          THEN COALESCE(
+            oi.supplied_quantity,
+            0
+          )::numeric
+          ELSE 0
+        END AS verified_supplied_quantity,
+
+
+        /* =================================================
            CANCELLED QUANTITY
+           EXISTING KEY
         ================================================= */
 
         COALESCE(
@@ -4775,37 +5485,196 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            REORDER SUPPLIED QUANTITY
-
-           Original item ke against jitne bhi
-           reorder items hain unka total
+           EXISTING KEY
+           
+           Only VERIFIED challan supply count hogi.
         ================================================= */
 
         COALESCE(
           (
             SELECT SUM(
-              COALESCE(
-                child.supplied_quantity,
-                0
-              )::numeric
+
+              CASE
+                WHEN child_ch.is_verified = TRUE
+                THEN COALESCE(
+                  child.supplied_quantity,
+                  0
+                )::numeric
+                ELSE 0
+              END
+
             )
+
             FROM ${orderItemTable} child
-            WHERE child.parent_order_item_id = oi.row_id
+
+            INNER JOIN ${orderTable} child_order
+              ON child_order.row_id =
+                 child.order_id
+
+            LEFT JOIN LATERAL (
+
+              SELECT
+                ch2.is_verified
+
+              FROM ${chalanTable} ch2
+
+              WHERE ch2.order_id =
+                    child_order.row_id
+
+              ORDER BY ch2.cr_on DESC
+
+              LIMIT 1
+
+            ) child_ch ON TRUE
+
+            WHERE child.parent_order_item_id =
+                  oi.row_id
+
+              AND child_order.order_type =
+                  'REORDER'
+
           ),
           0
         )::numeric AS reorder_supplied_quantity,
 
 
         /* =================================================
-           TOTAL SUPPLIED
+           NEW: REORDER REQUESTED QUANTITY
+           
+           IMPORTANT:
+           order_items.quantity is TEXT
+           so default is '0', then numeric cast.
+        ================================================= */
 
-           Original supplied
+        COALESCE(
+          (
+            SELECT SUM(
+              COALESCE(
+                child.quantity,
+                '0'
+              )::numeric
+            )
+
+            FROM ${orderItemTable} child
+
+            INNER JOIN ${orderTable} child_order
+              ON child_order.row_id =
+                 child.order_id
+
+            WHERE child.parent_order_item_id =
+                  oi.row_id
+
+              AND child_order.order_type =
+                  'REORDER'
+
+          ),
+          0
+        )::numeric AS reorder_requested_quantity,
+
+
+        /* =================================================
+           NEW: REORDER COUNT
+        ================================================= */
+
+        COALESCE(
+          (
+            SELECT COUNT(*)
+
+            FROM ${orderItemTable} child
+
+            INNER JOIN ${orderTable} child_order
+              ON child_order.row_id =
+                 child.order_id
+
+            WHERE child.parent_order_item_id =
+                  oi.row_id
+
+              AND child_order.order_type =
+                  'REORDER'
+
+          ),
+          0
+        ) AS reorder_count,
+
+
+        /* =================================================
+           TOTAL SUPPLIED
+           
+           Existing key.
+           Original verified supply
            +
-           Reorder supplied
+           Reorder verified supply
+        ================================================= */
+
+        (
+          CASE
+            WHEN ch.is_verified = TRUE
+            THEN COALESCE(
+              oi.supplied_quantity,
+              0
+            )::numeric
+            ELSE 0
+          END
+
+          +
+
+          COALESCE(
+            (
+              SELECT SUM(
+
+                CASE
+                  WHEN child_ch.is_verified = TRUE
+                  THEN COALESCE(
+                    child.supplied_quantity,
+                    0
+                  )::numeric
+                  ELSE 0
+                END
+
+              )
+
+              FROM ${orderItemTable} child
+
+              INNER JOIN ${orderTable} child_order
+                ON child_order.row_id =
+                   child.order_id
+
+              LEFT JOIN LATERAL (
+
+                SELECT
+                  ch2.is_verified
+
+                FROM ${chalanTable} ch2
+
+                WHERE ch2.order_id =
+                      child_order.row_id
+
+                ORDER BY ch2.cr_on DESC
+
+                LIMIT 1
+
+              ) child_ch ON TRUE
+
+              WHERE child.parent_order_item_id =
+                    oi.row_id
+
+                AND child_order.order_type =
+                    'REORDER'
+
+            ),
+            0
+          )::numeric
+
+        ) AS total_supplied_quantity,
+
+
+        /* =================================================
+           NEW: TOTAL CANCELLED QUANTITY
         ================================================= */
 
         (
           COALESCE(
-            oi.supplied_quantity,
+            oi.cancelled_quantity,
             0
           )::numeric
 
@@ -4815,25 +5684,42 @@ async function getCounterRequests(req, res) {
             (
               SELECT SUM(
                 COALESCE(
-                  child.supplied_quantity,
+                  child.cancelled_quantity,
                   0
                 )::numeric
               )
+
               FROM ${orderItemTable} child
-              WHERE child.parent_order_item_id = oi.row_id
+
+              INNER JOIN ${orderTable} child_order
+                ON child_order.row_id =
+                   child.order_id
+
+              WHERE child.parent_order_item_id =
+                    oi.row_id
+
+                AND child_order.order_type =
+                    'REORDER'
+
             ),
             0
           )::numeric
-        ) AS total_supplied_quantity,
+
+        ) AS total_cancelled_quantity,
 
 
         /* =================================================
            REMAINING QUANTITY
-
+           
+           Existing key.
+           
            Requested
-           - Original supplied
-           - Reorder supplied
-           - Cancelled
+           -
+           Original verified supplied
+           -
+           Reorder verified supplied
+           -
+           Cancelled
         ================================================= */
 
         GREATEST(
@@ -4842,33 +5728,103 @@ async function getCounterRequests(req, res) {
 
           -
 
-          COALESCE(
-            oi.supplied_quantity,
-            0
-          )::numeric
+          (
+            CASE
+              WHEN ch.is_verified = TRUE
+              THEN COALESCE(
+                oi.supplied_quantity,
+                0
+              )::numeric
+              ELSE 0
+            END
+
+            +
+
+            COALESCE(
+              (
+                SELECT SUM(
+
+                  CASE
+                    WHEN child_ch.is_verified = TRUE
+                    THEN COALESCE(
+                      child.supplied_quantity,
+                      0
+                    )::numeric
+                    ELSE 0
+                  END
+
+                )
+
+                FROM ${orderItemTable} child
+
+                INNER JOIN ${orderTable} child_order
+                  ON child_order.row_id =
+                     child.order_id
+
+                LEFT JOIN LATERAL (
+
+                  SELECT
+                    ch2.is_verified
+
+                  FROM ${chalanTable} ch2
+
+                  WHERE ch2.order_id =
+                        child_order.row_id
+
+                  ORDER BY ch2.cr_on DESC
+
+                  LIMIT 1
+
+                ) child_ch ON TRUE
+
+                WHERE child.parent_order_item_id =
+                      oi.row_id
+
+                  AND child_order.order_type =
+                      'REORDER'
+
+              ),
+              0
+            )::numeric
+
+          )
 
           -
 
-          COALESCE(
-            (
-              SELECT SUM(
-                COALESCE(
-                  child.supplied_quantity,
-                  0
-                )::numeric
-              )
-              FROM ${orderItemTable} child
-              WHERE child.parent_order_item_id = oi.row_id
-            ),
-            0
-          )::numeric
+          (
+            COALESCE(
+              oi.cancelled_quantity,
+              0
+            )::numeric
 
-          -
+            +
 
-          COALESCE(
-            oi.cancelled_quantity,
-            0
-          )::numeric,
+            COALESCE(
+              (
+                SELECT SUM(
+                  COALESCE(
+                    child.cancelled_quantity,
+                    0
+                  )::numeric
+                )
+
+                FROM ${orderItemTable} child
+
+                INNER JOIN ${orderTable} child_order
+                  ON child_order.row_id =
+                     child.order_id
+
+                WHERE child.parent_order_item_id =
+                      oi.row_id
+
+                  AND child_order.order_type =
+                      'REORDER'
+
+              ),
+              0
+            )::numeric
+
+          ),
 
           0
 
@@ -4876,7 +5832,295 @@ async function getCounterRequests(req, res) {
 
 
         /* =================================================
+           NEW: FINAL TRACKING STATUS
+        ================================================= */
+
+        CASE
+
+          /* ===============================================
+             COMPLETED
+             
+             Remaining = 0
+             AND at least some quantity supplied
+          =============================================== */
+
+          WHEN
+            GREATEST(
+
+              r.quantity::numeric
+
+              -
+
+              (
+                CASE
+                  WHEN ch.is_verified = TRUE
+                  THEN COALESCE(
+                    oi.supplied_quantity,
+                    0
+                  )::numeric
+                  ELSE 0
+                END
+
+                +
+
+                COALESCE(
+                  (
+                    SELECT SUM(
+
+                      CASE
+                        WHEN child_ch.is_verified = TRUE
+                        THEN COALESCE(
+                          child.supplied_quantity,
+                          0
+                        )::numeric
+                        ELSE 0
+                      END
+
+                    )
+
+                    FROM ${orderItemTable} child
+
+                    INNER JOIN ${orderTable} child_order
+                      ON child_order.row_id =
+                         child.order_id
+
+                    LEFT JOIN LATERAL (
+
+                      SELECT
+                        ch2.is_verified
+
+                      FROM ${chalanTable} ch2
+
+                      WHERE ch2.order_id =
+                            child_order.row_id
+
+                      ORDER BY ch2.cr_on DESC
+
+                      LIMIT 1
+
+                    ) child_ch ON TRUE
+
+                    WHERE child.parent_order_item_id =
+                          oi.row_id
+
+                      AND child_order.order_type =
+                          'REORDER'
+
+                  ),
+                  0
+                )::numeric
+
+              )
+
+              -
+
+              (
+                COALESCE(
+                  oi.cancelled_quantity,
+                  0
+                )::numeric
+
+                +
+
+                COALESCE(
+                  (
+                    SELECT SUM(
+                      COALESCE(
+                        child.cancelled_quantity,
+                        0
+                      )::numeric
+                    )
+
+                    FROM ${orderItemTable} child
+
+                    INNER JOIN ${orderTable} child_order
+                      ON child_order.row_id =
+                         child.order_id
+
+                    WHERE child.parent_order_item_id =
+                          oi.row_id
+
+                      AND child_order.order_type =
+                          'REORDER'
+
+                  ),
+                  0
+                )::numeric
+
+              ),
+
+              0
+
+            ) = 0
+
+            AND
+
+            (
+              CASE
+                WHEN ch.is_verified = TRUE
+                THEN COALESCE(
+                  oi.supplied_quantity,
+                  0
+                )::numeric
+                ELSE 0
+              END
+
+              +
+
+              COALESCE(
+                (
+                  SELECT SUM(
+
+                    CASE
+                      WHEN child_ch.is_verified = TRUE
+                      THEN COALESCE(
+                        child.supplied_quantity,
+                        0
+                      )::numeric
+                      ELSE 0
+                    END
+
+                  )
+
+                  FROM ${orderItemTable} child
+
+                  INNER JOIN ${orderTable} child_order
+                    ON child_order.row_id =
+                       child.order_id
+
+                  LEFT JOIN LATERAL (
+
+                    SELECT
+                      ch2.is_verified
+
+                    FROM ${chalanTable} ch2
+
+                    WHERE ch2.order_id =
+                          child_order.row_id
+
+                    ORDER BY ch2.cr_on DESC
+
+                    LIMIT 1
+
+                  ) child_ch ON TRUE
+
+                  WHERE child.parent_order_item_id =
+                        oi.row_id
+
+                    AND child_order.order_type =
+                        'REORDER'
+
+                ),
+                0
+              )::numeric
+
+            ) > 0
+
+          THEN 'COMPLETED'
+
+
+          /* ===============================================
+             FULLY CANCELLED
+          =============================================== */
+
+          WHEN
+            (
+              COALESCE(
+                oi.cancelled_quantity,
+                0
+              )::numeric
+
+              +
+
+              COALESCE(
+                (
+                  SELECT SUM(
+                    COALESCE(
+                      child.cancelled_quantity,
+                      0
+                    )::numeric
+                  )
+
+                  FROM ${orderItemTable} child
+
+                  INNER JOIN ${orderTable} child_order
+                    ON child_order.row_id =
+                       child.order_id
+
+                  WHERE child.parent_order_item_id =
+                        oi.row_id
+
+                    AND child_order.order_type =
+                        'REORDER'
+
+                ),
+                0
+              )::numeric
+
+            ) >= r.quantity::numeric
+
+          THEN 'CANCELLED'
+
+
+          /* ===============================================
+             REORDER EXISTS
+          =============================================== */
+
+          WHEN
+            COALESCE(
+              (
+                SELECT COUNT(*)
+
+                FROM ${orderItemTable} child
+
+                INNER JOIN ${orderTable} child_order
+                  ON child_order.row_id =
+                     child.order_id
+
+                WHERE child.parent_order_item_id =
+                      oi.row_id
+
+                  AND child_order.order_type =
+                      'REORDER'
+
+              ),
+              0
+            ) > 0
+
+          THEN 'REORDER_PENDING'
+
+
+          /* ===============================================
+             ORIGINAL PARTIALLY SUPPLIED
+          =============================================== */
+
+          WHEN
+            (
+              CASE
+                WHEN ch.is_verified = TRUE
+                THEN COALESCE(
+                  oi.supplied_quantity,
+                  0
+                )::numeric
+                ELSE 0
+              END
+            ) > 0
+
+          THEN 'PARTIAL'
+
+
+          /* ===============================================
+             NOTHING YET
+          =============================================== */
+
+          ELSE 'PENDING'
+
+        END AS final_status,
+
+
+        /* =================================================
            REMAINING ACTION
+           EXISTING KEYS
         ================================================= */
 
         COALESCE(
@@ -4892,6 +6136,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            CURRENT ORDER CHALLAN
+           EXISTING KEYS
         ================================================= */
 
         ch.row_id AS chalan_id,
@@ -4927,9 +6172,8 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            REORDER ORDERS
-
-           Original/root item ke against
-           saare reorder orders
+           
+           EXISTING RESPONSE STRUCTURE PRESERVED
         ================================================= */
 
         COALESCE(
@@ -4983,10 +6227,14 @@ async function getCounterRequests(req, res) {
 
                   -
 
-                  COALESCE(
-                    child_item.supplied_quantity,
-                    0
-                  )::numeric
+                  CASE
+                    WHEN child_ch.is_verified = TRUE
+                    THEN COALESCE(
+                      child_item.supplied_quantity,
+                      0
+                    )::numeric
+                    ELSE 0
+                  END
 
                   -
 
@@ -5029,12 +6277,14 @@ async function getCounterRequests(req, res) {
                 END,
 
                 'dispatch_date',
+
                 TO_CHAR(
                   child_ch.dispatch_date,
                   'YYYY-MM-DD HH24:MI:SS'
                 ),
 
                 'created_at',
+
                 TO_CHAR(
                   child_order.cr_on,
                   'YYYY-MM-DD HH24:MI:SS'
@@ -5049,7 +6299,6 @@ async function getCounterRequests(req, res) {
             FROM ${orderItemTable} child_item
 
             INNER JOIN ${orderTable} child_order
-
               ON child_order.row_id =
                  child_item.order_id
 
@@ -5077,6 +6326,9 @@ async function getCounterRequests(req, res) {
             WHERE child_item.parent_order_item_id =
                   oi.row_id
 
+              AND child_order.order_type =
+                  'REORDER'
+
           ),
 
           '[]'::json
@@ -5086,6 +6338,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            ORDER DATES
+           EXISTING KEYS
         ================================================= */
 
         TO_CHAR(
@@ -5109,7 +6362,6 @@ async function getCounterRequests(req, res) {
       /* COUNTER */
 
       LEFT JOIN ${counterTable} c
-
         ON c.row_id =
            r.counter_id
 
@@ -5117,22 +6369,15 @@ async function getCounterRequests(req, res) {
       /* SWEET */
 
       LEFT JOIN ${sweetTable} s
-
         ON s.row_id =
            r.sweet_id
 
 
       /* ===================================================
-         IMPORTANT
-
-         Exact request → order_item
-
-         Isse previous request ka supplier status
-         new request mein nahi aayega.
+         EXACT REQUEST → ORDER ITEM
       =================================================== */
 
       LEFT JOIN ${orderItemTable} oi
-
         ON oi.request_id =
            r.row_id
 
@@ -5140,15 +6385,32 @@ async function getCounterRequests(req, res) {
       /* ORDER */
 
       LEFT JOIN ${orderTable} o
-
         ON o.row_id =
            oi.order_id
+
+
+      /* ===================================================
+         ROOT ORDER
+         
+         NORMAL → itself
+         REORDER → parent order
+      =================================================== */
+
+      LEFT JOIN ${orderTable} root_order
+        ON root_order.row_id =
+           CASE
+
+             WHEN o.order_type = 'REORDER'
+             THEN o.parent_order_id
+
+             ELSE o.row_id
+
+           END
 
 
       /* SUPPLIER */
 
       LEFT JOIN ${supplierTable} sup
-
         ON sup.row_id =
            o.supplier_id
 
@@ -5185,107 +6447,168 @@ async function getCounterRequests(req, res) {
       ORDER BY r.cr_on DESC
     `;
 
-    console.log("getCounterRequests query:", query);
+    console.log(
+      "getCounterRequests query:",
+      query
+    );
 
     // =====================================================
     // EXECUTE
     // =====================================================
 
-    const result = await db_query.customQuery(query, "Get Counter Requests");
+    const result =
+      await db_query.customQuery(
+        query,
+        "Get Counter Requests"
+      );
 
-    console.log("getCounterRequests result:", result);
+    console.log(
+      "getCounterRequests result:",
+      result
+    );
 
-    const requests = result.data || [];
+    const requests =
+      result.data || [];
+
 
     // =====================================================
     // GROUP REQUESTS
+    // EXISTING RESPONSE STRUCTURE
     // =====================================================
 
     const groupedRequests = {};
 
+
     requests.forEach((item) => {
-      const groupKey = item.request_group;
+
+      const groupKey =
+        item.request_group;
+
 
       if (!groupedRequests[groupKey]) {
+
         groupedRequests[groupKey] = {
-          request_group: groupKey,
 
-          cr_on: groupKey,
+          request_group:
+            groupKey,
 
-          total_requests: 0,
+          cr_on:
+            groupKey,
 
-          total_requested_quantity: 0,
+          total_requests:
+            0,
 
-          total_supplied_quantity: 0,
+          total_requested_quantity:
+            0,
 
-          total_pending_quantity: 0,
+          total_supplied_quantity:
+            0,
 
-          requests: [],
+          total_pending_quantity:
+            0,
+
+          requests:
+            [],
+
         };
+
       }
+
 
       // ===================================================
       // REQUEST COUNT
       // ===================================================
 
-      groupedRequests[groupKey].total_requests += 1;
+      groupedRequests[groupKey]
+        .total_requests += 1;
+
 
       // ===================================================
       // REQUESTED
       // ===================================================
 
-      groupedRequests[groupKey].total_requested_quantity += Number(
-        item.requested_quantity || 0,
-      );
+      groupedRequests[groupKey]
+        .total_requested_quantity += Number(
+          item.requested_quantity || 0
+        );
+
 
       // ===================================================
       // TOTAL SUPPLIED
       // ===================================================
 
-      groupedRequests[groupKey].total_supplied_quantity += Number(
-        item.total_supplied_quantity || 0,
-      );
+      groupedRequests[groupKey]
+        .total_supplied_quantity += Number(
+          item.total_supplied_quantity || 0
+        );
+
 
       // ===================================================
       // TOTAL REMAINING
       // ===================================================
 
-      groupedRequests[groupKey].total_pending_quantity += Number(
-        item.remaining_quantity || 0,
-      );
+      groupedRequests[groupKey]
+        .total_pending_quantity += Number(
+          item.remaining_quantity || 0
+        );
+
 
       // ===================================================
       // INDIVIDUAL REQUEST
       // ===================================================
 
-      groupedRequests[groupKey].requests.push(item);
+      groupedRequests[groupKey]
+        .requests
+        .push(item);
+
     });
+
 
     // =====================================================
     // FINAL DATA
     // =====================================================
 
-    const data = Object.values(groupedRequests);
+    const data =
+      Object.values(
+        groupedRequests
+      );
+
 
     return libFunc.sendResponse(res, {
+
       status: 0,
 
-      msg: "Counter requests fetched successfully",
+      msg:
+        "Counter requests fetched successfully",
 
       data,
+
     });
+
+
   } catch (error) {
-    console.log("getCounterRequests error:", error);
+
+    console.log(
+      "getCounterRequests error:",
+      error
+    );
 
     return libFunc.sendResponse(res, {
+
       status: 1,
 
-      msg: "Something went wrong",
+      msg:
+        "Something went wrong",
 
-      error: error.message,
+      error:
+        error.message,
+
     });
+
   }
 }
+
+
 
 // {
 //   "counter_id": "counter_123",

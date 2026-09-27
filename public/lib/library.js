@@ -4617,7 +4617,7 @@ async function getShopOrders(req, res) {
 //   }
 // }
 
-// old 
+// old
 // async function getCounterRequests(req, res) {
 //   try {
 //     const user = req.data;
@@ -4698,7 +4698,6 @@ async function getShopOrders(req, res) {
 //           'YYYY-MM-DD HH24:MI'
 //         ) AS request_group,
 
-
 //         /* =================================================
 //            COUNTER
 //         ================================================= */
@@ -4706,7 +4705,6 @@ async function getShopOrders(req, res) {
 //         c.row_id AS counter_id,
 
 //         c.counter_name,
-
 
 //         /* =================================================
 //            SWEET
@@ -4717,7 +4715,6 @@ async function getShopOrders(req, res) {
 //         s.sweet_name,
 
 //         s.unit,
-
 
 //         /* =================================================
 //            ORDER DETAILS
@@ -4739,7 +4736,6 @@ async function getShopOrders(req, res) {
 
 //         o.resolution_status,
 
-
 //         /* =================================================
 //            SUPPLIER
 //         ================================================= */
@@ -4747,7 +4743,6 @@ async function getShopOrders(req, res) {
 //         sup.row_id AS supplier_id,
 
 //         sup.supplier_name,
-
 
 //         /* =================================================
 //            CURRENT ORDER ITEM STATUS
@@ -4763,7 +4758,6 @@ async function getShopOrders(req, res) {
 //           0
 //         )::numeric AS supplied_quantity,
 
-
 //         /* =================================================
 //            CANCELLED QUANTITY
 //         ================================================= */
@@ -4772,7 +4766,6 @@ async function getShopOrders(req, res) {
 //           oi.cancelled_quantity,
 //           0
 //         )::numeric AS cancelled_quantity,
-
 
 //         /* =================================================
 //            REORDER SUPPLIED QUANTITY
@@ -4794,7 +4787,6 @@ async function getShopOrders(req, res) {
 //           ),
 //           0
 //         )::numeric AS reorder_supplied_quantity,
-
 
 //         /* =================================================
 //            TOTAL SUPPLIED
@@ -4826,7 +4818,6 @@ async function getShopOrders(req, res) {
 //             0
 //           )::numeric
 //         ) AS total_supplied_quantity,
-
 
 //         /* =================================================
 //            REMAINING QUANTITY
@@ -4875,7 +4866,6 @@ async function getShopOrders(req, res) {
 
 //         ) AS remaining_quantity,
 
-
 //         /* =================================================
 //            REMAINING ACTION
 //         ================================================= */
@@ -4889,7 +4879,6 @@ async function getShopOrders(req, res) {
 //           oi.remaining_action_on,
 //           'YYYY-MM-DD HH24:MI:SS'
 //         ) AS remaining_action_on,
-
 
 //         /* =================================================
 //            CURRENT ORDER CHALLAN
@@ -4924,7 +4913,6 @@ async function getShopOrders(req, res) {
 //           ch.dispatch_date,
 //           'YYYY-MM-DD HH24:MI:SS'
 //         ) AS dispatch_date,
-
 
 //         /* =================================================
 //            REORDER ORDERS
@@ -5084,7 +5072,6 @@ async function getShopOrders(req, res) {
 
 //         ) AS reorder_orders,
 
-
 //         /* =================================================
 //            ORDER DATES
 //         ================================================= */
@@ -5099,13 +5086,11 @@ async function getShopOrders(req, res) {
 //           'YYYY-MM-DD HH24:MI:SS'
 //         ) AS order_updated_at
 
-
 //       /* ===================================================
 //          TABLES
 //       =================================================== */
 
 //       FROM ${requestTable} r
-
 
 //       /* COUNTER */
 
@@ -5114,14 +5099,12 @@ async function getShopOrders(req, res) {
 //         ON c.row_id =
 //            r.counter_id
 
-
 //       /* SWEET */
 
 //       LEFT JOIN ${sweetTable} s
 
 //         ON s.row_id =
 //            r.sweet_id
-
 
 //       /* ===================================================
 //          IMPORTANT
@@ -5137,7 +5120,6 @@ async function getShopOrders(req, res) {
 //         ON oi.request_id =
 //            r.row_id
 
-
 //       /* ORDER */
 
 //       LEFT JOIN ${orderTable} o
@@ -5145,14 +5127,12 @@ async function getShopOrders(req, res) {
 //         ON o.row_id =
 //            oi.order_id
 
-
 //       /* SUPPLIER */
 
 //       LEFT JOIN ${supplierTable} sup
 
 //         ON sup.row_id =
 //            o.supplier_id
-
 
 //       /* ===================================================
 //          LATEST CHALLAN OF CURRENT ORDER
@@ -5179,9 +5159,7 @@ async function getShopOrders(req, res) {
 
 //       ) ch ON TRUE
 
-
 //       ${whereClause}
-
 
 //       ORDER BY r.cr_on DESC
 //     `;
@@ -5287,7 +5265,6 @@ async function getShopOrders(req, res) {
 //     });
 //   }
 // }
-
 
 async function getCounterRequests(req, res) {
   try {
@@ -6447,29 +6424,17 @@ async function getCounterRequests(req, res) {
       ORDER BY r.cr_on DESC
     `;
 
-    console.log(
-      "getCounterRequests query:",
-      query
-    );
+    console.log("getCounterRequests query:", query);
 
     // =====================================================
     // EXECUTE
     // =====================================================
 
-    const result =
-      await db_query.customQuery(
-        query,
-        "Get Counter Requests"
-      );
+    const result = await db_query.customQuery(query, "Get Counter Requests");
 
-    console.log(
-      "getCounterRequests result:",
-      result
-    );
+    console.log("getCounterRequests result:", result);
 
-    const requests =
-      result.data || [];
-
+    const requests = result.data || [];
 
     // =====================================================
     // GROUP REQUESTS
@@ -6478,137 +6443,89 @@ async function getCounterRequests(req, res) {
 
     const groupedRequests = {};
 
-
     requests.forEach((item) => {
-
-      const groupKey =
-        item.request_group;
-
+      const groupKey = item.request_group;
 
       if (!groupedRequests[groupKey]) {
-
         groupedRequests[groupKey] = {
+          request_group: groupKey,
 
-          request_group:
-            groupKey,
+          cr_on: groupKey,
 
-          cr_on:
-            groupKey,
+          total_requests: 0,
 
-          total_requests:
-            0,
+          total_requested_quantity: 0,
 
-          total_requested_quantity:
-            0,
+          total_supplied_quantity: 0,
 
-          total_supplied_quantity:
-            0,
+          total_pending_quantity: 0,
 
-          total_pending_quantity:
-            0,
-
-          requests:
-            [],
-
+          requests: [],
         };
-
       }
-
 
       // ===================================================
       // REQUEST COUNT
       // ===================================================
 
-      groupedRequests[groupKey]
-        .total_requests += 1;
-
+      groupedRequests[groupKey].total_requests += 1;
 
       // ===================================================
       // REQUESTED
       // ===================================================
 
-      groupedRequests[groupKey]
-        .total_requested_quantity += Number(
-          item.requested_quantity || 0
-        );
-
+      groupedRequests[groupKey].total_requested_quantity += Number(
+        item.requested_quantity || 0,
+      );
 
       // ===================================================
       // TOTAL SUPPLIED
       // ===================================================
 
-      groupedRequests[groupKey]
-        .total_supplied_quantity += Number(
-          item.total_supplied_quantity || 0
-        );
-
+      groupedRequests[groupKey].total_supplied_quantity += Number(
+        item.total_supplied_quantity || 0,
+      );
 
       // ===================================================
       // TOTAL REMAINING
       // ===================================================
 
-      groupedRequests[groupKey]
-        .total_pending_quantity += Number(
-          item.remaining_quantity || 0
-        );
-
+      groupedRequests[groupKey].total_pending_quantity += Number(
+        item.remaining_quantity || 0,
+      );
 
       // ===================================================
       // INDIVIDUAL REQUEST
       // ===================================================
 
-      groupedRequests[groupKey]
-        .requests
-        .push(item);
-
+      groupedRequests[groupKey].requests.push(item);
     });
-
 
     // =====================================================
     // FINAL DATA
     // =====================================================
 
-    const data =
-      Object.values(
-        groupedRequests
-      );
-
+    const data = Object.values(groupedRequests);
 
     return libFunc.sendResponse(res, {
-
       status: 0,
 
-      msg:
-        "Counter requests fetched successfully",
+      msg: "Counter requests fetched successfully",
 
       data,
-
     });
-
-
   } catch (error) {
-
-    console.log(
-      "getCounterRequests error:",
-      error
-    );
+    console.log("getCounterRequests error:", error);
 
     return libFunc.sendResponse(res, {
-
       status: 1,
 
-      msg:
-        "Something went wrong",
+      msg: "Something went wrong",
 
-      error:
-        error.message,
-
+      error: error.message,
     });
-
   }
 }
-
-
 
 // {
 //   "counter_id": "counter_123",
@@ -9467,6 +9384,1246 @@ async function downloadOrderPDF(req, res) {
 // }
 
 // a5
+// async function downloadChalanPDF(req, res) {
+//   try {
+//     const { chalan_id } = req.data || {};
+
+//     if (!chalan_id) {
+//       return res.status(400).send("Chalan ID required");
+//     }
+
+//     // =====================================================
+//     // TABLES
+//     // =====================================================
+
+//     const chalanTable = schema + ".chalans";
+//     const orderTable = schema + ".orders";
+//     const supplierTable = schema + ".suppliers";
+//     const shopTable = schema + ".shops";
+//     const itemTable = schema + ".order_items";
+//     const sweetTable = schema + ".sweets";
+//     const categoryTable = schema + ".categories";
+//     const counterTable = schema + ".counters";
+
+//     const safeChalanId = chalan_id.trim().replaceAll("'", "''");
+
+//     // =====================================================
+//     // QUERY
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- =================================================
+//         -- CHALAN
+//         -- =================================================
+
+//         ch.id AS chalan_serial_id,
+//         ch.row_id AS chalan_id,
+//         ch.dispatch_date,
+//         ch.transport_details,
+//         ch.verification_code,
+//         ch.is_verified,
+
+//         -- =================================================
+//         -- ORDER
+//         -- =================================================
+
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+
+//         -- =================================================
+//         -- SUPPLIER
+//         -- =================================================
+
+//         sup.row_id AS supplier_id,
+//         sup.supplier_name,
+//         sup.phone AS supplier_phone,
+//         sup.address AS supplier_address,
+
+//         -- =================================================
+//         -- SHOP
+//         -- =================================================
+
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.city,
+//         sh.state,
+//         sh.address AS shop_address,
+//         sh.phone AS shop_phone,
+
+//         -- =================================================
+//         -- ORDER ITEM
+//         -- =================================================
+
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.sweet_id,
+//         oi.counter_id,
+//         oi.quantity AS ordered_quantity,
+//         oi.supplied_quantity,
+//         oi.item_status,
+
+//         -- =================================================
+//         -- SWEET
+//         -- =================================================
+
+//         sw.sweet_name,
+//         sw.unit,
+
+//         -- =================================================
+//         -- CATEGORY
+//         -- =================================================
+
+//         cat.row_id AS category_id,
+//         cat.category_name,
+
+//         -- =================================================
+//         -- COUNTER
+//         -- =================================================
+
+//         c.counter_name,
+//         c.location AS counter_location
+
+//       FROM ${chalanTable} ch
+
+//       INNER JOIN ${orderTable} o
+//         ON o.row_id = ch.order_id
+
+//       LEFT JOIN ${supplierTable} sup
+//         ON sup.row_id = ch.supplier_id
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       INNER JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+//         AND oi.item_status IN ('ACCEPTED', 'PARTIAL')
+//         AND oi.supplied_quantity > 0
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       WHERE ch.row_id = '${safeChalanId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     // =====================================================
+//     // VALIDATION
+//     // =====================================================
+
+//     if (!result.data?.length) {
+//       return res
+//         .status(404)
+//         .send("Chalan not found or no accepted supplied items found");
+//     }
+
+//     const data = result.data;
+//     const firstRow = data[0];
+
+//     // =====================================================
+//     // DISPLAY IDS
+//     // =====================================================
+
+//     const chalanDisplayId = `CHL-${String(firstRow.chalan_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     const orderDisplayId = `ORD-${String(firstRow.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // GROUP DATA
+//     //
+//     // Counter
+//     //   -> Category
+//     //      -> Items
+//     // =====================================================
+
+//     const groupedData = {};
+
+//     data.forEach((item) => {
+//       const counter = item.counter_name || "Default Counter";
+
+//       const category = item.category_name || "Others";
+
+//       if (!groupedData[counter]) {
+//         groupedData[counter] = {};
+//       }
+
+//       if (!groupedData[counter][category]) {
+//         groupedData[counter][category] = [];
+//       }
+
+//       groupedData[counter][category].push(item);
+//     });
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "ShopMedia");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `Chalan_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // LOGO
+//     // =====================================================
+
+//     const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+
+//     // =====================================================
+//     // A5 PAGE
+//     // =====================================================
+
+//     const PAGE_WIDTH = 419.53;
+//     const PAGE_HEIGHT = 595.28;
+
+//     const MARGIN = 20;
+
+//     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+//     // Safe bottom area
+//     const SAFE_BOTTOM = PAGE_HEIGHT - MARGIN - 15;
+
+//     const doc = new PDFDocument({
+//       size: "A5",
+//       margin: MARGIN,
+//       autoFirstPage: true,
+//       bufferPages: false,
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // =====================================================
+//     // COLORS
+//     // =====================================================
+
+//     const PRIMARY = "#1F2937";
+//     const SECONDARY = "#6B7280";
+
+//     const BORDER = "#D1D5DB";
+
+//     const LIGHT = "#F3F4F6";
+//     const LIGHTER = "#F9FAFB";
+
+//     const WHITE = "#FFFFFF";
+
+//     const GREEN = "#047857";
+//     const GREEN_LIGHT = "#ECFDF5";
+
+//     const ORANGE = "#C2410C";
+//     const ORANGE_LIGHT = "#FFF7ED";
+
+//     // =====================================================
+//     // TABLE COLUMNS
+//     // =====================================================
+
+//     const tableColumns = {
+//       sr: 22,
+//       sweet: 143,
+//       ordered: 48,
+//       supplied: 52,
+//       unit: 42,
+//       status: 52,
+//     };
+
+//     const tableWidth =
+//       tableColumns.sr +
+//       tableColumns.sweet +
+//       tableColumns.ordered +
+//       tableColumns.supplied +
+//       tableColumns.unit +
+//       tableColumns.status;
+
+//     // =====================================================
+//     // HELPERS
+//     // =====================================================
+
+//     const formatDate = (value) => {
+//       if (!value) return "-";
+
+//       const date = new Date(value);
+
+//       if (Number.isNaN(date.getTime())) {
+//         return "-";
+//       }
+
+//       return date.toLocaleDateString("en-IN");
+//     };
+
+//     const formatNumber = (value) => {
+//       const number = Number(value || 0);
+
+//       if (!Number.isFinite(number)) {
+//         return "0";
+//       }
+
+//       return Number.isInteger(number)
+//         ? String(number)
+//         : number.toFixed(2).replace(/\.?0+$/, "");
+//     };
+
+//     const drawCircularLogo = (x, y, size) => {
+//       if (!fs.existsSync(LOGO_PATH)) {
+//         return;
+//       }
+
+//       try {
+//         doc.save();
+
+//         doc.circle(x + size / 2, y + size / 2, size / 2).clip();
+
+//         doc.image(LOGO_PATH, x, y, {
+//           width: size,
+//           height: size,
+//         });
+
+//         doc.restore();
+
+//         doc
+//           .circle(x + size / 2, y + size / 2, size / 2)
+//           .lineWidth(0.7)
+//           .stroke(BORDER);
+//       } catch (error) {
+//         console.log("Logo error:", error);
+//       }
+//     };
+
+//     // =====================================================
+//     // CONTINUATION PAGE HEADER
+//     // =====================================================
+
+//     const drawContinuationHeader = () => {
+//       const logoSize = 28;
+
+//       drawCircularLogo(MARGIN, 12, logoSize);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(10)
+//         .fillColor(PRIMARY)
+//         .text("DISPATCH CHALAN", MARGIN + 36, 15);
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.5)
+//         .fillColor(SECONDARY)
+//         .text(`${chalanDisplayId}  •  ${orderDisplayId}`, MARGIN + 36, 29, {
+//           width: CONTENT_WIDTH - 36,
+//         });
+
+//       doc
+//         .moveTo(MARGIN, 48)
+//         .lineTo(PAGE_WIDTH - MARGIN, 48)
+//         .lineWidth(0.6)
+//         .stroke(BORDER);
+
+//       return 60;
+//     };
+
+//     // =====================================================
+//     // ADD NEW PAGE
+//     // =====================================================
+
+//     const addNewPage = () => {
+//       doc.addPage({
+//         size: "A5",
+//         margin: MARGIN,
+//       });
+
+//       return drawContinuationHeader();
+//     };
+
+//     // =====================================================
+//     // FIRST PAGE HEADER
+//     // =====================================================
+
+//     const drawHeader = () => {
+//       const logoSize = 42;
+
+//       drawCircularLogo(MARGIN, 14, logoSize);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(15)
+//         .fillColor(PRIMARY)
+//         .text("DISPATCH CHALAN", MARGIN, 21, {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6)
+//         .fillColor(SECONDARY)
+//         .text("GOODS DISPATCH DOCUMENT", MARGIN, 40, {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc
+//         .moveTo(MARGIN, 65)
+//         .lineTo(PAGE_WIDTH - MARGIN, 65)
+//         .lineWidth(0.8)
+//         .stroke(PRIMARY);
+//     };
+
+//     // =====================================================
+//     // BASIC INFORMATION
+//     // =====================================================
+
+//     const drawBasicInfo = () => {
+//       const top = 75;
+
+//       const headerHeight = 20;
+
+//       const valueHeight = 24;
+
+//       // Header
+
+//       doc
+//         .roundedRect(MARGIN, top, CONTENT_WIDTH, headerHeight, 3)
+//         .fill(PRIMARY);
+
+//       doc.font("Helvetica-Bold").fontSize(5.8).fillColor(WHITE);
+
+//       doc.text("CHALAN ID", MARGIN + 7, top + 6);
+
+//       doc.text("ORDER ID", MARGIN + 100, top + 6);
+
+//       doc.text("DISPATCH DATE", MARGIN + 198, top + 6);
+
+//       doc.text("STATUS", MARGIN + 308, top + 6);
+
+//       // Value row
+
+//       doc
+//         .roundedRect(MARGIN, top + headerHeight, CONTENT_WIDTH, valueHeight, 3)
+//         .fill(LIGHTER);
+
+//       // Chalan ID
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(PRIMARY)
+//         .text(chalanDisplayId, MARGIN + 7, top + headerHeight + 8, {
+//           width: 80,
+//           ellipsis: true,
+//         });
+
+//       // Order ID
+
+//       doc.text(orderDisplayId, MARGIN + 100, top + headerHeight + 8, {
+//         width: 80,
+//         ellipsis: true,
+//       });
+
+//       // Date
+
+//       doc
+//         .font("Helvetica")
+//         .text(
+//           formatDate(firstRow.dispatch_date),
+//           MARGIN + 198,
+//           top + headerHeight + 8,
+//           {
+//             width: 90,
+//             ellipsis: true,
+//           },
+//         );
+
+//       // Status
+
+//       const status = firstRow.is_verified ? "VERIFIED" : "PENDING";
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.5)
+//         .fillColor(firstRow.is_verified ? GREEN : ORANGE)
+//         .text(status, MARGIN + 308, top + headerHeight + 8, {
+//           width: 60,
+//           align: "center",
+//         });
+
+//       return top + headerHeight + valueHeight;
+//     };
+
+//     // =====================================================
+//     // PARTY INFORMATION
+//     // =====================================================
+
+//     const drawPartyInfo = (top) => {
+//       const gap = 8;
+
+//       const boxWidth = (CONTENT_WIDTH - gap) / 2;
+
+//       const rightX = MARGIN + boxWidth + gap;
+
+//       const boxHeight = 74;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7.5)
+//         .fillColor(PRIMARY)
+//         .text("PARTY DETAILS", MARGIN, top + 7);
+
+//       const boxTop = top + 20;
+
+//       // Supplier
+
+//       doc
+//         .roundedRect(MARGIN, boxTop, boxWidth, boxHeight, 4)
+//         .fillAndStroke("#FAFAFA", BORDER);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6)
+//         .fillColor(SECONDARY)
+//         .text("FROM / SUPPLIER", MARGIN + 8, boxTop + 8);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(PRIMARY)
+//         .text(firstRow.supplier_name || "-", MARGIN + 8, boxTop + 21, {
+//           width: boxWidth - 16,
+//           ellipsis: true,
+//         });
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text(
+//           `Phone: ${firstRow.supplier_phone || "-"}`,
+//           MARGIN + 8,
+//           boxTop + 36,
+//           {
+//             width: boxWidth - 16,
+//             ellipsis: true,
+//           },
+//         );
+
+//       doc.text(
+//         `Address: ${firstRow.supplier_address || "-"}`,
+//         MARGIN + 8,
+//         boxTop + 49,
+//         {
+//           width: boxWidth - 16,
+//           ellipsis: true,
+//         },
+//       );
+
+//       // Deliver To
+
+//       doc
+//         .roundedRect(rightX, boxTop, boxWidth, boxHeight, 4)
+//         .fillAndStroke("#FAFAFA", BORDER);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6)
+//         .fillColor(SECONDARY)
+//         .text("DELIVER TO / SHOP", rightX + 8, boxTop + 8);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(PRIMARY)
+//         .text(firstRow.shop_name || "-", rightX + 8, boxTop + 21, {
+//           width: boxWidth - 16,
+//           ellipsis: true,
+//         });
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text(`Phone: ${firstRow.shop_phone || "-"}`, rightX + 8, boxTop + 36, {
+//           width: boxWidth - 16,
+//           ellipsis: true,
+//         });
+
+//       const address = [firstRow.shop_address, firstRow.city, firstRow.state]
+//         .filter(Boolean)
+//         .join(", ");
+
+//       doc.text(`Address: ${address || "-"}`, rightX + 8, boxTop + 49, {
+//         width: boxWidth - 16,
+//         ellipsis: true,
+//       });
+
+//       return boxTop + boxHeight;
+//     };
+
+//     // =====================================================
+//     // TRANSPORT + VERIFICATION
+//     // =====================================================
+
+//     const drawTransport = (top) => {
+//       const boxHeight = 43;
+
+//       doc
+//         .roundedRect(MARGIN, top, CONTENT_WIDTH, boxHeight, 4)
+//         .fillAndStroke(LIGHTER, BORDER);
+
+//       // Transport
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text("TRANSPORT", MARGIN + 8, top + 8);
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6.2)
+//         .fillColor(PRIMARY)
+//         .text(firstRow.transport_details || "-", MARGIN + 62, top + 7, {
+//           width: CONTENT_WIDTH - 70,
+//           ellipsis: true,
+//         });
+
+//       // Verification
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text("VERIFICATION CODE", MARGIN + 8, top + 25);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.2)
+//         .fillColor(PRIMARY)
+//         .text(firstRow.verification_code || "-", MARGIN + 90, top + 24, {
+//           width: 120,
+//           ellipsis: true,
+//         });
+
+//       return top + boxHeight;
+//     };
+
+//     // =====================================================
+//     // TABLE HEADER
+//     // =====================================================
+
+//     const drawTableHeader = (y) => {
+//       doc.roundedRect(MARGIN, y, tableWidth, 18, 2).fill(PRIMARY);
+
+//       doc.font("Helvetica-Bold").fontSize(5.4).fillColor(WHITE);
+
+//       let x = MARGIN;
+
+//       // #
+
+//       doc.text("#", x, y + 6, {
+//         width: tableColumns.sr,
+//         align: "center",
+//       });
+
+//       x += tableColumns.sr;
+
+//       // Sweet
+
+//       doc.text("SWEET / ITEM", x + 4, y + 6, {
+//         width: tableColumns.sweet - 8,
+//       });
+
+//       x += tableColumns.sweet;
+
+//       // Ordered
+
+//       doc.text("ORDERED", x, y + 6, {
+//         width: tableColumns.ordered,
+//         align: "center",
+//       });
+
+//       x += tableColumns.ordered;
+
+//       // Supplied
+
+//       doc.text("SUPPLIED", x, y + 6, {
+//         width: tableColumns.supplied,
+//         align: "center",
+//       });
+
+//       x += tableColumns.supplied;
+
+//       // Unit
+
+//       doc.text("UNIT", x, y + 6, {
+//         width: tableColumns.unit,
+//         align: "center",
+//       });
+
+//       x += tableColumns.unit;
+
+//       // Status
+
+//       doc.text("STATUS", x, y + 6, {
+//         width: tableColumns.status,
+//         align: "center",
+//       });
+
+//       return y + 18;
+//     };
+
+//     // =====================================================
+//     // COUNTER HEADER
+//     // =====================================================
+
+//     const drawCounterHeader = (counter, location, counterTotal, y) => {
+//       const height = 30;
+
+//       doc.roundedRect(MARGIN, y, CONTENT_WIDTH, height, 5).fill(PRIMARY);
+
+//       // Counter label
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(5.3)
+//         .fillColor("#D1D5DB")
+//         .text("COUNTER", MARGIN + 9, y + 6);
+
+//       // Counter name
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(8.5)
+//         .fillColor(WHITE)
+//         .text(counter, MARGIN + 9, y + 14, {
+//           width: 190,
+//           ellipsis: true,
+//         });
+
+//       // Location
+
+//       if (location) {
+//         doc
+//           .font("Helvetica")
+//           .fontSize(5.2)
+//           .fillColor("#D1D5DB")
+//           .text(`Location: ${location}`, MARGIN + 205, y + 7, {
+//             width: 90,
+//             align: "right",
+//             ellipsis: true,
+//           });
+//       }
+
+//       // Supplied badge
+
+//       doc
+//         .roundedRect(MARGIN + CONTENT_WIDTH - 72, y + 5, 64, 20, 4)
+//         .fill(WHITE);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(4.8)
+//         .fillColor(SECONDARY)
+//         .text("SUPPLIED", MARGIN + CONTENT_WIDTH - 68, y + 8, {
+//           width: 56,
+//           align: "center",
+//         });
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.5)
+//         .fillColor(PRIMARY)
+//         .text(formatNumber(counterTotal), MARGIN + CONTENT_WIDTH - 68, y + 15, {
+//           width: 56,
+//           align: "center",
+//         });
+
+//       return y + height;
+//     };
+
+//     // =====================================================
+//     // CATEGORY HEADER
+//     // =====================================================
+
+//     const drawCategoryHeader = (category, items, y, continued = false) => {
+//       const height = 22;
+
+//       doc.roundedRect(MARGIN, y, tableWidth, height, 3).fill(LIGHT);
+
+//       // Accent
+
+//       doc.roundedRect(MARGIN, y, 4, height, 2).fill(PRIMARY);
+
+//       // Category
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.8)
+//         .fillColor(PRIMARY)
+//         .text(
+//           `CATEGORY  •  ${category}${continued ? " (Continued)" : ""}`,
+//           MARGIN + 10,
+//           y + 7,
+//           {
+//             width: 230,
+//             ellipsis: true,
+//           },
+//         );
+
+//       // Item count
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.3)
+//         .fillColor(SECONDARY)
+//         .text(
+//           `${items.length} item${items.length === 1 ? "" : "s"}`,
+//           MARGIN + tableWidth - 70,
+//           y + 7,
+//           {
+//             width: 60,
+//             align: "right",
+//           },
+//         );
+
+//       return y + height;
+//     };
+
+//     // =====================================================
+//     // CATEGORY TABLE
+//     // =====================================================
+
+//     const drawCategory = (category, items, startY) => {
+//       let y = startY;
+
+//       const categoryTotal = items.reduce(
+//         (sum, item) => sum + Number(item.supplied_quantity || 0),
+//         0,
+//       );
+
+//       // ---------------------------------------------------
+//       // Category heading + table header + first row
+//       // ---------------------------------------------------
+
+//       if (y + 22 + 18 + 17 > SAFE_BOTTOM) {
+//         y = addNewPage();
+//       }
+
+//       // Category header
+
+//       y = drawCategoryHeader(category, items, y);
+
+//       y += 4;
+
+//       // Table header
+
+//       y = drawTableHeader(y);
+
+//       // ---------------------------------------------------
+//       // Items
+//       // ---------------------------------------------------
+
+//       items.forEach((item, index) => {
+//         const rowHeight = 17;
+
+//         if (y + rowHeight > SAFE_BOTTOM) {
+//           y = addNewPage();
+
+//           y = drawCategoryHeader(category, items, y, true);
+
+//           y += 4;
+
+//           y = drawTableHeader(y);
+//         }
+
+//         const ordered = Number(item.ordered_quantity || 0);
+
+//         const supplied = Number(item.supplied_quantity || 0);
+
+//         // Alternating row
+
+//         if (index % 2 === 0) {
+//           doc.rect(MARGIN, y, tableWidth, rowHeight).fill("#FAFAFA");
+//         }
+
+//         // Bottom border
+
+//         doc
+//           .moveTo(MARGIN, y + rowHeight)
+//           .lineTo(MARGIN + tableWidth, y + rowHeight)
+//           .lineWidth(0.25)
+//           .stroke(BORDER);
+
+//         let x = MARGIN;
+
+//         // Serial
+
+//         doc
+//           .font("Helvetica")
+//           .fontSize(5.8)
+//           .fillColor(SECONDARY)
+//           .text(String(index + 1), x, y + 5, {
+//             width: tableColumns.sr,
+//             align: "center",
+//           });
+
+//         x += tableColumns.sr;
+
+//         // Sweet
+
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(5.9)
+//           .fillColor(PRIMARY)
+//           .text(item.sweet_name || "-", x + 4, y + 5, {
+//             width: tableColumns.sweet - 8,
+//             ellipsis: true,
+//             lineBreak: false,
+//           });
+
+//         x += tableColumns.sweet;
+
+//         // Ordered
+
+//         doc
+//           .font("Helvetica")
+//           .fontSize(5.9)
+//           .fillColor(PRIMARY)
+//           .text(formatNumber(ordered), x, y + 5, {
+//             width: tableColumns.ordered,
+//             align: "center",
+//           });
+
+//         x += tableColumns.ordered;
+
+//         // Supplied
+
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(6)
+//           .fillColor(PRIMARY)
+//           .text(formatNumber(supplied), x, y + 5, {
+//             width: tableColumns.supplied,
+//             align: "center",
+//           });
+
+//         x += tableColumns.supplied;
+
+//         // Unit
+
+//         doc
+//           .font("Helvetica")
+//           .fontSize(5.5)
+//           .fillColor(SECONDARY)
+//           .text(item.unit || "-", x, y + 5, {
+//             width: tableColumns.unit,
+//             align: "center",
+//             ellipsis: true,
+//           });
+
+//         x += tableColumns.unit;
+
+//         // Status
+
+//         const status = item.item_status || "ACCEPTED";
+
+//         const isPartial = status === "PARTIAL";
+
+//         doc
+//           .roundedRect(x + 4, y + 3, tableColumns.status - 8, 11, 3)
+//           .fill(isPartial ? ORANGE_LIGHT : GREEN_LIGHT);
+
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(4.8)
+//           .fillColor(isPartial ? ORANGE : GREEN)
+//           .text(status, x + 4, y + 6, {
+//             width: tableColumns.status - 8,
+//             align: "center",
+//           });
+
+//         y += rowHeight;
+//       });
+
+//       // ---------------------------------------------------
+//       // CATEGORY TOTAL
+//       // ---------------------------------------------------
+
+//       const totalHeight = 22;
+
+//       if (y + totalHeight > SAFE_BOTTOM) {
+//         y = addNewPage();
+
+//         y = drawCategoryHeader(category, items, y, true);
+
+//         y += 4;
+
+//         y = drawTableHeader(y);
+//       }
+
+//       doc
+//         .roundedRect(MARGIN, y, tableWidth, totalHeight, 3)
+//         .fillAndStroke(LIGHT, BORDER);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(5.8)
+//         .fillColor(PRIMARY)
+//         .text("CATEGORY TOTAL", MARGIN + 7, y + 8);
+
+//       // Only numeric total
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.5)
+//         .fillColor(PRIMARY)
+//         .text(
+//           formatNumber(categoryTotal),
+//           MARGIN + tableColumns.sr + tableColumns.sweet + tableColumns.ordered,
+//           y + 8,
+//           {
+//             width:
+//               tableColumns.supplied + tableColumns.unit + tableColumns.status,
+//             align: "right",
+//           },
+//         );
+
+//       return {
+//         y: y + totalHeight + 7,
+//         total: categoryTotal,
+//       };
+//     };
+
+//     // =====================================================
+//     // FIRST PAGE
+//     // =====================================================
+
+//     drawHeader();
+
+//     // Basic information
+
+//     let currentY = drawBasicInfo() + 8;
+
+//     // Party information
+
+//     currentY = drawPartyInfo(currentY) + 7;
+
+//     // Transport
+
+//     currentY = drawTransport(currentY) + 10;
+
+//     // =====================================================
+//     // DISPATCHED ITEMS TITLE
+//     // =====================================================
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(8)
+//       .fillColor(PRIMARY)
+//       .text("DISPATCHED ITEMS", MARGIN, currentY);
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.5)
+//       .fillColor(SECONDARY)
+//       .text(
+//         "Counter-wise and category-wise dispatch details",
+//         MARGIN + 95,
+//         currentY + 2,
+//         {
+//           width: CONTENT_WIDTH - 95,
+//           align: "right",
+//         },
+//       );
+
+//     currentY += 17;
+
+//     // =====================================================
+//     // COUNTERS
+//     // =====================================================
+
+//     let grandTotal = 0;
+
+//     for (const counter of Object.keys(groupedData)) {
+//       const categories = groupedData[counter];
+
+//       const counterItems = Object.values(categories).flat();
+
+//       const counterTotal = counterItems.reduce(
+//         (sum, item) => sum + Number(item.supplied_quantity || 0),
+//         0,
+//       );
+
+//       grandTotal += counterTotal;
+
+//       const location = counterItems[0]?.counter_location;
+
+//       // ---------------------------------------------------
+//       // Counter header
+//       // ---------------------------------------------------
+
+//       if (currentY + 30 > SAFE_BOTTOM) {
+//         currentY = addNewPage();
+//       }
+
+//       currentY = drawCounterHeader(counter, location, counterTotal, currentY);
+
+//       currentY += 7;
+
+//       // ---------------------------------------------------
+//       // Categories
+//       // ---------------------------------------------------
+
+//       for (const category of Object.keys(categories)) {
+//         const categoryResult = drawCategory(
+//           category,
+//           categories[category],
+//           currentY,
+//         );
+
+//         currentY = categoryResult.y;
+//       }
+
+//       // ---------------------------------------------------
+//       // Counter total
+//       // ---------------------------------------------------
+
+//       const counterTotalHeight = 24;
+
+//       if (currentY + counterTotalHeight > SAFE_BOTTOM) {
+//         currentY = addNewPage();
+//       }
+
+//       doc
+//         .roundedRect(MARGIN, currentY, tableWidth, counterTotalHeight, 3)
+//         .fill(PRIMARY);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.2)
+//         .fillColor(WHITE)
+//         .text(`COUNTER TOTAL  •  ${counter}`, MARGIN + 8, currentY + 9, {
+//           width: 200,
+//           ellipsis: true,
+//         });
+
+//       // Only numeric counter total
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(WHITE)
+//         .text(
+//           formatNumber(counterTotal),
+//           MARGIN + tableColumns.sr + tableColumns.sweet + tableColumns.ordered,
+//           currentY + 8,
+//           {
+//             width:
+//               tableColumns.supplied + tableColumns.unit + tableColumns.status,
+//             align: "right",
+//           },
+//         );
+
+//       currentY += counterTotalHeight + 12;
+//     }
+
+//     // =====================================================
+//     // GRAND TOTAL
+//     // =====================================================
+
+//     const grandTotalHeight = 52;
+
+//     if (currentY + grandTotalHeight > SAFE_BOTTOM) {
+//       currentY = addNewPage();
+//     }
+
+//     // Separator
+
+//     doc
+//       .moveTo(MARGIN, currentY)
+//       .lineTo(MARGIN + tableWidth, currentY)
+//       .lineWidth(0.8)
+//       .stroke(PRIMARY);
+
+//     currentY += 8;
+
+//     // Grand total box
+
+//     doc
+//       .roundedRect(MARGIN, currentY, tableWidth, 40, 5)
+//       .fillAndStroke(LIGHT, PRIMARY);
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.5)
+//       .fillColor(SECONDARY)
+//       .text("GRAND TOTAL", MARGIN + 10, currentY + 8);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(9)
+//       .fillColor(PRIMARY)
+//       .text("TOTAL DISPATCHED", MARGIN + 10, currentY + 19);
+
+//     // Only numeric grand total
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(10)
+//       .fillColor(PRIMARY)
+//       .text(formatNumber(grandTotal), MARGIN + 190, currentY + 13, {
+//         width: tableWidth - 200,
+//         align: "right",
+//       });
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // RESPONSE
+//     // =====================================================
+
+//     const fileUrl = `/uploads/ShopMedia/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "A5 Chalan PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadChalanPDF error:", error);
+
+//     return res.status(500).send("Error generating Chalan PDF");
+//   }
+// }
+
 async function downloadChalanPDF(req, res) {
   try {
     const { chalan_id } = req.data || {};
@@ -9488,10 +10645,36 @@ async function downloadChalanPDF(req, res) {
     const categoryTable = schema + ".categories";
     const counterTable = schema + ".counters";
 
-    const safeChalanId = chalan_id.trim().replaceAll("'", "''");
+    const safeChalanId = String(chalan_id).trim().replaceAll("'", "''");
 
     // =====================================================
-    // QUERY
+    // COMPANY DETAILS
+    // =====================================================
+
+    const COMPANY_NAME = "JODHPUR SWEETS";
+
+    const COMPANY_GSTIN = "08AAWPV0050D1ZK";
+
+    const COMPANY_REGD_OFFICE =
+      "Regd.off. : 889/4, 8th C Road, Sardarpura, Jodhpur, 342001.";
+
+    const COMPANY_FACTORY =
+      "Factory : 55-a, Industrial Area, New Power House, Jodhpur, 342003.";
+
+    const COMPANY_ADDRESS = "9th 'C' ROAD, SARDARPURA JODHPUR-342003";
+
+    const COMPANY_EMAIL = "info@jodhpursweets.com";
+
+    const COMPANY_PHONE = "0291-2633762";
+
+    // =====================================================
+    // LOGO
+    // =====================================================
+
+    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+
+    // =====================================================
+    // FETCH CHALAN DATA
     // =====================================================
 
     const result = await db_query.customQuery(`
@@ -9602,17 +10785,18 @@ async function downloadChalanPDF(req, res) {
         sw.sweet_name ASC
     `);
 
+    const data = result.data || [];
+
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (!result.data?.length) {
+    if (data.length === 0) {
       return res
         .status(404)
         .send("Chalan not found or no accepted supplied items found");
     }
 
-    const data = result.data;
     const firstRow = data[0];
 
     // =====================================================
@@ -9628,32 +10812,6 @@ async function downloadChalanPDF(req, res) {
       6,
       "0",
     )}`;
-
-    // =====================================================
-    // GROUP DATA
-    //
-    // Counter
-    //   -> Category
-    //      -> Items
-    // =====================================================
-
-    const groupedData = {};
-
-    data.forEach((item) => {
-      const counter = item.counter_name || "Default Counter";
-
-      const category = item.category_name || "Others";
-
-      if (!groupedData[counter]) {
-        groupedData[counter] = {};
-      }
-
-      if (!groupedData[counter][category]) {
-        groupedData[counter][category] = [];
-      }
-
-      groupedData[counter][category].push(item);
-    });
 
     // =====================================================
     // FILE SETUP
@@ -9674,1012 +10832,915 @@ async function downloadChalanPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     // =====================================================
-    // LOGO
+    // A4 DOCUMENT
     // =====================================================
 
-    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+    const PAGE_WIDTH = 595.28;
+    const PAGE_HEIGHT = 841.89;
 
-    // =====================================================
-    // A5 PAGE
-    // =====================================================
-
-    const PAGE_WIDTH = 419.53;
-    const PAGE_HEIGHT = 595.28;
-
-    const MARGIN = 20;
+    const MARGIN = 28;
 
     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
-    // Safe bottom area
-    const SAFE_BOTTOM = PAGE_HEIGHT - MARGIN - 15;
+    const SAFE_BOTTOM = PAGE_HEIGHT - MARGIN - 25;
 
     const doc = new PDFDocument({
-      size: "A5",
-      margin: MARGIN,
+      size: "A4",
+
+      margins: {
+        top: MARGIN,
+        bottom: MARGIN,
+        left: MARGIN,
+        right: MARGIN,
+      },
+
       autoFirstPage: true,
+
       bufferPages: false,
+
+      info: {
+        Title: `Dispatch Challan ${chalanDisplayId}`,
+
+        Author: COMPANY_NAME,
+
+        Subject: "Dispatch Challan",
+      },
     });
 
-    doc.pipe(fs.createWriteStream(filePath));
+    const writeStream = fs.createWriteStream(filePath);
 
-    // =====================================================
-    // COLORS
-    // =====================================================
-
-    const PRIMARY = "#1F2937";
-    const SECONDARY = "#6B7280";
-
-    const BORDER = "#D1D5DB";
-
-    const LIGHT = "#F3F4F6";
-    const LIGHTER = "#F9FAFB";
-
-    const WHITE = "#FFFFFF";
-
-    const GREEN = "#047857";
-    const GREEN_LIGHT = "#ECFDF5";
-
-    const ORANGE = "#C2410C";
-    const ORANGE_LIGHT = "#FFF7ED";
-
-    // =====================================================
-    // TABLE COLUMNS
-    // =====================================================
-
-    const tableColumns = {
-      sr: 22,
-      sweet: 143,
-      ordered: 48,
-      supplied: 52,
-      unit: 42,
-      status: 52,
-    };
-
-    const tableWidth =
-      tableColumns.sr +
-      tableColumns.sweet +
-      tableColumns.ordered +
-      tableColumns.supplied +
-      tableColumns.unit +
-      tableColumns.status;
+    doc.pipe(writeStream);
 
     // =====================================================
     // HELPERS
     // =====================================================
 
+    const safeText = (value, fallback = "-") => {
+      if (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+      ) {
+        return fallback;
+      }
+
+      return String(value);
+    };
+
     const formatDate = (value) => {
-      if (!value) return "-";
-
-      const date = new Date(value);
-
-      if (Number.isNaN(date.getTime())) {
+      if (!value) {
         return "-";
       }
 
-      return date.toLocaleDateString("en-IN");
+      try {
+        const date = new Date(value);
+
+        if (Number.isNaN(date.getTime())) {
+          return "-";
+        }
+
+        return date.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+      } catch (error) {
+        return "-";
+      }
     };
 
-    const formatNumber = (value) => {
+    const formatQuantity = (value) => {
       const number = Number(value || 0);
 
       if (!Number.isFinite(number)) {
-        return "0";
+        return "0.00";
       }
 
-      return Number.isInteger(number)
-        ? String(number)
-        : number.toFixed(2).replace(/\.?0+$/, "");
+      return number.toFixed(2);
     };
 
-    const drawCircularLogo = (x, y, size) => {
+    // =====================================================
+    // HSN
+    // =====================================================
+
+    const getHSN = (item) => {
+      return item.hsn_code || item.hsn || item.hsnCode || "-";
+    };
+
+    // =====================================================
+    // SHOP ADDRESS
+    // =====================================================
+
+    const shopAddress = [firstRow.shop_address, firstRow.city, firstRow.state]
+      .filter(Boolean)
+      .join(", ");
+
+    // =====================================================
+    // DRAW LOGO
+    // =====================================================
+
+    const drawLogo = (x, y, width, height) => {
       if (!fs.existsSync(LOGO_PATH)) {
+        console.log("Logo not found:", LOGO_PATH);
+
         return;
       }
 
       try {
-        doc.save();
-
-        doc.circle(x + size / 2, y + size / 2, size / 2).clip();
+        /*
+         * IMPORTANT:
+         *
+         * Reference image has rectangular
+         * Jodhpur Sweets logo.
+         *
+         * So DON'T use circle clipping.
+         */
 
         doc.image(LOGO_PATH, x, y, {
-          width: size,
-          height: size,
+          width,
+          height,
         });
-
-        doc.restore();
-
-        doc
-          .circle(x + size / 2, y + size / 2, size / 2)
-          .lineWidth(0.7)
-          .stroke(BORDER);
       } catch (error) {
-        console.log("Logo error:", error);
+        console.log("Logo loading error:", error);
       }
     };
 
     // =====================================================
-    // CONTINUATION PAGE HEADER
+    // MAIN HEADER
     // =====================================================
 
-    const drawContinuationHeader = () => {
-      const logoSize = 28;
+    const drawMainHeader = () => {
+      let y = 25;
 
-      drawCircularLogo(MARGIN, 12, logoSize);
+      // ===================================================
+      // TOP BOX
+      // ===================================================
+
+      doc.rect(MARGIN, y, CONTENT_WIDTH, 30).lineWidth(0.8).stroke();
+
+      // ---------------------------------------------------
+      // GSTIN
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(10)
-        .fillColor(PRIMARY)
-        .text("DISPATCH CHALAN", MARGIN + 36, 15);
-
-      doc
-        .font("Helvetica")
-        .fontSize(5.5)
-        .fillColor(SECONDARY)
-        .text(`${chalanDisplayId}  •  ${orderDisplayId}`, MARGIN + 36, 29, {
-          width: CONTENT_WIDTH - 36,
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 8, y + 10, {
+          width: 170,
         });
 
-      doc
-        .moveTo(MARGIN, 48)
-        .lineTo(PAGE_WIDTH - MARGIN, 48)
-        .lineWidth(0.6)
-        .stroke(BORDER);
-
-      return 60;
-    };
-
-    // =====================================================
-    // ADD NEW PAGE
-    // =====================================================
-
-    const addNewPage = () => {
-      doc.addPage({
-        size: "A5",
-        margin: MARGIN,
-      });
-
-      return drawContinuationHeader();
-    };
-
-    // =====================================================
-    // FIRST PAGE HEADER
-    // =====================================================
-
-    const drawHeader = () => {
-      const logoSize = 42;
-
-      drawCircularLogo(MARGIN, 14, logoSize);
+      // ---------------------------------------------------
+      // DISPATCH CHALLAN
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(15)
-        .fillColor(PRIMARY)
-        .text("DISPATCH CHALAN", MARGIN, 21, {
-          width: CONTENT_WIDTH,
+        .fontSize(13)
+        .fillColor("#000000")
+        .text("DISPATCH CHALLAN", MARGIN + 175, y + 8, {
+          width: 190,
           align: "center",
         });
 
-      doc
-        .font("Helvetica")
-        .fontSize(6)
-        .fillColor(SECONDARY)
-        .text("GOODS DISPATCH DOCUMENT", MARGIN, 40, {
-          width: CONTENT_WIDTH,
-          align: "center",
-        });
-
-      doc
-        .moveTo(MARGIN, 65)
-        .lineTo(PAGE_WIDTH - MARGIN, 65)
-        .lineWidth(0.8)
-        .stroke(PRIMARY);
-    };
-
-    // =====================================================
-    // BASIC INFORMATION
-    // =====================================================
-
-    const drawBasicInfo = () => {
-      const top = 75;
-
-      const headerHeight = 20;
-
-      const valueHeight = 24;
-
-      // Header
-
-      doc
-        .roundedRect(MARGIN, top, CONTENT_WIDTH, headerHeight, 3)
-        .fill(PRIMARY);
-
-      doc.font("Helvetica-Bold").fontSize(5.8).fillColor(WHITE);
-
-      doc.text("CHALAN ID", MARGIN + 7, top + 6);
-
-      doc.text("ORDER ID", MARGIN + 100, top + 6);
-
-      doc.text("DISPATCH DATE", MARGIN + 198, top + 6);
-
-      doc.text("STATUS", MARGIN + 308, top + 6);
-
-      // Value row
-
-      doc
-        .roundedRect(MARGIN, top + headerHeight, CONTENT_WIDTH, valueHeight, 3)
-        .fill(LIGHTER);
-
-      // Chalan ID
+      // ---------------------------------------------------
+      // FOR MOVEMENT OF GOODS
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
         .fontSize(7)
-        .fillColor(PRIMARY)
-        .text(chalanDisplayId, MARGIN + 7, top + headerHeight + 8, {
-          width: 80,
-          ellipsis: true,
+        .fillColor("#000000")
+        .text("FOR MOVEMENT OF GOODS", PAGE_WIDTH - MARGIN - 155, y + 10, {
+          width: 147,
+          align: "right",
         });
 
-      // Order ID
+      // ===================================================
+      // COMPANY HEADER
+      // ===================================================
 
-      doc.text(orderDisplayId, MARGIN + 100, top + headerHeight + 8, {
-        width: 80,
-        ellipsis: true,
-      });
+      y += 43;
 
-      // Date
+      /*
+       * Logo position:
+       *
+       * Left side
+       * Similar to physical challan
+       */
 
-      doc
-        .font("Helvetica")
-        .text(
-          formatDate(firstRow.dispatch_date),
-          MARGIN + 198,
-          top + headerHeight + 8,
-          {
-            width: 90,
-            ellipsis: true,
-          },
-        );
+      const logoX = MARGIN + 8;
 
-      // Status
+      const logoY = y + 2;
 
-      const status = firstRow.is_verified ? "VERIFIED" : "PENDING";
+      const logoWidth = 62;
+
+      const logoHeight = 68;
+
+      // ---------------------------------------------------
+      // LOGO
+      // ---------------------------------------------------
+
+      drawLogo(logoX, logoY, logoWidth, logoHeight);
+
+      // ===================================================
+      // COMPANY TEXT AREA
+      // ===================================================
+
+      /*
+       * Keep company content away from logo.
+       *
+       * Logo occupies approximately
+       * x = 36 to 98.
+       *
+       * Company content starts after it.
+       */
+
+      const companyX = MARGIN + 65;
+
+      const companyWidth = CONTENT_WIDTH - 65;
+
+      // ---------------------------------------------------
+      // COMPANY NAME
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(firstRow.is_verified ? GREEN : ORANGE)
-        .text(status, MARGIN + 308, top + headerHeight + 8, {
-          width: 60,
+        .fontSize(20)
+        .fillColor("#000000")
+        .text(COMPANY_NAME, companyX, y + 2, {
+          width: companyWidth,
           align: "center",
         });
 
-      return top + headerHeight + valueHeight;
+      // ---------------------------------------------------
+      // REGD OFFICE
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_REGD_OFFICE, companyX, y + 29, {
+          width: companyWidth,
+          align: "center",
+        });
+
+      // ---------------------------------------------------
+      // FACTORY
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_FACTORY, companyX, y + 39, {
+          width: companyWidth,
+          align: "center",
+        });
+
+      // ---------------------------------------------------
+      // COMPANY ADDRESS
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_ADDRESS, companyX, y + 49, {
+          width: companyWidth,
+          align: "center",
+        });
+
+      // ---------------------------------------------------
+      // EMAIL / PHONE
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(
+          `Email : ${COMPANY_EMAIL}    CONTACT : ${COMPANY_PHONE}`,
+          companyX,
+          y + 59,
+          {
+            width: companyWidth,
+            align: "center",
+          },
+        );
+
+      // ===================================================
+      // HEADER BOTTOM LINE
+      // ===================================================
+
+      y += 78;
+
+      doc
+        .moveTo(MARGIN, y)
+        .lineTo(PAGE_WIDTH - MARGIN, y)
+        .lineWidth(0.8)
+        .stroke();
+
+      return y + 8;
     };
 
     // =====================================================
     // PARTY INFORMATION
     // =====================================================
 
-    const drawPartyInfo = (top) => {
-      const gap = 8;
+    const drawPartyInformation = (startY) => {
+      let y = startY;
 
-      const boxWidth = (CONTENT_WIDTH - gap) / 2;
+      const halfWidth = CONTENT_WIDTH / 2;
 
-      const rightX = MARGIN + boxWidth + gap;
-
-      const boxHeight = 74;
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7.5)
-        .fillColor(PRIMARY)
-        .text("PARTY DETAILS", MARGIN, top + 7);
-
-      const boxTop = top + 20;
-
-      // Supplier
-
-      doc
-        .roundedRect(MARGIN, boxTop, boxWidth, boxHeight, 4)
-        .fillAndStroke("#FAFAFA", BORDER);
+      // ===================================================
+      // CHALLAN NUMBER
+      // ===================================================
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6)
-        .fillColor(SECONDARY)
-        .text("FROM / SUPPLIER", MARGIN + 8, boxTop + 8);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor(PRIMARY)
-        .text(firstRow.supplier_name || "-", MARGIN + 8, boxTop + 21, {
-          width: boxWidth - 16,
-          ellipsis: true,
-        });
+        .fontSize(8)
+        .fillColor("#000000")
+        .text("Delivery Challan No. :", MARGIN + 4, y);
 
       doc
         .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
+        .fontSize(8)
+        .text(chalanDisplayId, MARGIN + 130, y);
+
+      // ===================================================
+      // DATE
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
         .text(
-          `Phone: ${firstRow.supplier_phone || "-"}`,
-          MARGIN + 8,
-          boxTop + 36,
+          `Date : ${formatDate(firstRow.dispatch_date)}`,
+          MARGIN + halfWidth + 35,
+          y,
           {
-            width: boxWidth - 16,
-            ellipsis: true,
+            width: halfWidth - 40,
+            align: "right",
           },
         );
 
-      doc.text(
-        `Address: ${firstRow.supplier_address || "-"}`,
-        MARGIN + 8,
-        boxTop + 49,
-        {
-          width: boxWidth - 16,
-          ellipsis: true,
-        },
-      );
+      // ===================================================
+      // FROM / TO
+      // ===================================================
 
-      // Deliver To
-
-      doc
-        .roundedRect(rightX, boxTop, boxWidth, boxHeight, 4)
-        .fillAndStroke("#FAFAFA", BORDER);
+      y += 25;
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6)
-        .fillColor(SECONDARY)
-        .text("DELIVER TO / SHOP", rightX + 8, boxTop + 8);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor(PRIMARY)
-        .text(firstRow.shop_name || "-", rightX + 8, boxTop + 21, {
-          width: boxWidth - 16,
-          ellipsis: true,
-        });
+        .fontSize(8)
+        .text("From :", MARGIN + 4, y);
 
       doc
         .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text(`Phone: ${firstRow.shop_phone || "-"}`, rightX + 8, boxTop + 36, {
-          width: boxWidth - 16,
-          ellipsis: true,
-        });
-
-      const address = [firstRow.shop_address, firstRow.city, firstRow.state]
-        .filter(Boolean)
-        .join(", ");
-
-      doc.text(`Address: ${address || "-"}`, rightX + 8, boxTop + 49, {
-        width: boxWidth - 16,
-        ellipsis: true,
-      });
-
-      return boxTop + boxHeight;
-    };
-
-    // =====================================================
-    // TRANSPORT + VERIFICATION
-    // =====================================================
-
-    const drawTransport = (top) => {
-      const boxHeight = 43;
-
-      doc
-        .roundedRect(MARGIN, top, CONTENT_WIDTH, boxHeight, 4)
-        .fillAndStroke(LIGHTER, BORDER);
-
-      // Transport
+        .fontSize(8)
+        .text(COMPANY_NAME, MARGIN + 45, y);
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text("TRANSPORT", MARGIN + 8, top + 8);
+        .fontSize(8)
+        .text("To :", MARGIN + halfWidth + 4, y);
 
       doc
         .font("Helvetica")
-        .fontSize(6.2)
-        .fillColor(PRIMARY)
-        .text(firstRow.transport_details || "-", MARGIN + 62, top + 7, {
-          width: CONTENT_WIDTH - 70,
+        .fontSize(8)
+        .text(safeText(firstRow.shop_name), MARGIN + halfWidth + 38, y, {
+          width: halfWidth - 45,
           ellipsis: true,
         });
 
-      // Verification
+      // ===================================================
+      // GSTIN / ADDRESS
+      // ===================================================
+
+      y += 23;
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text("VERIFICATION CODE", MARGIN + 8, top + 25);
+        .fontSize(8)
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 4, y);
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6.2)
-        .fillColor(PRIMARY)
-        .text(firstRow.verification_code || "-", MARGIN + 90, top + 24, {
-          width: 120,
+        .fontSize(8)
+        .text("Address :", MARGIN + halfWidth + 4, y);
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .text(safeText(shopAddress), MARGIN + halfWidth + 58, y, {
+          width: halfWidth - 63,
           ellipsis: true,
         });
 
-      return top + boxHeight;
+      // ===================================================
+      // SHOP GSTIN
+      // ===================================================
+
+      y += 23;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + halfWidth + 4, y);
+
+      // ===================================================
+      // DIVIDER
+      // ===================================================
+
+      y += 12;
+
+      doc
+        .moveTo(MARGIN, y)
+        .lineTo(PAGE_WIDTH - MARGIN, y)
+        .lineWidth(0.7)
+        .stroke();
+
+      return y + 9;
     };
+
+    // =====================================================
+    // TABLE CONFIG
+    // =====================================================
+
+    const SERIAL_WIDTH = 42;
+
+    const PRODUCT_WIDTH = 300;
+
+    const HSN_WIDTH = 105;
+
+    const QTY_WIDTH = CONTENT_WIDTH - SERIAL_WIDTH - PRODUCT_WIDTH - HSN_WIDTH;
+
+    const TABLE_WIDTH = SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH + QTY_WIDTH;
+
+    const TABLE_HEADER_HEIGHT = 25;
 
     // =====================================================
     // TABLE HEADER
     // =====================================================
 
     const drawTableHeader = (y) => {
-      doc.roundedRect(MARGIN, y, tableWidth, 18, 2).fill(PRIMARY);
+      // ---------------------------------------------------
+      // OUTER BORDER
+      // ---------------------------------------------------
 
-      doc.font("Helvetica-Bold").fontSize(5.4).fillColor(WHITE);
+      doc
+        .rect(MARGIN, y, TABLE_WIDTH, TABLE_HEADER_HEIGHT)
+        .lineWidth(0.8)
+        .stroke();
 
-      let x = MARGIN;
+      // ---------------------------------------------------
+      // VERTICAL 1
+      // ---------------------------------------------------
 
-      // #
+      let x = MARGIN + SERIAL_WIDTH;
 
-      doc.text("#", x, y + 6, {
-        width: tableColumns.sr,
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + TABLE_HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ---------------------------------------------------
+      // VERTICAL 2
+      // ---------------------------------------------------
+
+      x += PRODUCT_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + TABLE_HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ---------------------------------------------------
+      // VERTICAL 3
+      // ---------------------------------------------------
+
+      x += HSN_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + TABLE_HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ---------------------------------------------------
+      // TEXT
+      // ---------------------------------------------------
+
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+
+      // S.No.
+
+      doc.text("S.No.", MARGIN, y + 8, {
+        width: SERIAL_WIDTH,
         align: "center",
       });
 
-      x += tableColumns.sr;
+      // Product
 
-      // Sweet
-
-      doc.text("SWEET / ITEM", x + 4, y + 6, {
-        width: tableColumns.sweet - 8,
-      });
-
-      x += tableColumns.sweet;
-
-      // Ordered
-
-      doc.text("ORDERED", x, y + 6, {
-        width: tableColumns.ordered,
+      doc.text("Product", MARGIN + SERIAL_WIDTH, y + 8, {
+        width: PRODUCT_WIDTH,
         align: "center",
       });
 
-      x += tableColumns.ordered;
+      // HSN
 
-      // Supplied
-
-      doc.text("SUPPLIED", x, y + 6, {
-        width: tableColumns.supplied,
+      doc.text("HSN", MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH, y + 8, {
+        width: HSN_WIDTH,
         align: "center",
       });
 
-      x += tableColumns.supplied;
+      // Qty
 
-      // Unit
+      doc.text(
+        "Qty.",
+        MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH,
+        y + 8,
+        {
+          width: QTY_WIDTH,
+          align: "center",
+        },
+      );
 
-      doc.text("UNIT", x, y + 6, {
-        width: tableColumns.unit,
-        align: "center",
-      });
-
-      x += tableColumns.unit;
-
-      // Status
-
-      doc.text("STATUS", x, y + 6, {
-        width: tableColumns.status,
-        align: "center",
-      });
-
-      return y + 18;
+      return y + TABLE_HEADER_HEIGHT;
     };
 
     // =====================================================
-    // COUNTER HEADER
+    // TABLE ITEM ROW
     // =====================================================
 
-    const drawCounterHeader = (counter, location, counterTotal, y) => {
-      const height = 30;
+    const drawItemRow = (item, index, y, rowHeight) => {
+      // ---------------------------------------------------
+      // OUTER BORDER
+      // ---------------------------------------------------
 
-      doc.roundedRect(MARGIN, y, CONTENT_WIDTH, height, 5).fill(PRIMARY);
+      doc.rect(MARGIN, y, TABLE_WIDTH, rowHeight).lineWidth(0.5).stroke();
 
-      // Counter label
+      // ---------------------------------------------------
+      // VERTICAL LINES
+      // ---------------------------------------------------
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(5.3)
-        .fillColor("#D1D5DB")
-        .text("COUNTER", MARGIN + 9, y + 6);
-
-      // Counter name
+      let x = MARGIN + SERIAL_WIDTH;
 
       doc
-        .font("Helvetica-Bold")
-        .fontSize(8.5)
-        .fillColor(WHITE)
-        .text(counter, MARGIN + 9, y + 14, {
-          width: 190,
-          ellipsis: true,
-        });
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
 
-      // Location
-
-      if (location) {
-        doc
-          .font("Helvetica")
-          .fontSize(5.2)
-          .fillColor("#D1D5DB")
-          .text(`Location: ${location}`, MARGIN + 205, y + 7, {
-            width: 90,
-            align: "right",
-            ellipsis: true,
-          });
-      }
-
-      // Supplied badge
+      x += PRODUCT_WIDTH;
 
       doc
-        .roundedRect(MARGIN + CONTENT_WIDTH - 72, y + 5, 64, 20, 4)
-        .fill(WHITE);
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
+
+      x += HSN_WIDTH;
 
       doc
-        .font("Helvetica-Bold")
-        .fontSize(4.8)
-        .fillColor(SECONDARY)
-        .text("SUPPLIED", MARGIN + CONTENT_WIDTH - 68, y + 8, {
-          width: 56,
-          align: "center",
-        });
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(PRIMARY)
-        .text(formatNumber(counterTotal), MARGIN + CONTENT_WIDTH - 68, y + 15, {
-          width: 56,
-          align: "center",
-        });
-
-      return y + height;
-    };
-
-    // =====================================================
-    // CATEGORY HEADER
-    // =====================================================
-
-    const drawCategoryHeader = (category, items, y, continued = false) => {
-      const height = 22;
-
-      doc.roundedRect(MARGIN, y, tableWidth, height, 3).fill(LIGHT);
-
-      // Accent
-
-      doc.roundedRect(MARGIN, y, 4, height, 2).fill(PRIMARY);
-
-      // Category
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.8)
-        .fillColor(PRIMARY)
-        .text(
-          `CATEGORY  •  ${category}${continued ? " (Continued)" : ""}`,
-          MARGIN + 10,
-          y + 7,
-          {
-            width: 230,
-            ellipsis: true,
-          },
-        );
-
-      // Item count
+      // ---------------------------------------------------
+      // SERIAL
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica")
-        .fontSize(5.3)
-        .fillColor(SECONDARY)
-        .text(
-          `${items.length} item${items.length === 1 ? "" : "s"}`,
-          MARGIN + tableWidth - 70,
-          y + 7,
-          {
-            width: 60,
-            align: "right",
-          },
-        );
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(String(index + 1), MARGIN, y + 9, {
+          width: SERIAL_WIDTH,
+          align: "center",
+        });
 
-      return y + height;
+      // ---------------------------------------------------
+      // PRODUCT
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(safeText(item.sweet_name), MARGIN + SERIAL_WIDTH + 8, y + 9, {
+          width: PRODUCT_WIDTH - 16,
+          ellipsis: true,
+          lineBreak: false,
+        });
+
+      // ---------------------------------------------------
+      // HSN
+      // ---------------------------------------------------
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(getHSN(item), MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH, y + 9, {
+          width: HSN_WIDTH,
+          align: "center",
+          ellipsis: true,
+          lineBreak: false,
+        });
+
+      // ---------------------------------------------------
+      // QTY
+      // ---------------------------------------------------
+
+      const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
+
+      const quantity = formatQuantity(item.supplied_quantity);
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(quantity, qtyX + 6, y + 9, {
+          width: QTY_WIDTH - 12,
+          align: "center",
+          lineBreak: false,
+        });
+
+      return y + rowHeight;
     };
 
     // =====================================================
-    // CATEGORY TABLE
+    // NET TOTAL
     // =====================================================
 
-    const drawCategory = (category, items, startY) => {
-      let y = startY;
-
-      const categoryTotal = items.reduce(
-        (sum, item) => sum + Number(item.supplied_quantity || 0),
-        0,
-      );
+    const drawNetTotal = (y, totalQuantity) => {
+      const totalHeight = 30;
 
       // ---------------------------------------------------
-      // Category heading + table header + first row
+      // BORDER
       // ---------------------------------------------------
 
-      if (y + 22 + 18 + 17 > SAFE_BOTTOM) {
-        y = addNewPage();
-      }
-
-      // Category header
-
-      y = drawCategoryHeader(category, items, y);
-
-      y += 4;
-
-      // Table header
-
-      y = drawTableHeader(y);
+      doc.rect(MARGIN, y, TABLE_WIDTH, totalHeight).lineWidth(0.8).stroke();
 
       // ---------------------------------------------------
-      // Items
+      // QTY DIVIDER
       // ---------------------------------------------------
 
-      items.forEach((item, index) => {
-        const rowHeight = 17;
-
-        if (y + rowHeight > SAFE_BOTTOM) {
-          y = addNewPage();
-
-          y = drawCategoryHeader(category, items, y, true);
-
-          y += 4;
-
-          y = drawTableHeader(y);
-        }
-
-        const ordered = Number(item.ordered_quantity || 0);
-
-        const supplied = Number(item.supplied_quantity || 0);
-
-        // Alternating row
-
-        if (index % 2 === 0) {
-          doc.rect(MARGIN, y, tableWidth, rowHeight).fill("#FAFAFA");
-        }
-
-        // Bottom border
-
-        doc
-          .moveTo(MARGIN, y + rowHeight)
-          .lineTo(MARGIN + tableWidth, y + rowHeight)
-          .lineWidth(0.25)
-          .stroke(BORDER);
-
-        let x = MARGIN;
-
-        // Serial
-
-        doc
-          .font("Helvetica")
-          .fontSize(5.8)
-          .fillColor(SECONDARY)
-          .text(String(index + 1), x, y + 5, {
-            width: tableColumns.sr,
-            align: "center",
-          });
-
-        x += tableColumns.sr;
-
-        // Sweet
-
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(5.9)
-          .fillColor(PRIMARY)
-          .text(item.sweet_name || "-", x + 4, y + 5, {
-            width: tableColumns.sweet - 8,
-            ellipsis: true,
-            lineBreak: false,
-          });
-
-        x += tableColumns.sweet;
-
-        // Ordered
-
-        doc
-          .font("Helvetica")
-          .fontSize(5.9)
-          .fillColor(PRIMARY)
-          .text(formatNumber(ordered), x, y + 5, {
-            width: tableColumns.ordered,
-            align: "center",
-          });
-
-        x += tableColumns.ordered;
-
-        // Supplied
-
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(6)
-          .fillColor(PRIMARY)
-          .text(formatNumber(supplied), x, y + 5, {
-            width: tableColumns.supplied,
-            align: "center",
-          });
-
-        x += tableColumns.supplied;
-
-        // Unit
-
-        doc
-          .font("Helvetica")
-          .fontSize(5.5)
-          .fillColor(SECONDARY)
-          .text(item.unit || "-", x, y + 5, {
-            width: tableColumns.unit,
-            align: "center",
-            ellipsis: true,
-          });
-
-        x += tableColumns.unit;
-
-        // Status
-
-        const status = item.item_status || "ACCEPTED";
-
-        const isPartial = status === "PARTIAL";
-
-        doc
-          .roundedRect(x + 4, y + 3, tableColumns.status - 8, 11, 3)
-          .fill(isPartial ? ORANGE_LIGHT : GREEN_LIGHT);
-
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(4.8)
-          .fillColor(isPartial ? ORANGE : GREEN)
-          .text(status, x + 4, y + 6, {
-            width: tableColumns.status - 8,
-            align: "center",
-          });
-
-        y += rowHeight;
-      });
-
-      // ---------------------------------------------------
-      // CATEGORY TOTAL
-      // ---------------------------------------------------
-
-      const totalHeight = 22;
-
-      if (y + totalHeight > SAFE_BOTTOM) {
-        y = addNewPage();
-
-        y = drawCategoryHeader(category, items, y, true);
-
-        y += 4;
-
-        y = drawTableHeader(y);
-      }
+      const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
 
       doc
-        .roundedRect(MARGIN, y, tableWidth, totalHeight, 3)
-        .fillAndStroke(LIGHT, BORDER);
+        .moveTo(qtyX, y)
+        .lineTo(qtyX, y + totalHeight)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ---------------------------------------------------
+      // LABEL
+      // ---------------------------------------------------
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(5.8)
-        .fillColor(PRIMARY)
-        .text("CATEGORY TOTAL", MARGIN + 7, y + 8);
+        .fontSize(8)
+        .fillColor("#000000")
+        .text("Net Total", MARGIN, y + 10, {
+          width: SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH - 10,
+          align: "right",
+        });
 
-      // Only numeric total
+      // ---------------------------------------------------
+      // TOTAL QTY
+      // ---------------------------------------------------
+
       doc
         .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(PRIMARY)
-        .text(
-          formatNumber(categoryTotal),
-          MARGIN + tableColumns.sr + tableColumns.sweet + tableColumns.ordered,
-          y + 8,
-          {
-            width:
-              tableColumns.supplied + tableColumns.unit + tableColumns.status,
-            align: "right",
-          },
-        );
+        .fontSize(9)
+        .fillColor("#000000")
+        .text(formatQuantity(totalQuantity), qtyX + 6, y + 9, {
+          width: QTY_WIDTH - 12,
+          align: "center",
+          lineBreak: false,
+        });
 
-      return {
-        y: y + totalHeight + 7,
-        total: categoryTotal,
-      };
+      return y + totalHeight;
+    };
+
+    // =====================================================
+    // RECEIVER / SIGNATURE
+    // =====================================================
+
+    const drawReceiverSection = (y) => {
+      const boxHeight = 82;
+
+      // ---------------------------------------------------
+      // OUTER BOX
+      // ---------------------------------------------------
+
+      doc.rect(MARGIN, y, CONTENT_WIDTH, boxHeight).lineWidth(0.8).stroke();
+
+      // ---------------------------------------------------
+      // CENTER LINE
+      // ---------------------------------------------------
+
+      const centerX = MARGIN + CONTENT_WIDTH / 2;
+
+      doc
+        .moveTo(centerX, y)
+        .lineTo(centerX, y + boxHeight)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // LEFT
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text("Receiver Name", MARGIN + 8, y + 14);
+
+      doc
+        .moveTo(MARGIN + 95, y + 21)
+        .lineTo(centerX - 15, y + 21)
+        .lineWidth(0.5)
+        .stroke();
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Date", MARGIN + 8, y + 48);
+
+      doc
+        .moveTo(MARGIN + 95, y + 55)
+        .lineTo(centerX - 15, y + 55)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // RIGHT
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`For : ${COMPANY_NAME}`, centerX + 10, y + 14);
+
+      doc
+        .moveTo(centerX + 65, y + 55)
+        .lineTo(PAGE_WIDTH - MARGIN - 15, y + 55)
+        .lineWidth(0.5)
+        .stroke();
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Authorised Signatory", centerX + 10, y + 63, {
+          width: CONTENT_WIDTH / 2 - 20,
+          align: "center",
+        });
+
+      return y + boxHeight;
     };
 
     // =====================================================
     // FIRST PAGE
     // =====================================================
 
-    drawHeader();
+    let currentY = drawMainHeader();
 
-    // Basic information
-
-    let currentY = drawBasicInfo() + 8;
-
-    // Party information
-
-    currentY = drawPartyInfo(currentY) + 7;
-
-    // Transport
-
-    currentY = drawTransport(currentY) + 10;
+    currentY = drawPartyInformation(currentY);
 
     // =====================================================
-    // DISPATCHED ITEMS TITLE
+    // TABLE
     // =====================================================
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor(PRIMARY)
-      .text("DISPATCHED ITEMS", MARGIN, currentY);
+    let tableY = currentY;
 
-    doc
-      .font("Helvetica")
-      .fontSize(5.5)
-      .fillColor(SECONDARY)
-      .text(
-        "Counter-wise and category-wise dispatch details",
-        MARGIN + 95,
-        currentY + 2,
-        {
-          width: CONTENT_WIDTH - 95,
-          align: "right",
-        },
-      );
-
-    currentY += 17;
+    tableY = drawTableHeader(tableY);
 
     // =====================================================
-    // COUNTERS
+    // ITEMS
     // =====================================================
 
     let grandTotal = 0;
 
-    for (const counter of Object.keys(groupedData)) {
-      const categories = groupedData[counter];
+    const ROW_HEIGHT = 30;
 
-      const counterItems = Object.values(categories).flat();
+    data.forEach((item, index) => {
+      const suppliedQuantity = Number(item.supplied_quantity || 0);
 
-      const counterTotal = counterItems.reduce(
-        (sum, item) => sum + Number(item.supplied_quantity || 0),
-        0,
-      );
+      grandTotal += suppliedQuantity;
 
-      grandTotal += counterTotal;
+      // -------------------------------------------------
+      // PAGE BREAK
+      // -------------------------------------------------
 
-      const location = counterItems[0]?.counter_location;
+      if (tableY + ROW_HEIGHT + 120 > SAFE_BOTTOM) {
+        doc.addPage({
+          size: "A4",
 
-      // ---------------------------------------------------
-      // Counter header
-      // ---------------------------------------------------
-
-      if (currentY + 30 > SAFE_BOTTOM) {
-        currentY = addNewPage();
-      }
-
-      currentY = drawCounterHeader(counter, location, counterTotal, currentY);
-
-      currentY += 7;
-
-      // ---------------------------------------------------
-      // Categories
-      // ---------------------------------------------------
-
-      for (const category of Object.keys(categories)) {
-        const categoryResult = drawCategory(
-          category,
-          categories[category],
-          currentY,
-        );
-
-        currentY = categoryResult.y;
-      }
-
-      // ---------------------------------------------------
-      // Counter total
-      // ---------------------------------------------------
-
-      const counterTotalHeight = 24;
-
-      if (currentY + counterTotalHeight > SAFE_BOTTOM) {
-        currentY = addNewPage();
-      }
-
-      doc
-        .roundedRect(MARGIN, currentY, tableWidth, counterTotalHeight, 3)
-        .fill(PRIMARY);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(6.2)
-        .fillColor(WHITE)
-        .text(`COUNTER TOTAL  •  ${counter}`, MARGIN + 8, currentY + 9, {
-          width: 200,
-          ellipsis: true,
+          margins: {
+            top: MARGIN,
+            bottom: MARGIN,
+            left: MARGIN,
+            right: MARGIN,
+          },
         });
 
-      // Only numeric counter total
+        // ------------------------------------------------
+        // CONTINUATION HEADER
+        // ------------------------------------------------
+
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(16)
+          .fillColor("#000000")
+          .text(COMPANY_NAME, MARGIN, 25, {
+            width: CONTENT_WIDTH,
+            align: "center",
+          });
+
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .text("DISPATCH CHALLAN - CONTINUED", MARGIN, 49, {
+            width: CONTENT_WIDTH,
+            align: "center",
+          });
+
+        doc
+          .moveTo(MARGIN, 68)
+          .lineTo(PAGE_WIDTH - MARGIN, 68)
+          .lineWidth(0.7)
+          .stroke();
+
+        tableY = 82;
+
+        tableY = drawTableHeader(tableY);
+      }
+
+      tableY = drawItemRow(item, index, tableY, ROW_HEIGHT);
+    });
+
+    // =====================================================
+    // TOTAL PAGE CHECK
+    // =====================================================
+
+    if (tableY + 30 + 105 > SAFE_BOTTOM) {
+      doc.addPage({
+        size: "A4",
+
+        margins: {
+          top: MARGIN,
+          bottom: MARGIN,
+          left: MARGIN,
+          right: MARGIN,
+        },
+      });
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor(WHITE)
-        .text(
-          formatNumber(counterTotal),
-          MARGIN + tableColumns.sr + tableColumns.sweet + tableColumns.ordered,
-          currentY + 8,
-          {
-            width:
-              tableColumns.supplied + tableColumns.unit + tableColumns.status,
-            align: "right",
-          },
-        );
+        .fontSize(16)
+        .fillColor("#000000")
+        .text(COMPANY_NAME, MARGIN, 25, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
 
-      currentY += counterTotalHeight + 12;
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .text("DISPATCH CHALLAN - SUMMARY", MARGIN, 49, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
+
+      doc
+        .moveTo(MARGIN, 68)
+        .lineTo(PAGE_WIDTH - MARGIN, 68)
+        .lineWidth(0.7)
+        .stroke();
+
+      tableY = 82;
     }
 
     // =====================================================
-    // GRAND TOTAL
+    // NET TOTAL
     // =====================================================
 
-    const grandTotalHeight = 52;
+    tableY = drawNetTotal(tableY, grandTotal);
 
-    if (currentY + grandTotalHeight > SAFE_BOTTOM) {
-      currentY = addNewPage();
-    }
+    // =====================================================
+    // RECEIVER SECTION
+    // =====================================================
 
-    // Separator
-
-    doc
-      .moveTo(MARGIN, currentY)
-      .lineTo(MARGIN + tableWidth, currentY)
-      .lineWidth(0.8)
-      .stroke(PRIMARY);
-
-    currentY += 8;
-
-    // Grand total box
-
-    doc
-      .roundedRect(MARGIN, currentY, tableWidth, 40, 5)
-      .fillAndStroke(LIGHT, PRIMARY);
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.5)
-      .fillColor(SECONDARY)
-      .text("GRAND TOTAL", MARGIN + 10, currentY + 8);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .fillColor(PRIMARY)
-      .text("TOTAL DISPATCHED", MARGIN + 10, currentY + 19);
-
-    // Only numeric grand total
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(10)
-      .fillColor(PRIMARY)
-      .text(formatNumber(grandTotal), MARGIN + 190, currentY + 13, {
-        width: tableWidth - 200,
-        align: "right",
-      });
+    drawReceiverSection(tableY + 15);
 
     // =====================================================
     // END PDF
@@ -10691,22 +11752,1048 @@ async function downloadChalanPDF(req, res) {
     // RESPONSE
     // =====================================================
 
-    const fileUrl = `/uploads/ShopMedia/${fileName}`;
+    writeStream.on("finish", () => {
+      const fileUrl = `/uploads/ShopMedia/${fileName}`;
 
-    const serverUrl = "https://api.joswee.cloud";
+      const serverUrl = "https://api.joswee.cloud";
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      msg: "A5 Chalan PDF generated successfully",
-      filePath: serverUrl + fileUrl,
+      return libFunc.sendResponse(res, {
+        status: 0,
+
+        msg: "Dispatch Challan PDF generated successfully",
+
+        filePath: serverUrl + fileUrl,
+      });
+    });
+
+    writeStream.on("error", (error) => {
+      console.log("Chalan PDF write error:", error);
+
+      if (!res.headersSent) {
+        return res.status(500).send("Error writing Chalan PDF");
+      }
     });
   } catch (error) {
     console.log("downloadChalanPDF error:", error);
 
-    return res.status(500).send("Error generating Chalan PDF");
+    if (!res.headersSent) {
+      return res.status(500).send("Error generating Chalan PDF");
+    }
   }
 }
 
+// async function downloadOrderRequestPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = order_id.trim().replaceAll("'", "\\'");
+
+//     // =====================================================
+//     // FETCH ORDER DATA
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         -- Order
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         -- Shop
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         -- Order Item
+//         oi.row_id AS order_item_id,
+//         oi.request_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         -- Sweet
+//         sw.row_id AS sweet_id,
+//         COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
+//         COALESCE(sw.unit, '-') AS unit,
+
+//         -- Counter
+//         c.row_id AS counter_id,
+//         COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+//         c.location AS counter_location,
+
+//         -- Category
+//         cat.row_id AS category_id,
+//         COALESCE(cat.category_name, 'Others') AS category_name,
+
+//         -- Department
+//         d.row_id AS department_id,
+//         COALESCE(d.department_name, 'Others') AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE o.row_id = '${safeOrderId}'
+
+//       ORDER BY
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     if (data.length === 0) {
+//       return res.status(404).send("No order found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // ORDER DISPLAY ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+//       6,
+//       "0",
+//     )}`;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "OrderRequests");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `OrderRequest_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // LOGO
+//     // =====================================================
+
+//     const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+
+//     // =====================================================
+//     // A5 DOCUMENT
+//     // =====================================================
+
+//     const PAGE_WIDTH = 419.53;
+//     const PAGE_HEIGHT = 595.28;
+
+//     const MARGIN = 22;
+
+//     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+//     const doc = new PDFDocument({
+//       size: "A5",
+//       margin: MARGIN,
+//       autoFirstPage: true,
+//       bufferPages: false,
+
+//       info: {
+//         Title: `Order Request ${orderDisplayId}`,
+//         Author: "Jodhpur Sweets",
+//         Subject: "Purchase / Stock Order Request",
+//       },
+//     });
+
+//     doc.pipe(fs.createWriteStream(filePath));
+
+//     // =====================================================
+//     // COLORS
+//     // =====================================================
+
+//     const PRIMARY = "#111827";
+//     const DARK = "#1F2937";
+//     const SECONDARY = "#6B7280";
+//     const BORDER = "#D1D5DB";
+//     const LIGHT_BORDER = "#E5E7EB";
+//     const LIGHT_BG = "#F8FAFC";
+//     const TOTAL_BG = "#F1F5F9";
+//     const WHITE = "#FFFFFF";
+
+//     // =====================================================
+//     // HELPERS
+//     // =====================================================
+
+//     const safeText = (value, fallback = "-") => {
+//       if (
+//         value === null ||
+//         value === undefined ||
+//         String(value).trim() === ""
+//       ) {
+//         return fallback;
+//       }
+
+//       return String(value);
+//     };
+
+//     const formatDate = (value) => {
+//       if (!value) return "-";
+
+//       try {
+//         return new Date(value).toLocaleDateString("en-IN", {
+//           day: "2-digit",
+//           month: "2-digit",
+//           year: "numeric",
+//         });
+//       } catch (error) {
+//         return "-";
+//       }
+//     };
+
+//     const shopAddress = [order.shop_address, order.city, order.state]
+//       .filter(Boolean)
+//       .join(", ");
+
+//     // =====================================================
+//     // STATUS STYLE
+//     // =====================================================
+
+//     const getStatusStyle = (status) => {
+//       const normalized = String(status || "PENDING").toUpperCase();
+
+//       if (normalized === "ACCEPTED") {
+//         return {
+//           bg: "#DCFCE7",
+//           text: "#166534",
+//         };
+//       }
+
+//       if (normalized === "DISPATCHED") {
+//         return {
+//           bg: "#DBEAFE",
+//           text: "#1D4ED8",
+//         };
+//       }
+
+//       if (normalized === "DELIVERED") {
+//         return {
+//           bg: "#D1FAE5",
+//           text: "#047857",
+//         };
+//       }
+
+//       if (normalized === "REJECTED") {
+//         return {
+//           bg: "#FEE2E2",
+//           text: "#B91C1C",
+//         };
+//       }
+
+//       return {
+//         bg: "#FEF3C7",
+//         text: "#92400E",
+//       };
+//     };
+
+//     const status = String(order.order_status || "PENDING").toUpperCase();
+
+//     const statusStyle = getStatusStyle(status);
+
+//     // =====================================================
+//     // PAGE HEADER
+//     // =====================================================
+
+//     const drawPageHeader = (isFirstPage = false) => {
+//       const top = 18;
+
+//       const logoSize = isFirstPage ? 48 : 30;
+
+//       // ---------------------------------------------------
+//       // LOGO
+//       // ---------------------------------------------------
+
+//       if (fs.existsSync(LOGO_PATH)) {
+//         try {
+//           doc.save();
+
+//           doc
+//             .circle(MARGIN + logoSize / 2, top + logoSize / 2, logoSize / 2)
+//             .clip();
+
+//           doc.image(LOGO_PATH, MARGIN, top, {
+//             width: logoSize,
+//             height: logoSize,
+//           });
+
+//           doc.restore();
+
+//           doc
+//             .circle(MARGIN + logoSize / 2, top + logoSize / 2, logoSize / 2)
+//             .lineWidth(0.8)
+//             .stroke(BORDER);
+//         } catch (logoError) {
+//           console.log("Logo loading error:", logoError);
+//         }
+//       }
+
+//       // ---------------------------------------------------
+//       // COMPANY NAME
+//       // ---------------------------------------------------
+
+//       const companyX = MARGIN + logoSize + 10;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(isFirstPage ? 12 : 9)
+//         .fillColor(PRIMARY)
+//         .text("JODHPUR SWEETS", companyX, top + 5, {
+//           width: 170,
+//         });
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(isFirstPage ? 6.5 : 5.5)
+//         .fillColor(SECONDARY)
+//         .text("Purchase & Inventory Management", companyX, top + 21, {
+//           width: 170,
+//         });
+
+//       // ---------------------------------------------------
+//       // DOCUMENT TITLE
+//       // ---------------------------------------------------
+
+//       if (isFirstPage) {
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(11)
+//           .fillColor(PRIMARY)
+//           .text("ORDER REQUEST", PAGE_WIDTH - MARGIN - 125, top + 3, {
+//             width: 125,
+//             align: "right",
+//           });
+
+//         doc
+//           .font("Helvetica")
+//           .fontSize(6)
+//           .fillColor(SECONDARY)
+//           .text(
+//             "PURCHASE / STOCK DOCUMENT",
+//             PAGE_WIDTH - MARGIN - 125,
+//             top + 20,
+//             {
+//               width: 125,
+//               align: "right",
+//             },
+//           );
+//       } else {
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(7)
+//           .fillColor(PRIMARY)
+//           .text("ORDER REQUEST", PAGE_WIDTH - MARGIN - 100, top + 8, {
+//             width: 100,
+//             align: "right",
+//           });
+//       }
+
+//       // ---------------------------------------------------
+//       // HEADER LINE
+//       // ---------------------------------------------------
+
+//       const dividerY = isFirstPage ? 76 : 54;
+
+//       doc
+//         .moveTo(MARGIN, dividerY)
+//         .lineTo(PAGE_WIDTH - MARGIN, dividerY)
+//         .lineWidth(1)
+//         .stroke(PRIMARY);
+
+//       return dividerY;
+//     };
+
+//     // =====================================================
+//     // TABLE CONFIG
+//     // =====================================================
+
+//     const rowHeight = 21;
+
+//     const colWidths = {
+//       sr: 24,
+//       sweet: 105,
+//       department: 56,
+//       category: 58,
+//       counter: 60,
+//       qty: 38,
+//       unit: 34,
+//     };
+
+//     const totalWidth =
+//       colWidths.sr +
+//       colWidths.sweet +
+//       colWidths.department +
+//       colWidths.category +
+//       colWidths.counter +
+//       colWidths.qty +
+//       colWidths.unit;
+
+//     // =====================================================
+//     // TABLE HEADER
+//     // =====================================================
+
+//     const drawTableHeader = (y) => {
+//       doc.roundedRect(MARGIN, y, totalWidth, rowHeight, 3).fill(PRIMARY);
+
+//       doc.font("Helvetica-Bold").fontSize(5.8).fillColor(WHITE);
+
+//       let x = MARGIN;
+
+//       doc.text("#", x, y + 7, {
+//         width: colWidths.sr,
+//         align: "center",
+//       });
+
+//       x += colWidths.sr;
+
+//       doc.text("ITEM / SWEET", x + 3, y + 7, {
+//         width: colWidths.sweet - 6,
+//       });
+
+//       x += colWidths.sweet;
+
+//       doc.text("DEPT.", x, y + 7, {
+//         width: colWidths.department,
+//         align: "center",
+//       });
+
+//       x += colWidths.department;
+
+//       doc.text("CATEGORY", x, y + 7, {
+//         width: colWidths.category,
+//         align: "center",
+//       });
+
+//       x += colWidths.category;
+
+//       doc.text("COUNTER", x, y + 7, {
+//         width: colWidths.counter,
+//         align: "center",
+//       });
+
+//       x += colWidths.counter;
+
+//       doc.text("QTY", x, y + 7, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//       x += colWidths.qty;
+
+//       doc.text("UNIT", x, y + 7, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//       return y + rowHeight;
+//     };
+
+//     // =====================================================
+//     // ITEM ROW
+//     // =====================================================
+
+//     const drawItemRow = (item, index, yPosition) => {
+//       const qty = Number(item.quantity || 0);
+
+//       const rowBg = index % 2 === 0 ? "#FFFFFF" : "#F8FAFC";
+
+//       doc.rect(MARGIN, yPosition, totalWidth, rowHeight).fill(rowBg);
+
+//       doc
+//         .moveTo(MARGIN, yPosition + rowHeight)
+//         .lineTo(MARGIN + totalWidth, yPosition + rowHeight)
+//         .lineWidth(0.3)
+//         .stroke(LIGHT_BORDER);
+
+//       let x = MARGIN;
+
+//       // SR
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6)
+//         .fillColor(SECONDARY)
+//         .text(String(index + 1), x, yPosition + 7, {
+//           width: colWidths.sr,
+//           align: "center",
+//         });
+
+//       x += colWidths.sr;
+
+//       // SWEET
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.2)
+//         .fillColor(PRIMARY)
+//         .text(safeText(item.sweet_name), x + 4, yPosition + 7, {
+//           width: colWidths.sweet - 8,
+//           ellipsis: true,
+//           lineBreak: false,
+//         });
+
+//       x += colWidths.sweet;
+
+//       // DEPARTMENT
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.7)
+//         .fillColor(DARK)
+//         .text(safeText(item.department_name), x + 2, yPosition + 7, {
+//           width: colWidths.department - 4,
+//           align: "center",
+//           ellipsis: true,
+//           lineBreak: false,
+//         });
+
+//       x += colWidths.department;
+
+//       // CATEGORY
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.7)
+//         .fillColor(DARK)
+//         .text(safeText(item.category_name), x + 2, yPosition + 7, {
+//           width: colWidths.category - 4,
+//           align: "center",
+//           ellipsis: true,
+//           lineBreak: false,
+//         });
+
+//       x += colWidths.category;
+
+//       // COUNTER
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.7)
+//         .fillColor(DARK)
+//         .text(safeText(item.counter_name), x + 2, yPosition + 7, {
+//           width: colWidths.counter - 4,
+//           align: "center",
+//           ellipsis: true,
+//           lineBreak: false,
+//         });
+
+//       x += colWidths.counter;
+
+//       // QTY
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(6.5)
+//         .fillColor(PRIMARY)
+//         .text(String(qty), x, yPosition + 6.5, {
+//           width: colWidths.qty,
+//           align: "center",
+//         });
+
+//       x += colWidths.qty;
+
+//       // UNIT
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(DARK)
+//         .text(safeText(item.unit), x, yPosition + 7, {
+//           width: colWidths.unit,
+//           align: "center",
+//           ellipsis: true,
+//         });
+
+//       return yPosition + rowHeight;
+//     };
+
+//     // =====================================================
+//     // FIRST PAGE
+//     // =====================================================
+
+//     const headerBottom = drawPageHeader(true);
+
+//     // =====================================================
+//     // ORDER META
+//     // =====================================================
+
+//     const metaTop = headerBottom + 12;
+
+//     const metaHeight = 58;
+
+//     doc
+//       .roundedRect(MARGIN, metaTop, CONTENT_WIDTH, metaHeight, 4)
+//       .fillAndStroke(LIGHT_BG, BORDER);
+
+//     doc
+//       .moveTo(MARGIN + CONTENT_WIDTH / 2, metaTop + 8)
+//       .lineTo(MARGIN + CONTENT_WIDTH / 2, metaTop + metaHeight - 8)
+//       .lineWidth(0.5)
+//       .stroke(LIGHT_BORDER);
+
+//     // LEFT
+
+//     const leftX = MARGIN + 10;
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("ORDER NUMBER", leftX, metaTop + 9);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(9)
+//       .fillColor(PRIMARY)
+//       .text(orderDisplayId, leftX, metaTop + 20);
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("ORDER DATE", leftX, metaTop + 38);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(7)
+//       .fillColor(DARK)
+//       .text(formatDate(order.order_date), leftX + 58, metaTop + 37);
+
+//     // RIGHT
+
+//     const rightX = MARGIN + CONTENT_WIDTH / 2 + 10;
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("DOCUMENT STATUS", rightX, metaTop + 9);
+
+//     doc.roundedRect(rightX, metaTop + 19, 82, 18, 4).fill(statusStyle.bg);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(6.5)
+//       .fillColor(statusStyle.text)
+//       .text(status, rightX, metaTop + 25, {
+//         width: 82,
+//         align: "center",
+//       });
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("REQUEST TYPE", rightX, metaTop + 43);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(6.5)
+//       .fillColor(DARK)
+//       .text("STOCK / PURCHASE", rightX + 55, metaTop + 42);
+
+//     // =====================================================
+//     // ORDER DETAILS
+//     // =====================================================
+
+//     const detailsTop = metaTop + metaHeight + 14;
+
+//     const detailsHeight = 82;
+
+//     doc
+//       .roundedRect(MARGIN, detailsTop, CONTENT_WIDTH, detailsHeight, 4)
+//       .fillAndStroke(WHITE, BORDER);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(7)
+//       .fillColor(PRIMARY)
+//       .text("ORDER DETAILS", MARGIN + 10, detailsTop + 9);
+
+//     doc
+//       .moveTo(MARGIN + 10, detailsTop + 22)
+//       .lineTo(PAGE_WIDTH - MARGIN - 10, detailsTop + 22)
+//       .lineWidth(0.5)
+//       .stroke(LIGHT_BORDER);
+
+//     // SHOP
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("SHOP", MARGIN + 10, detailsTop + 31);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(7)
+//       .fillColor(DARK)
+//       .text(safeText(order.shop_name), MARGIN + 10, detailsTop + 42, {
+//         width: 160,
+//         ellipsis: true,
+//       });
+
+//     // PHONE
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("PHONE", MARGIN + 205, detailsTop + 31);
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(7)
+//       .fillColor(DARK)
+//       .text(safeText(order.shop_phone), MARGIN + 205, detailsTop + 42, {
+//         width: 145,
+//         ellipsis: true,
+//       });
+
+//     // ADDRESS
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.8)
+//       .fillColor(SECONDARY)
+//       .text("ADDRESS", MARGIN + 10, detailsTop + 60);
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(6.5)
+//       .fillColor(DARK)
+//       .text(safeText(shopAddress), MARGIN + 55, detailsTop + 59, {
+//         width: CONTENT_WIDTH - 65,
+//         ellipsis: true,
+//       });
+
+//     // =====================================================
+//     // ITEMS TITLE
+//     // =====================================================
+
+//     const tableTitleY = detailsTop + detailsHeight + 15;
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(8)
+//       .fillColor(PRIMARY)
+//       .text("ITEM DETAILS", MARGIN, tableTitleY);
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(5.5)
+//       .fillColor(SECONDARY)
+//       .text(
+//         `${data.length} item${data.length === 1 ? "" : "s"}`,
+//         PAGE_WIDTH - MARGIN - 80,
+//         tableTitleY + 2,
+//         {
+//           width: 80,
+//           align: "right",
+//         },
+//       );
+
+//     // =====================================================
+//     // TABLE START
+//     // =====================================================
+
+//     let tableTop = tableTitleY + 15;
+
+//     let y = drawTableHeader(tableTop);
+
+//     let grandTotal = 0;
+
+//     // =====================================================
+//     // ITEMS
+//     // =====================================================
+
+//     data.forEach((item, index) => {
+//       const qty = Number(item.quantity || 0);
+
+//       grandTotal += qty;
+
+//       // IMPORTANT:
+//       // Keep enough space for total.
+//       // Footer has been completely removed.
+
+//       const bottomSafeArea = 42;
+
+//       if (y + rowHeight > PAGE_HEIGHT - bottomSafeArea) {
+//         // Close current table
+//         if (y > tableTop) {
+//           doc
+//             .rect(MARGIN, tableTop, totalWidth, y - tableTop)
+//             .lineWidth(0.5)
+//             .stroke(BORDER);
+//         }
+
+//         // New page
+//         doc.addPage({
+//           size: "A5",
+//           margin: MARGIN,
+//         });
+
+//         drawPageHeader(false);
+
+//         const continuationY = 70;
+
+//         doc
+//           .font("Helvetica-Bold")
+//           .fontSize(7)
+//           .fillColor(PRIMARY)
+//           .text("ITEM DETAILS — CONTINUED", MARGIN, continuationY);
+
+//         tableTop = continuationY + 14;
+
+//         y = drawTableHeader(tableTop);
+//       }
+
+//       y = drawItemRow(item, index, y);
+//     });
+
+//     // =====================================================
+//     // TOTAL ROW
+//     // =====================================================
+
+//     const totalRowHeight = 25;
+
+//     // Keep total on current page whenever possible.
+//     // If it doesn't fit, create exactly ONE new page.
+
+//     if (y + totalRowHeight > PAGE_HEIGHT - 42) {
+//       if (y > tableTop) {
+//         doc
+//           .rect(MARGIN, tableTop, totalWidth, y - tableTop)
+//           .lineWidth(0.5)
+//           .stroke(BORDER);
+//       }
+
+//       doc.addPage({
+//         size: "A5",
+//         margin: MARGIN,
+//       });
+
+//       drawPageHeader(false);
+
+//       const summaryY = 70;
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(PRIMARY)
+//         .text("ORDER SUMMARY", MARGIN, summaryY);
+
+//       tableTop = summaryY + 14;
+
+//       y = drawTableHeader(tableTop);
+//     }
+
+//     // =====================================================
+//     // TOTAL ROW
+//     // =====================================================
+
+//     doc.rect(MARGIN, y, totalWidth, totalRowHeight).fill(TOTAL_BG);
+
+//     doc
+//       .rect(MARGIN, y, totalWidth, totalRowHeight)
+//       .lineWidth(0.5)
+//       .stroke(BORDER);
+
+//     const totalLabelWidth =
+//       colWidths.sr +
+//       colWidths.sweet +
+//       colWidths.department +
+//       colWidths.category +
+//       colWidths.counter;
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(7)
+//       .fillColor(PRIMARY)
+//       .text("TOTAL QUANTITY", MARGIN + 8, y + 8, {
+//         width: totalLabelWidth - 10,
+//       });
+
+//     const totalQtyX =
+//       MARGIN +
+//       colWidths.sr +
+//       colWidths.sweet +
+//       colWidths.department +
+//       colWidths.category +
+//       colWidths.counter;
+
+//     doc
+//       .font("Helvetica-Bold")
+//       .fontSize(9)
+//       .fillColor(PRIMARY)
+//       .text(String(grandTotal), totalQtyX, y + 7, {
+//         width: colWidths.qty,
+//         align: "center",
+//       });
+
+//     doc
+//       .font("Helvetica")
+//       .fontSize(6)
+//       .fillColor(SECONDARY)
+//       .text("TOTAL", totalQtyX + colWidths.qty, y + 8, {
+//         width: colWidths.unit,
+//         align: "center",
+//       });
+
+//     // =====================================================
+//     // FINAL TABLE BORDER
+//     // =====================================================
+
+//     const tableBottom = y + totalRowHeight;
+
+//     doc
+//       .rect(MARGIN, tableTop, totalWidth, tableBottom - tableTop)
+//       .lineWidth(0.5)
+//       .stroke(BORDER);
+
+//     // =====================================================
+//     // SUMMARY BOX
+//     // =====================================================
+
+//     const summaryTop = tableBottom + 12;
+
+//     const summaryHeight = 42;
+
+//     // VERY IMPORTANT:
+//     // Only draw summary if it safely fits.
+//     // Otherwise SKIP it instead of allowing PDFKit
+//     // to automatically create a blank page.
+
+//     if (summaryTop + summaryHeight <= PAGE_HEIGHT - 30) {
+//       doc
+//         .roundedRect(MARGIN, summaryTop, CONTENT_WIDTH, summaryHeight, 4)
+//         .fillAndStroke(WHITE, BORDER);
+
+//       // TOTAL ITEMS
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text("TOTAL ITEMS", MARGIN + 10, summaryTop + 8);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(8)
+//         .fillColor(PRIMARY)
+//         .text(String(data.length), MARGIN + 10, summaryTop + 19);
+
+//       // TOTAL QUANTITY
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text("TOTAL QUANTITY", MARGIN + 125, summaryTop + 8);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(8)
+//         .fillColor(PRIMARY)
+//         .text(String(grandTotal), MARGIN + 125, summaryTop + 19);
+
+//       // STATUS
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(5.8)
+//         .fillColor(SECONDARY)
+//         .text("DOCUMENT STATUS", MARGIN + 245, summaryTop + 8);
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor(statusStyle.text)
+//         .text(status, MARGIN + 245, summaryTop + 19);
+//     }
+
+//     // =====================================================
+//     // NO FOOTER
+//     // =====================================================
+//     //
+//     // IMPORTANT:
+//     // Do NOT add footer here.
+//     //
+//     // This was causing PDFKit to automatically
+//     // create additional blank pages because the
+//     // footer was positioned outside the usable A5
+//     // content area.
+//     //
+//     // =====================================================
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // RESPONSE
+//     // =====================================================
+
+//     const fileUrl = `/uploads/OrderRequests/${fileName}`;
+
+//     const serverUrl = "https://api.joswee.cloud";
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+//       msg: "Professional A5 order request PDF generated successfully",
+//       filePath: serverUrl + fileUrl,
+//     });
+//   } catch (error) {
+//     console.log("downloadOrderRequestPDF error:", error);
+
+//     return res.status(500).send("Error generating order request PDF");
+//   }
+// }
 
 async function downloadOrderRequestPDF(req, res) {
   try {
@@ -10716,6 +12803,10 @@ async function downloadOrderRequestPDF(req, res) {
       return res.status(400).send("Order ID required");
     }
 
+    // =====================================================
+    // TABLES
+    // =====================================================
+
     const orderTable = schema + ".orders";
     const itemTable = schema + ".order_items";
     const shopTable = schema + ".shops";
@@ -10724,7 +12815,33 @@ async function downloadOrderRequestPDF(req, res) {
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
 
-    const safeOrderId = order_id.trim().replaceAll("'", "\\'");
+    const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+    // =====================================================
+    // COMPANY DETAILS
+    // =====================================================
+
+    const COMPANY_NAME = "JODHPUR SWEETS";
+
+    const COMPANY_GSTIN = "08AAWPV0050D1ZK";
+
+    const COMPANY_REGD_OFFICE =
+      "Regd.off. : 889/4, 8th C Road, Sardarpura, Jodhpur, 342001.";
+
+    const COMPANY_FACTORY =
+      "Factory : 55-a, Industrial Area, New Power House, Jodhpur, 342003.";
+
+    const COMPANY_ADDRESS = "9th C' ROAD, SARDARPURA JODHPUR-342003";
+
+    const COMPANY_EMAIL = "info@jodhpursweets.com";
+
+    const COMPANY_PHONE = "0291-2633762";
+
+    // =====================================================
+    // LOGO
+    // =====================================================
+
+    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
 
     // =====================================================
     // FETCH ORDER DATA
@@ -10733,14 +12850,20 @@ async function downloadOrderRequestPDF(req, res) {
     const result = await db_query.customQuery(`
       SELECT
 
-        -- Order
+        -- ===============================================
+        -- ORDER
+        -- ===============================================
+
         o.id AS order_serial_id,
         o.row_id AS order_id,
         o.order_status,
         o.order_date,
         o.supplier_id,
 
-        -- Shop
+        -- ===============================================
+        -- SHOP
+        -- ===============================================
+
         sh.row_id AS shop_id,
         sh.shop_name,
         sh.address AS shop_address,
@@ -10748,30 +12871,66 @@ async function downloadOrderRequestPDF(req, res) {
         sh.state,
         sh.phone AS shop_phone,
 
-        -- Order Item
+        -- ===============================================
+        -- ORDER ITEM
+        -- ===============================================
+
         oi.row_id AS order_item_id,
         oi.request_id,
         oi.quantity,
         oi.item_status,
         oi.counter_id,
 
-        -- Sweet
-        sw.row_id AS sweet_id,
-        COALESCE(sw.sweet_name, 'Unknown Sweet') AS sweet_name,
-        COALESCE(sw.unit, '-') AS unit,
+        -- ===============================================
+        -- SWEET
+        -- ===============================================
 
-        -- Counter
+        sw.row_id AS sweet_id,
+
+        COALESCE(
+          sw.sweet_name,
+          'Unknown Sweet'
+        ) AS sweet_name,
+
+        COALESCE(
+          sw.unit,
+          '-'
+        ) AS unit,
+
+        -- ===============================================
+        -- COUNTER
+        -- ===============================================
+
         c.row_id AS counter_id,
-        COALESCE(c.counter_name, 'Default Counter') AS counter_name,
+
+        COALESCE(
+          c.counter_name,
+          'Default Counter'
+        ) AS counter_name,
+
         c.location AS counter_location,
 
-        -- Category
-        cat.row_id AS category_id,
-        COALESCE(cat.category_name, 'Others') AS category_name,
+        -- ===============================================
+        -- CATEGORY
+        -- ===============================================
 
-        -- Department
+        cat.row_id AS category_id,
+
+        COALESCE(
+          cat.category_name,
+          'Others'
+        ) AS category_name,
+
+        -- ===============================================
+        -- DEPARTMENT
+        -- ===============================================
+
         d.row_id AS department_id,
-        COALESCE(d.department_name, 'Others') AS department_name
+
+        COALESCE(
+          d.department_name,
+          'Others'
+        ) AS department_name
 
       FROM ${orderTable} o
 
@@ -10793,7 +12952,8 @@ async function downloadOrderRequestPDF(req, res) {
       LEFT JOIN ${departmentTable} d
         ON d.row_id = cat.department_id
 
-      WHERE o.row_id = '${safeOrderId}'
+      WHERE
+        o.row_id = '${safeOrderId}'
 
       ORDER BY
         c.counter_name ASC,
@@ -10802,6 +12962,10 @@ async function downloadOrderRequestPDF(req, res) {
     `);
 
     const data = result.data || [];
+
+    // =====================================================
+    // ORDER NOT FOUND
+    // =====================================================
 
     if (data.length === 0) {
       return res.status(404).send("No order found");
@@ -10813,10 +12977,42 @@ async function downloadOrderRequestPDF(req, res) {
     // ORDER DISPLAY ID
     // =====================================================
 
-    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
-      6,
-      "0",
-    )}`;
+    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
+
+    // =====================================================
+    // DATE
+    // =====================================================
+
+    function formatDate(value) {
+      if (!value) {
+        return "-";
+      }
+
+      try {
+        return new Date(value).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+      } catch (error) {
+        return "-";
+      }
+    }
+
+    const orderDate = formatDate(order.order_date);
+
+    // =====================================================
+    // SHOP ADDRESS
+    // =====================================================
+
+    const shopAddressParts = [
+      order.shop_address,
+      order.city,
+      order.state,
+    ].filter(Boolean);
+
+    const shopAddress =
+      shopAddressParts.length > 0 ? shopAddressParts.join(", ") : "-";
 
     // =====================================================
     // FILE SETUP
@@ -10837,55 +13033,50 @@ async function downloadOrderRequestPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     // =====================================================
-    // LOGO
+    // A4 PAGE SETTINGS
     // =====================================================
 
-    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+    const PAGE_WIDTH = 595.28;
+    const PAGE_HEIGHT = 841.89;
 
-    // =====================================================
-    // A5 DOCUMENT
-    // =====================================================
-
-    const PAGE_WIDTH = 419.53;
-    const PAGE_HEIGHT = 595.28;
-
-    const MARGIN = 22;
+    const MARGIN = 28;
 
     const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
+    // =====================================================
+    // CREATE PDF
+    // =====================================================
+
     const doc = new PDFDocument({
-      size: "A5",
-      margin: MARGIN,
+      size: "A4",
+
+      margins: {
+        top: MARGIN,
+        bottom: MARGIN,
+        left: MARGIN,
+        right: MARGIN,
+      },
+
       autoFirstPage: true,
-      bufferPages: false,
 
       info: {
         Title: `Order Request ${orderDisplayId}`,
-        Author: "Jodhpur Sweets",
-        Subject: "Purchase / Stock Order Request",
+
+        Author: COMPANY_NAME,
+
+        Subject: "Order Request",
       },
     });
 
-    doc.pipe(fs.createWriteStream(filePath));
+    const writeStream = fs.createWriteStream(filePath);
 
-    // =====================================================
-    // COLORS
-    // =====================================================
-
-    const PRIMARY = "#111827";
-    const DARK = "#1F2937";
-    const SECONDARY = "#6B7280";
-    const BORDER = "#D1D5DB";
-    const LIGHT_BORDER = "#E5E7EB";
-    const LIGHT_BG = "#F8FAFC";
-    const TOTAL_BG = "#F1F5F9";
-    const WHITE = "#FFFFFF";
+    doc.pipe(writeStream);
 
     // =====================================================
     // HELPERS
     // =====================================================
 
-    const safeText = (value, fallback = "-") => {
+    function safeText(value, fallback = "-") {
       if (
         value === null ||
         value === undefined ||
@@ -10895,805 +13086,828 @@ async function downloadOrderRequestPDF(req, res) {
       }
 
       return String(value);
-    };
+    }
 
-    const formatDate = (value) => {
-      if (!value) return "-";
+    function getHSN(item) {
+      return item.hsn_code || item.hsn || item.hsnCode || "-";
+    }
 
-      try {
-        return new Date(value).toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
+    function formatQuantity(value) {
+      const qty = Number(value || 0);
+
+      if (Number.isNaN(qty)) {
+        return "0.00";
+      }
+
+      return qty.toFixed(2);
+    }
+
+    // =====================================================
+    // HEADER
+    // =====================================================
+
+    function drawHeader() {
+      const startY = doc.y;
+
+      // ===================================================
+      // TOP HEADER BOX
+      // ===================================================
+
+      doc.rect(MARGIN, startY, CONTENT_WIDTH, 28).lineWidth(0.8).stroke();
+
+      // ===================================================
+      // GSTIN
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 6, startY + 9, {
+          width: 180,
         });
-      } catch (error) {
-        return "-";
-      }
-    };
 
-    const shopAddress = [order.shop_address, order.city, order.state]
-      .filter(Boolean)
-      .join(", ");
+      // ===================================================
+      // DELIVERY CHALLAN
+      // ===================================================
 
-    // =====================================================
-    // STATUS STYLE
-    // =====================================================
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(12)
+        .fillColor("#000000")
+        .text("Order Request", MARGIN + 180, startY + 7, {
+          width: 180,
+          align: "center",
+        });
 
-    const getStatusStyle = (status) => {
-      const normalized = String(status || "PENDING").toUpperCase();
+      // ===================================================
+      // FOR MOVEMENT OF GOODS
+      // ===================================================
 
-      if (normalized === "ACCEPTED") {
-        return {
-          bg: "#DCFCE7",
-          text: "#166534",
-        };
-      }
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text("FOR MOVEMENT OF GOODS", PAGE_WIDTH - MARGIN - 150, startY + 9, {
+          width: 144,
+          align: "right",
+        });
 
-      if (normalized === "DISPATCHED") {
-        return {
-          bg: "#DBEAFE",
-          text: "#1D4ED8",
-        };
-      }
+      // ===================================================
+      // COMPANY HEADER
+      // ===================================================
 
-      if (normalized === "DELIVERED") {
-        return {
-          bg: "#D1FAE5",
-          text: "#047857",
-        };
-      }
+      const companyTop = startY + 39;
 
-      if (normalized === "REJECTED") {
-        return {
-          bg: "#FEE2E2",
-          text: "#B91C1C",
-        };
-      }
-
-      return {
-        bg: "#FEF3C7",
-        text: "#92400E",
-      };
-    };
-
-    const status = String(order.order_status || "PENDING").toUpperCase();
-
-    const statusStyle = getStatusStyle(status);
-
-    // =====================================================
-    // PAGE HEADER
-    // =====================================================
-
-    const drawPageHeader = (isFirstPage = false) => {
-      const top = 18;
-
-      const logoSize = isFirstPage ? 48 : 30;
-
-      // ---------------------------------------------------
-      // LOGO
-      // ---------------------------------------------------
+      // ===================================================
+      // LOGO - LEFT SIDE
+      // ===================================================
 
       if (fs.existsSync(LOGO_PATH)) {
         try {
-          doc.save();
+          /*
+           * Rectangular Jodhpur Sweets logo.
+           * No circular clipping.
+           */
 
-          doc
-            .circle(MARGIN + logoSize / 2, top + logoSize / 2, logoSize / 2)
-            .clip();
-
-          doc.image(LOGO_PATH, MARGIN, top, {
-            width: logoSize,
-            height: logoSize,
+          doc.image(LOGO_PATH, MARGIN + 8, companyTop + 2, {
+            width: 62,
+            height: 68,
           });
-
-          doc.restore();
-
-          doc
-            .circle(MARGIN + logoSize / 2, top + logoSize / 2, logoSize / 2)
-            .lineWidth(0.8)
-            .stroke(BORDER);
         } catch (logoError) {
           console.log("Logo loading error:", logoError);
         }
-      }
-
-      // ---------------------------------------------------
-      // COMPANY NAME
-      // ---------------------------------------------------
-
-      const companyX = MARGIN + logoSize + 10;
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(isFirstPage ? 12 : 9)
-        .fillColor(PRIMARY)
-        .text("JODHPUR SWEETS", companyX, top + 5, {
-          width: 170,
-        });
-
-      doc
-        .font("Helvetica")
-        .fontSize(isFirstPage ? 6.5 : 5.5)
-        .fillColor(SECONDARY)
-        .text("Purchase & Inventory Management", companyX, top + 21, {
-          width: 170,
-        });
-
-      // ---------------------------------------------------
-      // DOCUMENT TITLE
-      // ---------------------------------------------------
-
-      if (isFirstPage) {
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(11)
-          .fillColor(PRIMARY)
-          .text("ORDER REQUEST", PAGE_WIDTH - MARGIN - 125, top + 3, {
-            width: 125,
-            align: "right",
-          });
-
-        doc
-          .font("Helvetica")
-          .fontSize(6)
-          .fillColor(SECONDARY)
-          .text(
-            "PURCHASE / STOCK DOCUMENT",
-            PAGE_WIDTH - MARGIN - 125,
-            top + 20,
-            {
-              width: 125,
-              align: "right",
-            },
-          );
       } else {
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(7)
-          .fillColor(PRIMARY)
-          .text("ORDER REQUEST", PAGE_WIDTH - MARGIN - 100, top + 8, {
-            width: 100,
-            align: "right",
-          });
+        console.log("Logo not found:", LOGO_PATH);
       }
 
-      // ---------------------------------------------------
-      // HEADER LINE
-      // ---------------------------------------------------
+      // ===================================================
+      // COMPANY TEXT AREA
+      // ===================================================
 
-      const dividerY = isFirstPage ? 76 : 54;
+      /*
+       * Logo occupies left side.
+       * Company text starts after logo.
+       */
 
-      doc
-        .moveTo(MARGIN, dividerY)
-        .lineTo(PAGE_WIDTH - MARGIN, dividerY)
-        .lineWidth(1)
-        .stroke(PRIMARY);
+      const companyX = MARGIN + 68;
 
-      return dividerY;
-    };
+      const companyWidth = CONTENT_WIDTH - 68;
 
-    // =====================================================
-    // TABLE CONFIG
-    // =====================================================
-
-    const rowHeight = 21;
-
-    const colWidths = {
-      sr: 24,
-      sweet: 105,
-      department: 56,
-      category: 58,
-      counter: 60,
-      qty: 38,
-      unit: 34,
-    };
-
-    const totalWidth =
-      colWidths.sr +
-      colWidths.sweet +
-      colWidths.department +
-      colWidths.category +
-      colWidths.counter +
-      colWidths.qty +
-      colWidths.unit;
-
-    // =====================================================
-    // TABLE HEADER
-    // =====================================================
-
-    const drawTableHeader = (y) => {
-      doc.roundedRect(MARGIN, y, totalWidth, rowHeight, 3).fill(PRIMARY);
-
-      doc.font("Helvetica-Bold").fontSize(5.8).fillColor(WHITE);
-
-      let x = MARGIN;
-
-      doc.text("#", x, y + 7, {
-        width: colWidths.sr,
-        align: "center",
-      });
-
-      x += colWidths.sr;
-
-      doc.text("ITEM / SWEET", x + 3, y + 7, {
-        width: colWidths.sweet - 6,
-      });
-
-      x += colWidths.sweet;
-
-      doc.text("DEPT.", x, y + 7, {
-        width: colWidths.department,
-        align: "center",
-      });
-
-      x += colWidths.department;
-
-      doc.text("CATEGORY", x, y + 7, {
-        width: colWidths.category,
-        align: "center",
-      });
-
-      x += colWidths.category;
-
-      doc.text("COUNTER", x, y + 7, {
-        width: colWidths.counter,
-        align: "center",
-      });
-
-      x += colWidths.counter;
-
-      doc.text("QTY", x, y + 7, {
-        width: colWidths.qty,
-        align: "center",
-      });
-
-      x += colWidths.qty;
-
-      doc.text("UNIT", x, y + 7, {
-        width: colWidths.unit,
-        align: "center",
-      });
-
-      return y + rowHeight;
-    };
-
-    // =====================================================
-    // ITEM ROW
-    // =====================================================
-
-    const drawItemRow = (item, index, yPosition) => {
-      const qty = Number(item.quantity || 0);
-
-      const rowBg = index % 2 === 0 ? "#FFFFFF" : "#F8FAFC";
-
-      doc.rect(MARGIN, yPosition, totalWidth, rowHeight).fill(rowBg);
-
-      doc
-        .moveTo(MARGIN, yPosition + rowHeight)
-        .lineTo(MARGIN + totalWidth, yPosition + rowHeight)
-        .lineWidth(0.3)
-        .stroke(LIGHT_BORDER);
-
-      let x = MARGIN;
-
-      // SR
-
-      doc
-        .font("Helvetica")
-        .fontSize(6)
-        .fillColor(SECONDARY)
-        .text(String(index + 1), x, yPosition + 7, {
-          width: colWidths.sr,
-          align: "center",
-        });
-
-      x += colWidths.sr;
-
-      // SWEET
+      // ===================================================
+      // COMPANY NAME
+      // ===================================================
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6.2)
-        .fillColor(PRIMARY)
-        .text(safeText(item.sweet_name), x + 4, yPosition + 7, {
-          width: colWidths.sweet - 8,
-          ellipsis: true,
-          lineBreak: false,
+        .fontSize(19)
+        .fillColor("#000000")
+        .text(COMPANY_NAME, companyX, companyTop + 3, {
+          width: companyWidth,
+          align: "center",
         });
 
-      x += colWidths.sweet;
-
-      // DEPARTMENT
+      // ===================================================
+      // REGD OFFICE
+      // ===================================================
 
       doc
         .font("Helvetica")
-        .fontSize(5.7)
-        .fillColor(DARK)
-        .text(safeText(item.department_name), x + 2, yPosition + 7, {
-          width: colWidths.department - 4,
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_REGD_OFFICE, companyX, companyTop + 30, {
+          width: companyWidth,
           align: "center",
-          ellipsis: true,
-          lineBreak: false,
         });
 
-      x += colWidths.department;
-
-      // CATEGORY
+      // ===================================================
+      // FACTORY
+      // ===================================================
 
       doc
         .font("Helvetica")
-        .fontSize(5.7)
-        .fillColor(DARK)
-        .text(safeText(item.category_name), x + 2, yPosition + 7, {
-          width: colWidths.category - 4,
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_FACTORY, companyX, companyTop + 40, {
+          width: companyWidth,
           align: "center",
-          ellipsis: true,
-          lineBreak: false,
         });
 
-      x += colWidths.category;
-
-      // COUNTER
+      // ===================================================
+      // COMPANY ADDRESS
+      // ===================================================
 
       doc
         .font("Helvetica")
-        .fontSize(5.7)
-        .fillColor(DARK)
-        .text(safeText(item.counter_name), x + 2, yPosition + 7, {
-          width: colWidths.counter - 4,
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(COMPANY_ADDRESS, companyX, companyTop + 50, {
+          width: companyWidth,
           align: "center",
-          ellipsis: true,
-          lineBreak: false,
         });
 
-      x += colWidths.counter;
+      // ===================================================
+      // EMAIL / PHONE
+      // ===================================================
 
-      // QTY
+      doc
+        .font("Helvetica")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text(
+          `Email : ${COMPANY_EMAIL}    PHONE : ${COMPANY_PHONE}`,
+          companyX,
+          companyTop + 60,
+          {
+            width: companyWidth,
+            align: "center",
+          },
+        );
+
+      // ===================================================
+      // HEADER BOTTOM LINE
+      // ===================================================
+
+      const bottomY = companyTop + 78;
+
+      doc
+        .moveTo(MARGIN, bottomY)
+        .lineTo(PAGE_WIDTH - MARGIN, bottomY)
+        .lineWidth(0.8)
+        .stroke();
+
+      doc.y = bottomY + 8;
+    }
+
+    // =====================================================
+    // ORDER INFORMATION
+    // =====================================================
+
+    function drawOrderInformation() {
+      const topY = doc.y;
+
+      const leftWidth = CONTENT_WIDTH / 2;
+
+      const rightWidth = CONTENT_WIDTH / 2;
+
+      // ===================================================
+      // DELIVERY CHALLAN NUMBER
+      // ===================================================
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor(PRIMARY)
-        .text(String(qty), x, yPosition + 6.5, {
-          width: colWidths.qty,
-          align: "center",
+        .fontSize(8)
+        .text("Order Request No. :", MARGIN + 4, topY, {
+          continued: true,
         });
 
-      x += colWidths.qty;
+      doc.font("Helvetica").text(` ${orderDisplayId}`);
 
-      // UNIT
+      // ===================================================
+      // DATE
+      // ===================================================
 
       doc
-        .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(DARK)
-        .text(safeText(item.unit), x, yPosition + 7, {
-          width: colWidths.unit,
-          align: "center",
-          ellipsis: true,
-        });
-
-      return yPosition + rowHeight;
-    };
-
-    // =====================================================
-    // FIRST PAGE
-    // =====================================================
-
-    const headerBottom = drawPageHeader(true);
-
-    // =====================================================
-    // ORDER META
-    // =====================================================
-
-    const metaTop = headerBottom + 12;
-
-    const metaHeight = 58;
-
-    doc
-      .roundedRect(MARGIN, metaTop, CONTENT_WIDTH, metaHeight, 4)
-      .fillAndStroke(LIGHT_BG, BORDER);
-
-    doc
-      .moveTo(MARGIN + CONTENT_WIDTH / 2, metaTop + 8)
-      .lineTo(MARGIN + CONTENT_WIDTH / 2, metaTop + metaHeight - 8)
-      .lineWidth(0.5)
-      .stroke(LIGHT_BORDER);
-
-    // LEFT
-
-    const leftX = MARGIN + 10;
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("ORDER NUMBER", leftX, metaTop + 9);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .fillColor(PRIMARY)
-      .text(orderDisplayId, leftX, metaTop + 20);
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("ORDER DATE", leftX, metaTop + 38);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(DARK)
-      .text(formatDate(order.order_date), leftX + 58, metaTop + 37);
-
-    // RIGHT
-
-    const rightX = MARGIN + CONTENT_WIDTH / 2 + 10;
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("DOCUMENT STATUS", rightX, metaTop + 9);
-
-    doc.roundedRect(rightX, metaTop + 19, 82, 18, 4).fill(statusStyle.bg);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(6.5)
-      .fillColor(statusStyle.text)
-      .text(status, rightX, metaTop + 25, {
-        width: 82,
-        align: "center",
-      });
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("REQUEST TYPE", rightX, metaTop + 43);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(6.5)
-      .fillColor(DARK)
-      .text("STOCK / PURCHASE", rightX + 55, metaTop + 42);
-
-    // =====================================================
-    // ORDER DETAILS
-    // =====================================================
-
-    const detailsTop = metaTop + metaHeight + 14;
-
-    const detailsHeight = 82;
-
-    doc
-      .roundedRect(MARGIN, detailsTop, CONTENT_WIDTH, detailsHeight, 4)
-      .fillAndStroke(WHITE, BORDER);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(PRIMARY)
-      .text("ORDER DETAILS", MARGIN + 10, detailsTop + 9);
-
-    doc
-      .moveTo(MARGIN + 10, detailsTop + 22)
-      .lineTo(PAGE_WIDTH - MARGIN - 10, detailsTop + 22)
-      .lineWidth(0.5)
-      .stroke(LIGHT_BORDER);
-
-    // SHOP
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("SHOP", MARGIN + 10, detailsTop + 31);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(DARK)
-      .text(safeText(order.shop_name), MARGIN + 10, detailsTop + 42, {
-        width: 160,
-        ellipsis: true,
-      });
-
-    // PHONE
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("PHONE", MARGIN + 205, detailsTop + 31);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(DARK)
-      .text(safeText(order.shop_phone), MARGIN + 205, detailsTop + 42, {
-        width: 145,
-        ellipsis: true,
-      });
-
-    // ADDRESS
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.8)
-      .fillColor(SECONDARY)
-      .text("ADDRESS", MARGIN + 10, detailsTop + 60);
-
-    doc
-      .font("Helvetica")
-      .fontSize(6.5)
-      .fillColor(DARK)
-      .text(safeText(shopAddress), MARGIN + 55, detailsTop + 59, {
-        width: CONTENT_WIDTH - 65,
-        ellipsis: true,
-      });
-
-    // =====================================================
-    // ITEMS TITLE
-    // =====================================================
-
-    const tableTitleY = detailsTop + detailsHeight + 15;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor(PRIMARY)
-      .text("ITEM DETAILS", MARGIN, tableTitleY);
-
-    doc
-      .font("Helvetica")
-      .fontSize(5.5)
-      .fillColor(SECONDARY)
-      .text(
-        `${data.length} item${data.length === 1 ? "" : "s"}`,
-        PAGE_WIDTH - MARGIN - 80,
-        tableTitleY + 2,
-        {
-          width: 80,
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`Date : ${orderDate}`, MARGIN + leftWidth, topY, {
+          width: rightWidth - 4,
           align: "right",
+        });
+
+      doc.y = topY + 18;
+
+      // ===================================================
+      // FROM
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("From :", MARGIN + 4, doc.y, {
+          continued: true,
+        });
+
+      doc.font("Helvetica").text(` ${COMPANY_NAME}`);
+
+      // ===================================================
+      // TO
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("To :", MARGIN + leftWidth, topY + 18, {
+          continued: true,
+        });
+
+      doc.font("Helvetica").text(` ${safeText(order.shop_name)}`);
+
+      doc.y = topY + 36;
+
+      // ===================================================
+      // COMPANY GSTIN
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 4, doc.y);
+
+      // ===================================================
+      // SHOP ADDRESS
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Address :", MARGIN + leftWidth, topY + 36, {
+          continued: true,
+        });
+
+      doc.font("Helvetica").text(` ${shopAddress}`, {
+        width: rightWidth - 50,
+      });
+
+      doc.y = Math.max(doc.y, topY + 54);
+
+      // ===================================================
+      // SHOP GSTIN
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + leftWidth, doc.y);
+
+      doc.moveDown(0.5);
+
+      // ===================================================
+      // INFORMATION BOTTOM LINE
+      // ===================================================
+
+      const bottomY = doc.y + 3;
+
+      doc
+        .moveTo(MARGIN, bottomY)
+        .lineTo(PAGE_WIDTH - MARGIN, bottomY)
+        .lineWidth(0.7)
+        .stroke();
+
+      doc.y = bottomY + 8;
+    }
+
+    // =====================================================
+    // TABLE CONFIGURATION
+    // =====================================================
+
+    /*
+      A4 table:
+
+      S.No.   = 40
+      Product = 285
+      HSN     = 110
+      Qty     = remaining width
+
+      Qty automatically finishes exactly
+      at the table right border.
+    */
+
+    const SERIAL_WIDTH = 40;
+
+    const PRODUCT_WIDTH = 285;
+
+    const HSN_WIDTH = 110;
+
+    const QTY_WIDTH = CONTENT_WIDTH - SERIAL_WIDTH - PRODUCT_WIDTH - HSN_WIDTH;
+
+    const TABLE_WIDTH = SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH + QTY_WIDTH;
+
+    const HEADER_HEIGHT = 25;
+
+    // =====================================================
+    // DRAW TABLE HEADER
+    // =====================================================
+
+    function drawTableHeader() {
+      const y = doc.y;
+
+      // ===================================================
+      // OUTER BORDER
+      // ===================================================
+
+      doc.rect(MARGIN, y, TABLE_WIDTH, HEADER_HEIGHT).lineWidth(0.7).stroke();
+
+      // ===================================================
+      // S.NO / PRODUCT
+      // ===================================================
+
+      let x = MARGIN + SERIAL_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // PRODUCT / HSN
+      // ===================================================
+
+      x += PRODUCT_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // HSN / QTY
+      // ===================================================
+
+      x += HSN_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + HEADER_HEIGHT)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // HEADER TEXT
+      // ===================================================
+
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+
+      // S.No.
+
+      doc.text("S.No.", MARGIN, y + 8, {
+        width: SERIAL_WIDTH,
+        align: "center",
+      });
+
+      // Product
+
+      doc.text("Product", MARGIN + SERIAL_WIDTH, y + 8, {
+        width: PRODUCT_WIDTH,
+        align: "center",
+      });
+
+      // HSN
+
+      doc.text("HSN", MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH, y + 8, {
+        width: HSN_WIDTH,
+        align: "center",
+      });
+
+      // Qty
+
+      doc.text(
+        "Qty.",
+        MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH,
+        y + 8,
+        {
+          width: QTY_WIDTH,
+          align: "center",
         },
       );
 
+      doc.y = y + HEADER_HEIGHT;
+    }
+
     // =====================================================
-    // TABLE START
+    // DRAW ITEM ROW
     // =====================================================
 
-    let tableTop = tableTitleY + 15;
+    function drawItemRow(item, index, rowHeight) {
+      const y = doc.y;
 
-    let y = drawTableHeader(tableTop);
+      // ===================================================
+      // OUTER ROW
+      // ===================================================
 
-    let grandTotal = 0;
+      doc.rect(MARGIN, y, TABLE_WIDTH, rowHeight).lineWidth(0.5).stroke();
+
+      // ===================================================
+      // S.NO / PRODUCT
+      // ===================================================
+
+      let x = MARGIN + SERIAL_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
+
+      // ===================================================
+      // PRODUCT / HSN
+      // ===================================================
+
+      x += PRODUCT_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
+
+      // ===================================================
+      // HSN / QTY
+      // ===================================================
+
+      x += HSN_WIDTH;
+
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .lineWidth(0.4)
+        .stroke();
+
+      // ===================================================
+      // SERIAL NUMBER
+      // ===================================================
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(String(index + 1), MARGIN, y + 7, {
+          width: SERIAL_WIDTH,
+          align: "center",
+        });
+
+      // ===================================================
+      // PRODUCT
+      // ===================================================
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(safeText(item.sweet_name), MARGIN + SERIAL_WIDTH + 8, y + 7, {
+          width: PRODUCT_WIDTH - 16,
+
+          ellipsis: true,
+
+          lineBreak: false,
+        });
+
+      // ===================================================
+      // HSN
+      // ===================================================
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(
+          safeText(getHSN(item)),
+          MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH,
+          y + 7,
+          {
+            width: HSN_WIDTH,
+
+            align: "center",
+
+            ellipsis: true,
+
+            lineBreak: false,
+          },
+        );
+
+      // ===================================================
+      // QUANTITY
+      // ===================================================
+
+      const quantityText = formatQuantity(item.quantity);
+
+      const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
+
+      /*
+       * IMPORTANT:
+       *
+       * Quantity has 5px padding
+       * on both sides.
+       *
+       * This prevents quantity text
+       * from touching the table line.
+       */
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text(quantityText, qtyX + 5, y + 7, {
+          width: QTY_WIDTH - 10,
+
+          align: "center",
+
+          lineBreak: false,
+        });
+
+      doc.y = y + rowHeight;
+    }
+
+    // =====================================================
+    // DRAW TOTAL
+    // =====================================================
+
+    function drawTotal(total) {
+      const y = doc.y;
+
+      const totalHeight = 28;
+
+      // ===================================================
+      // OUTER TOTAL BOX
+      // ===================================================
+
+      doc.rect(MARGIN, y, TABLE_WIDTH, totalHeight).lineWidth(0.7).stroke();
+
+      // ===================================================
+      // QTY COLUMN
+      // ===================================================
+
+      const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
+
+      doc
+        .moveTo(qtyX, y)
+        .lineTo(qtyX, y + totalHeight)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // NET TOTAL LABEL
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .fillColor("#000000")
+        .text("Net Total", MARGIN, y + 9, {
+          width: SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH - 8,
+
+          align: "right",
+        });
+
+      // ===================================================
+      // TOTAL QUANTITY
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .fillColor("#000000")
+        .text(formatQuantity(total), qtyX + 5, y + 8, {
+          width: QTY_WIDTH - 10,
+
+          align: "center",
+
+          lineBreak: false,
+        });
+
+      doc.y = y + totalHeight;
+    }
+
+    // =====================================================
+    // RECEIVER / SIGNATURE
+    // =====================================================
+
+    function drawReceiverSection() {
+      const topY = doc.y + 12;
+
+      const boxHeight = 82;
+
+      // ===================================================
+      // OUTER BOX
+      // ===================================================
+
+      doc.rect(MARGIN, topY, CONTENT_WIDTH, boxHeight).lineWidth(0.7).stroke();
+
+      // ===================================================
+      // CENTER LINE
+      // ===================================================
+
+      const centerX = MARGIN + CONTENT_WIDTH / 2;
+
+      doc
+        .moveTo(centerX, topY)
+        .lineTo(centerX, topY + boxHeight)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // RECEIVER NAME
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor("#000000")
+        .text("Receiver Name", MARGIN + 8, topY + 12);
+
+      doc
+        .moveTo(MARGIN + 90, topY + 20)
+        .lineTo(centerX - 12, topY + 20)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // DATE
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Date", MARGIN + 8, topY + 43);
+
+      doc
+        .moveTo(MARGIN + 90, topY + 51)
+        .lineTo(centerX - 12, topY + 51)
+        .lineWidth(0.5)
+        .stroke();
+
+      // ===================================================
+      // FOR JODHPUR SWEETS
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text(`For : ${COMPANY_NAME}`, centerX + 8, topY + 12, {
+          width: CONTENT_WIDTH / 2 - 16,
+        });
+
+      // ===================================================
+      // SIGNATURE LINE
+      // ===================================================
+
+      doc
+        .moveTo(centerX + 45, topY + 51)
+        .lineTo(PAGE_WIDTH - MARGIN - 12, topY + 51)
+        .lineWidth(0.5)
+        .stroke();
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Authorised Signatory", centerX + 8, topY + 58, {
+          width: CONTENT_WIDTH / 2 - 16,
+
+          align: "center",
+        });
+
+      doc.y = topY + boxHeight;
+    }
+
+    // =====================================================
+    // START DOCUMENT
+    // =====================================================
+
+    drawHeader();
+
+    drawOrderInformation();
+
+    // =====================================================
+    // TABLE
+    // =====================================================
+
+    drawTableHeader();
 
     // =====================================================
     // ITEMS
     // =====================================================
+
+    let grandTotal = 0;
+
+    const ROW_HEIGHT = 30;
 
     data.forEach((item, index) => {
       const qty = Number(item.quantity || 0);
 
       grandTotal += qty;
 
-      // IMPORTANT:
-      // Keep enough space for total.
-      // Footer has been completely removed.
+      /*
+       * Keep enough space for:
+       *
+       * - Current row
+       * - Total
+       * - Receiver section
+       */
 
-      const bottomSafeArea = 42;
+      const requiredSpace = ROW_HEIGHT + 28 + 105;
 
-      if (y + rowHeight > PAGE_HEIGHT - bottomSafeArea) {
-        // Close current table
-        if (y > tableTop) {
-          doc
-            .rect(MARGIN, tableTop, totalWidth, y - tableTop)
-            .lineWidth(0.5)
-            .stroke(BORDER);
-        }
+      // =================================================
+      // PAGE BREAK
+      // =================================================
 
-        // New page
+      if (doc.y + requiredSpace > PAGE_HEIGHT - MARGIN) {
         doc.addPage({
-          size: "A5",
-          margin: MARGIN,
+          size: "A4",
+
+          margins: {
+            top: MARGIN,
+            bottom: MARGIN,
+            left: MARGIN,
+            right: MARGIN,
+          },
         });
 
-        drawPageHeader(false);
-
-        const continuationY = 70;
+        drawHeader();
 
         doc
           .font("Helvetica-Bold")
-          .fontSize(7)
-          .fillColor(PRIMARY)
-          .text("ITEM DETAILS — CONTINUED", MARGIN, continuationY);
+          .fontSize(8)
+          .fillColor("#000000")
+          .text("Delivery Challan - Continued", MARGIN, doc.y);
 
-        tableTop = continuationY + 14;
+        doc.moveDown(0.5);
 
-        y = drawTableHeader(tableTop);
+        drawTableHeader();
       }
 
-      y = drawItemRow(item, index, y);
+      drawItemRow(item, index, ROW_HEIGHT);
     });
 
     // =====================================================
-    // TOTAL ROW
+    // TOTAL PAGE CHECK
     // =====================================================
 
-    const totalRowHeight = 25;
-
-    // Keep total on current page whenever possible.
-    // If it doesn't fit, create exactly ONE new page.
-
-    if (y + totalRowHeight > PAGE_HEIGHT - 42) {
-      if (y > tableTop) {
-        doc
-          .rect(MARGIN, tableTop, totalWidth, y - tableTop)
-          .lineWidth(0.5)
-          .stroke(BORDER);
-      }
-
+    if (doc.y + 28 + 105 > PAGE_HEIGHT - MARGIN) {
       doc.addPage({
-        size: "A5",
-        margin: MARGIN,
+        size: "A4",
+
+        margins: {
+          top: MARGIN,
+          bottom: MARGIN,
+          left: MARGIN,
+          right: MARGIN,
+        },
       });
 
-      drawPageHeader(false);
-
-      const summaryY = 70;
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor(PRIMARY)
-        .text("ORDER SUMMARY", MARGIN, summaryY);
-
-      tableTop = summaryY + 14;
-
-      y = drawTableHeader(tableTop);
-    }
-
-    // =====================================================
-    // TOTAL ROW
-    // =====================================================
-
-    doc.rect(MARGIN, y, totalWidth, totalRowHeight).fill(TOTAL_BG);
-
-    doc
-      .rect(MARGIN, y, totalWidth, totalRowHeight)
-      .lineWidth(0.5)
-      .stroke(BORDER);
-
-    const totalLabelWidth =
-      colWidths.sr +
-      colWidths.sweet +
-      colWidths.department +
-      colWidths.category +
-      colWidths.counter;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(PRIMARY)
-      .text("TOTAL QUANTITY", MARGIN + 8, y + 8, {
-        width: totalLabelWidth - 10,
-      });
-
-    const totalQtyX =
-      MARGIN +
-      colWidths.sr +
-      colWidths.sweet +
-      colWidths.department +
-      colWidths.category +
-      colWidths.counter;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .fillColor(PRIMARY)
-      .text(String(grandTotal), totalQtyX, y + 7, {
-        width: colWidths.qty,
-        align: "center",
-      });
-
-    doc
-      .font("Helvetica")
-      .fontSize(6)
-      .fillColor(SECONDARY)
-      .text("TOTAL", totalQtyX + colWidths.qty, y + 8, {
-        width: colWidths.unit,
-        align: "center",
-      });
-
-    // =====================================================
-    // FINAL TABLE BORDER
-    // =====================================================
-
-    const tableBottom = y + totalRowHeight;
-
-    doc
-      .rect(MARGIN, tableTop, totalWidth, tableBottom - tableTop)
-      .lineWidth(0.5)
-      .stroke(BORDER);
-
-    // =====================================================
-    // SUMMARY BOX
-    // =====================================================
-
-    const summaryTop = tableBottom + 12;
-
-    const summaryHeight = 42;
-
-    // VERY IMPORTANT:
-    // Only draw summary if it safely fits.
-    // Otherwise SKIP it instead of allowing PDFKit
-    // to automatically create a blank page.
-
-    if (summaryTop + summaryHeight <= PAGE_HEIGHT - 30) {
-      doc
-        .roundedRect(MARGIN, summaryTop, CONTENT_WIDTH, summaryHeight, 4)
-        .fillAndStroke(WHITE, BORDER);
-
-      // TOTAL ITEMS
-
-      doc
-        .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text("TOTAL ITEMS", MARGIN + 10, summaryTop + 8);
+      drawHeader();
 
       doc
         .font("Helvetica-Bold")
         .fontSize(8)
-        .fillColor(PRIMARY)
-        .text(String(data.length), MARGIN + 10, summaryTop + 19);
+        .fillColor("#000000")
+        .text("Delivery Challan - Summary", MARGIN, doc.y);
 
-      // TOTAL QUANTITY
-
-      doc
-        .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text("TOTAL QUANTITY", MARGIN + 125, summaryTop + 8);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor(PRIMARY)
-        .text(String(grandTotal), MARGIN + 125, summaryTop + 19);
-
-      // STATUS
-
-      doc
-        .font("Helvetica")
-        .fontSize(5.8)
-        .fillColor(SECONDARY)
-        .text("DOCUMENT STATUS", MARGIN + 245, summaryTop + 8);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor(statusStyle.text)
-        .text(status, MARGIN + 245, summaryTop + 19);
+      doc.moveDown(0.5);
     }
 
     // =====================================================
-    // NO FOOTER
+    // NET TOTAL
     // =====================================================
-    //
-    // IMPORTANT:
-    // Do NOT add footer here.
-    //
-    // This was causing PDFKit to automatically
-    // create additional blank pages because the
-    // footer was positioned outside the usable A5
-    // content area.
-    //
+
+    drawTotal(grandTotal);
+
     // =====================================================
+    // RECEIVER / SIGNATURE
+    // =====================================================
+
+    drawReceiverSection();
 
     // =====================================================
     // END PDF
@@ -11705,19 +13919,33 @@ async function downloadOrderRequestPDF(req, res) {
     // RESPONSE
     // =====================================================
 
-    const fileUrl = `/uploads/OrderRequests/${fileName}`;
+    writeStream.on("finish", () => {
+      const fileUrl = `/uploads/OrderRequests/${fileName}`;
 
-    const serverUrl = "https://api.joswee.cloud";
+      const serverUrl = "https://api.joswee.cloud";
 
-    return libFunc.sendResponse(res, {
-      status: 0,
-      msg: "Professional A5 order request PDF generated successfully",
-      filePath: serverUrl + fileUrl,
+      return libFunc.sendResponse(res, {
+        status: 0,
+
+        msg: "Delivery challan PDF generated successfully",
+
+        filePath: serverUrl + fileUrl,
+      });
+    });
+
+    writeStream.on("error", (error) => {
+      console.log("Order PDF write error:", error);
+
+      if (!res.headersSent) {
+        return res.status(500).send("Error writing order PDF");
+      }
     });
   } catch (error) {
     console.log("downloadOrderRequestPDF error:", error);
 
-    return res.status(500).send("Error generating order request PDF");
+    if (!res.headersSent) {
+      return res.status(500).send("Error generating order request PDF");
+    }
   }
 }
 
@@ -12955,7 +15183,6 @@ async function createNotification(user_id, title, message) {
 //   }
 // }
 
-
 async function getAllCounterRequestsByShop(req, res) {
   try {
     const requestTable = schema + ".counter_requests";
@@ -13028,9 +15255,7 @@ async function getAllCounterRequestsByShop(req, res) {
     }
 
     const whereClause =
-      conditions.length > 0
-        ? `WHERE ${conditions.join(" AND ")}`
-        : "";
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     // =====================================
     // FETCH REQUESTS
@@ -13812,10 +16037,7 @@ async function getAllCounterRequestsByShop(req, res) {
     // DATABASE DEBUG
     // =====================================
 
-    console.log(
-      "getAllCounterRequestsByShop result:",
-      result
-    );
+    console.log("getAllCounterRequestsByShop result:", result);
 
     const requests = result.data || [];
 
@@ -13824,105 +16046,48 @@ async function getAllCounterRequestsByShop(req, res) {
     // =====================================
 
     requests.forEach((item, index) => {
-      console.log(
-        "\n=============================================="
-      );
+      console.log("\n==============================================");
 
-      console.log(
-        `SHOP REQUEST DEBUG #${index + 1}`
-      );
+      console.log(`SHOP REQUEST DEBUG #${index + 1}`);
 
-      console.log(
-        "=============================================="
-      );
+      console.log("==============================================");
 
-      console.log(
-        "Request ID             :",
-        item.row_id
-      );
+      console.log("Request ID             :", item.row_id);
 
-      console.log(
-        "Requested Quantity     :",
-        item.requested_quantity
-      );
+      console.log("Requested Quantity     :", item.requested_quantity);
 
-      console.log(
-        "Order ID               :",
-        item.order_id
-      );
+      console.log("Order ID               :", item.order_id);
 
-      console.log(
-        "Order Number           :",
-        item.order_number
-      );
+      console.log("Order Number           :", item.order_number);
 
-      console.log(
-        "Order Status           :",
-        item.order_status
-      );
+      console.log("Order Status           :", item.order_status);
 
-      console.log(
-        "Chalan Verified        :",
-        item.challan_verified
-      );
+      console.log("Chalan Verified        :", item.challan_verified);
 
-      console.log(
-        "Original Verified Qty  :",
-        item.verified_supplied_quantity
-      );
+      console.log("Original Verified Qty  :", item.verified_supplied_quantity);
 
-      console.log(
-        "Reorder Requested Qty  :",
-        item.reorder_requested_quantity
-      );
+      console.log("Reorder Requested Qty  :", item.reorder_requested_quantity);
 
-      console.log(
-        "Reorder Supplied Qty   :",
-        item.reorder_supplied_quantity
-      );
+      console.log("Reorder Supplied Qty   :", item.reorder_supplied_quantity);
 
-      console.log(
-        "Reorder Count          :",
-        item.reorder_count
-      );
+      console.log("Reorder Count          :", item.reorder_count);
 
-      console.log(
-        "Total Supplied Qty     :",
-        item.supplied_quantity
-      );
+      console.log("Total Supplied Qty     :", item.supplied_quantity);
 
-      console.log(
-        "Cancelled Qty          :",
-        item.cancelled_quantity
-      );
+      console.log("Cancelled Qty          :", item.cancelled_quantity);
 
-      console.log(
-        "Total Cancelled Qty    :",
-        item.total_cancelled_quantity
-      );
+      console.log("Total Cancelled Qty    :", item.total_cancelled_quantity);
 
-      console.log(
-        "Pending Qty            :",
-        item.pending_quantity
-      );
+      console.log("Pending Qty            :", item.pending_quantity);
 
-      console.log(
-        "Final Status            :",
-        item.final_status
-      );
+      console.log("Final Status            :", item.final_status);
 
       console.log(
         "Reorder Orders         :",
-        JSON.stringify(
-          item.reorder_orders,
-          null,
-          2
-        )
+        JSON.stringify(item.reorder_orders, null, 2),
       );
 
-      console.log(
-        "==============================================\n"
-      );
+      console.log("==============================================\n");
     });
 
     // =====================================
@@ -13962,22 +16127,25 @@ async function getAllCounterRequestsByShop(req, res) {
       // REQUESTED
       // =====================================
 
-      groupedRequests[groupKey].total_requested_quantity +=
-        Number(item.requested_quantity || 0);
+      groupedRequests[groupKey].total_requested_quantity += Number(
+        item.requested_quantity || 0,
+      );
 
       // =====================================
       // SUPPLIED
       // =====================================
 
-      groupedRequests[groupKey].total_supplied_quantity +=
-        Number(item.supplied_quantity || 0);
+      groupedRequests[groupKey].total_supplied_quantity += Number(
+        item.supplied_quantity || 0,
+      );
 
       // =====================================
       // PENDING
       // =====================================
 
-      groupedRequests[groupKey].total_pending_quantity +=
-        Number(item.pending_quantity || 0);
+      groupedRequests[groupKey].total_pending_quantity += Number(
+        item.pending_quantity || 0,
+      );
 
       // =====================================
       // REQUEST
@@ -13996,29 +16164,15 @@ async function getAllCounterRequestsByShop(req, res) {
     // FINAL DEBUG
     // =====================================
 
-    console.log(
-      "\n================================================="
-    );
+    console.log("\n=================================================");
 
-    console.log(
-      "FINAL SHOP COUNTER REQUEST RESPONSE"
-    );
+    console.log("FINAL SHOP COUNTER REQUEST RESPONSE");
 
-    console.log(
-      "================================================="
-    );
+    console.log("=================================================");
 
-    console.log(
-      JSON.stringify(
-        data,
-        null,
-        2
-      )
-    );
+    console.log(JSON.stringify(data, null, 2));
 
-    console.log(
-      "=================================================\n"
-    );
+    console.log("=================================================\n");
 
     // =====================================
     // RESPONSE
@@ -14031,13 +16185,8 @@ async function getAllCounterRequestsByShop(req, res) {
 
       data,
     });
-
   } catch (error) {
-
-    console.log(
-      "getAllCounterRequestsByShop error:",
-      error
-    );
+    console.log("getAllCounterRequestsByShop error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -14048,9 +16197,6 @@ async function getAllCounterRequestsByShop(req, res) {
     });
   }
 }
-
-
-
 
 async function getProfile(req, res) {
   try {
@@ -19434,6 +21580,737 @@ async function fetchCounterSweets(req, res) {
 // }
 
 // old
+// async function downloadDepartmentSlipPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const counterTable = schema + ".counters";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+//     // =====================================================
+//     // GET ORDER + CHECK SUPPLIER ACCEPTANCE
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         oi.row_id AS order_item_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         sw.row_id AS sweet_id,
+
+//         COALESCE(
+//           sw.sweet_name,
+//           'Unknown Sweet'
+//         ) AS sweet_name,
+
+//         COALESCE(
+//           sw.unit,
+//           '-'
+//         ) AS unit,
+
+//         c.row_id AS counter_id,
+
+//         COALESCE(
+//           c.counter_name,
+//           'Default Counter'
+//         ) AS counter_name,
+
+//         c.location AS counter_location,
+
+//         cat.row_id AS category_id,
+
+//         COALESCE(
+//           cat.category_name,
+//           'Others'
+//         ) AS category_name,
+
+//         d.row_id AS department_id,
+
+//         COALESCE(
+//           d.department_name,
+//           'Others'
+//         ) AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = oi.counter_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE
+//         o.row_id = '${safeOrderId}'
+//         AND o.order_status IN ('ACCEPTED', 'PARTIAL', 'DISPATCHED', 'DELIVERED')
+
+//       ORDER BY
+//         d.department_name ASC,
+//         c.counter_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     // =====================================================
+//     // SUPPLIER HAS NOT ACCEPTED
+//     // =====================================================
+
+//     if (data.length === 0) {
+//       const orderCheck = await db_query.customQuery(`
+//         SELECT
+//           row_id,
+//           order_status
+//         FROM ${orderTable}
+//         WHERE row_id = '${safeOrderId}'
+//       `);
+
+//       const orderData = orderCheck.data || [];
+
+//       if (orderData.length === 0) {
+//         return res.status(404).send("Order not found");
+//       }
+
+//       console.log("orderData[0].order_status", orderData[0].order_status);
+
+//       if (
+//         !["ACCEPTED", "PARTIAL", "DISPATCHED", "DELIVERED"].includes(
+//           orderData[0].order_status,
+//         )
+//       ) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Department slip is not available. Supplier must accept the order first.",
+//         });
+//       }
+
+//       return res.status(404).send("No department items found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
+
+//     // =====================================================
+//     // GROUP DATA BY DEPARTMENT
+//     // =====================================================
+
+//     const departmentGrouped = {};
+
+//     data.forEach((item) => {
+//       const departmentId = item.department_id || "NO_DEPARTMENT";
+
+//       const departmentName = item.department_name || "Others";
+
+//       if (!departmentGrouped[departmentId]) {
+//         departmentGrouped[departmentId] = {
+//           department_name: departmentName,
+//           items: [],
+//         };
+//       }
+
+//       departmentGrouped[departmentId].items.push(item);
+//     });
+
+//     const departments = Object.values(departmentGrouped);
+
+//     // =====================================================
+//     // THERMAL PAPER SETTINGS
+//     // =====================================================
+
+//     // 80mm thermal paper
+//     const PAPER_WIDTH = 226.77;
+
+//     const SIDE_MARGIN = 8;
+
+//     const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
+
+//     // =====================================================
+//     // TABLE WIDTHS
+//     // =====================================================
+
+//     const COUNTER_WIDTH = 55;
+//     const CATEGORY_WIDTH = 48;
+//     const SWEET_WIDTH = 82;
+//     const QTY_WIDTH = 25;
+
+//     const TABLE_WIDTH =
+//       COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
+
+//     const ROW_HEIGHT = 17;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `DepartmentSlip_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // PAGE HEIGHT
+//     // =====================================================
+
+//     /*
+//       Thermal printers use roll paper.
+
+//       We calculate the height according to
+//       the number of rows.
+
+//       If there are too many rows, we split
+//       the department into multiple pages.
+//     */
+
+//     const MAX_ROWS_PER_PAGE = 28;
+
+//     function splitItems(items) {
+//       const pages = [];
+
+//       for (let i = 0; i < items.length; i += MAX_ROWS_PER_PAGE) {
+//         pages.push(items.slice(i, i + MAX_ROWS_PER_PAGE));
+//       }
+
+//       return pages;
+//     }
+
+//     // =====================================================
+//     // ROUND LOGO
+//     // =====================================================
+
+//     const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
+
+//     function drawRoundLogo(doc) {
+//       if (!fs.existsSync(LOGO_PATH)) {
+//         return;
+//       }
+
+//       const logoSize = 38;
+
+//       const x = (PAPER_WIDTH - logoSize) / 2;
+
+//       const y = 6;
+
+//       doc.save();
+
+//       doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2).clip();
+
+//       doc.image(LOGO_PATH, x, y, {
+//         width: logoSize,
+//         height: logoSize,
+//       });
+
+//       doc.restore();
+
+//       // Small circular outline
+//       doc
+//         .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
+//         .lineWidth(0.5)
+//         .stroke();
+
+//       doc.y = y + logoSize + 4;
+//     }
+
+//     // =====================================================
+//     // CALCULATE PAGE HEIGHT
+//     // =====================================================
+
+//     function calculatePageHeight(itemCount) {
+//       /*
+//         Logo                  48
+//         Title                 18
+//         Department            16
+//         Separator              8
+//         Order information     55
+//         Separator              8
+//         Table header          17
+//         Items                 dynamic
+//         Total                 20
+//         Footer                25
+//         Bottom margin         10
+//       */
+
+//       return (
+//         48 + 18 + 16 + 8 + 55 + 8 + 17 + itemCount * ROW_HEIGHT + 20 + 25 + 10
+//       );
+//     }
+
+//     // =====================================================
+//     // FIRST PAGE
+//     // =====================================================
+
+//     const firstDepartment = departments[0];
+
+//     const firstPages = splitItems(firstDepartment.items);
+
+//     const firstPageHeight = calculatePageHeight(firstPages[0].length);
+
+//     // =====================================================
+//     // CREATE PDF
+//     // =====================================================
+
+//     const doc = new PDFDocument({
+//       size: [PAPER_WIDTH, firstPageHeight],
+
+//       margins: {
+//         top: 6,
+//         bottom: 6,
+//         left: SIDE_MARGIN,
+//         right: SIDE_MARGIN,
+//       },
+
+//       autoFirstPage: true,
+//     });
+
+//     const writeStream = fs.createWriteStream(filePath);
+
+//     doc.pipe(writeStream);
+
+//     // =====================================================
+//     // DRAW DEPARTMENT HEADER
+//     // =====================================================
+
+//     function drawHeader(department, isContinuation = false) {
+//       // -----------------------------------------------
+//       // LOGO
+//       // -----------------------------------------------
+
+//       drawRoundLogo(doc);
+
+//       // -----------------------------------------------
+//       // TITLE
+//       // -----------------------------------------------
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(11)
+//         .fillColor("#000000")
+//         .text(
+//           isContinuation ? "DEPARTMENT SLIP - CONTINUED" : "DEPARTMENT SLIP",
+//           {
+//             width: CONTENT_WIDTH,
+//             align: "center",
+//             lineBreak: false,
+//           },
+//         );
+
+//       doc.moveDown(0.1);
+
+//       // -----------------------------------------------
+//       // DEPARTMENT
+//       // -----------------------------------------------
+
+//       doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
+//         width: CONTENT_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // TOP SEPARATOR
+//       // -----------------------------------------------
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // ORDER INFO
+//       // -----------------------------------------------
+
+//       doc.font("Helvetica").fontSize(7.5);
+
+//       doc.text(`Order : ${orderDisplayId}`);
+
+//       doc.text(`Shop  : ${order.shop_name || "-"}`);
+
+//       doc.text(
+//         `Date  : ${
+//           order.order_date
+//             ? new Date(order.order_date).toLocaleDateString("en-IN")
+//             : "-"
+//         }`,
+//       );
+
+//       doc.text(`Status: ${order.order_status}`);
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // SECOND SEPARATOR
+//       // -----------------------------------------------
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.35);
+//     }
+
+//     // =====================================================
+//     // DRAW TABLE HEADER
+//     // =====================================================
+
+//     function drawTableHeader() {
+//       const y = doc.y;
+
+//       doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
+
+//       // Header line
+//       doc
+//         .moveTo(SIDE_MARGIN, y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
+//         .lineWidth(0.5)
+//         .stroke();
+
+//       doc.text("COUNTER", SIDE_MARGIN, y + 3, {
+//         width: COUNTER_WIDTH,
+//         align: "left",
+//       });
+
+//       doc.text("CATEGORY", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+//         width: CATEGORY_WIDTH,
+//         align: "left",
+//       });
+
+//       doc.text("SWEET", SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH, y + 3, {
+//         width: SWEET_WIDTH,
+//         align: "left",
+//       });
+
+//       doc.text(
+//         "QTY",
+//         SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+//         y + 3,
+//         {
+//           width: QTY_WIDTH,
+//           align: "center",
+//         },
+//       );
+
+//       doc.y = y + ROW_HEIGHT;
+
+//       // Bottom line
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.5)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW ITEM
+//     // =====================================================
+
+//     function drawItem(item) {
+//       const y = doc.y;
+
+//       const qty = Number(item.quantity || 0);
+
+//       doc.font("Helvetica").fontSize(7).fillColor("#000000");
+
+//       // Counter
+//       doc.text(item.counter_name || "-", SIDE_MARGIN, y + 3, {
+//         width: COUNTER_WIDTH - 2,
+//         ellipsis: true,
+//       });
+
+//       // Category
+//       doc.text(item.category_name || "-", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+//         width: CATEGORY_WIDTH - 2,
+//         ellipsis: true,
+//       });
+
+//       // Sweet
+//       doc.text(
+//         item.sweet_name || "-",
+//         SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH,
+//         y + 3,
+//         {
+//           width: SWEET_WIDTH - 2,
+//           ellipsis: true,
+//         },
+//       );
+
+//       // Quantity
+//       const quantityText =
+//         item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+
+//       doc.text(
+//         quantityText,
+//         SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+//         y + 3,
+//         {
+//           width: QTY_WIDTH,
+//           align: "center",
+//           ellipsis: true,
+//         },
+//       );
+
+//       doc.y = y + ROW_HEIGHT;
+
+//       // Row separator
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.25)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW TOTAL
+//     // =====================================================
+
+//     function drawTotal(total) {
+//       const y = doc.y;
+
+//       doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+
+//       doc.text("TOTAL", SIDE_MARGIN, y + 4, {
+//         width: COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+//         align: "right",
+//       });
+
+//       doc.text(
+//         String(total),
+//         SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+//         y + 4,
+//         {
+//           width: QTY_WIDTH,
+//           align: "center",
+//         },
+//       );
+
+//       doc.y = y + 20;
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW FOOTER
+//     // =====================================================
+
+//     function drawFooter() {
+//       doc.moveDown(0.5);
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6.5)
+//         .fillColor("#555555")
+//         .text("Department Production Slip", {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc.text("System Generated", {
+//         width: CONTENT_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.fillColor("#000000");
+//     }
+
+//     // =====================================================
+//     // PROCESS DEPARTMENTS
+//     // =====================================================
+
+//     departments.forEach((department, departmentIndex) => {
+//       const departmentPages = splitItems(department.items);
+
+//       departmentPages.forEach((pageItems, pageIndex) => {
+//         // -----------------------------------------
+//         // NEW PAGE
+//         // -----------------------------------------
+
+//         if (departmentIndex !== 0 || pageIndex !== 0) {
+//           const pageHeight = calculatePageHeight(pageItems.length);
+
+//           doc.addPage({
+//             size: [PAPER_WIDTH, pageHeight],
+
+//             margins: {
+//               top: 6,
+//               bottom: 6,
+//               left: SIDE_MARGIN,
+//               right: SIDE_MARGIN,
+//             },
+//           });
+//         }
+
+//         // -----------------------------------------
+//         // HEADER
+//         // -----------------------------------------
+
+//         drawHeader(department, pageIndex > 0);
+
+//         // -----------------------------------------
+//         // TABLE HEADER
+//         // -----------------------------------------
+
+//         drawTableHeader();
+
+//         // -----------------------------------------
+//         // ITEMS
+//         // -----------------------------------------
+
+//         let pageTotal = 0;
+
+//         pageItems.forEach((item) => {
+//           pageTotal += Number(item.quantity || 0);
+
+//           drawItem(item);
+//         });
+
+//         // -----------------------------------------
+//         // TOTAL
+//         // -----------------------------------------
+
+//         /*
+//               Only show final total on the last
+//               page of that department.
+
+//               On continuation pages show
+//               "Page Total".
+//             */
+
+//         if (pageIndex === departmentPages.length - 1) {
+//           const departmentTotal = department.items.reduce(
+//             (sum, item) => sum + Number(item.quantity || 0),
+//             0,
+//           );
+
+//           drawTotal(departmentTotal);
+//         } else {
+//           const y = doc.y;
+
+//           doc
+//             .font("Helvetica-Bold")
+//             .fontSize(7.5)
+//             .text(`PAGE TOTAL: ${pageTotal}`, SIDE_MARGIN, y + 4, {
+//               width: TABLE_WIDTH,
+//               align: "right",
+//             });
+
+//           doc.y = y + 20;
+
+//           doc
+//             .moveTo(SIDE_MARGIN, doc.y)
+//             .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//             .lineWidth(0.5)
+//             .stroke();
+//         }
+
+//         // -----------------------------------------
+//         // FOOTER
+//         // -----------------------------------------
+
+//         drawFooter();
+//       });
+//     });
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // SEND RESPONSE AFTER PDF CREATED
+//     // =====================================================
+
+//     writeStream.on("finish", () => {
+//       const fileUrl = `/uploads/DepartmentSlips/${fileName}`;
+
+//       const serverUrl = "https://api.joswee.cloud";
+
+//       return libFunc.sendResponse(res, {
+//         status: 0,
+//         msg: "Department slip generated successfully",
+//         filePath: serverUrl + fileUrl,
+//       });
+//     });
+
+//     writeStream.on("error", (error) => {
+//       console.log("Department PDF write error:", error);
+
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error writing department slip");
+//       }
+//     });
+//   } catch (error) {
+//     console.log("downloadDepartmentSlipPDF error:", error);
+
+//     if (!res.headersSent) {
+//       return res.status(500).send("Error generating department slip");
+//     }
+//   }
+// }
+
+////// test
+
 async function downloadDepartmentSlipPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -19446,7 +22323,6 @@ async function downloadDepartmentSlipPDF(req, res) {
     const itemTable = schema + ".order_items";
     const shopTable = schema + ".shops";
     const sweetTable = schema + ".sweets";
-    const counterTable = schema + ".counters";
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
 
@@ -19489,15 +22365,6 @@ async function downloadDepartmentSlipPDF(req, res) {
           '-'
         ) AS unit,
 
-        c.row_id AS counter_id,
-
-        COALESCE(
-          c.counter_name,
-          'Default Counter'
-        ) AS counter_name,
-
-        c.location AS counter_location,
-
         cat.row_id AS category_id,
 
         COALESCE(
@@ -19523,9 +22390,6 @@ async function downloadDepartmentSlipPDF(req, res) {
       LEFT JOIN ${sweetTable} sw
         ON sw.row_id = oi.sweet_id
 
-      LEFT JOIN ${counterTable} c
-        ON c.row_id = oi.counter_id
-
       LEFT JOIN ${categoryTable} cat
         ON cat.row_id = sw.category_id
 
@@ -19534,11 +22398,15 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       WHERE
         o.row_id = '${safeOrderId}'
-        AND o.order_status IN ('ACCEPTED', 'PARTIAL', 'DISPATCHED', 'DELIVERED')
+        AND o.order_status IN (
+          'ACCEPTED',
+          'PARTIAL',
+          'DISPATCHED',
+          'DELIVERED'
+        )
 
       ORDER BY
         d.department_name ASC,
-        c.counter_name ASC,
         cat.category_name ASC,
         sw.sweet_name ASC
     `);
@@ -19626,13 +22494,12 @@ async function downloadDepartmentSlipPDF(req, res) {
     // TABLE WIDTHS
     // =====================================================
 
-    const COUNTER_WIDTH = 55;
-    const CATEGORY_WIDTH = 48;
-    const SWEET_WIDTH = 82;
-    const QTY_WIDTH = 25;
+    // Counter removed
+    const CATEGORY_WIDTH = 65;
+    const SWEET_WIDTH = 112;
+    const QTY_WIDTH = 41;
 
-    const TABLE_WIDTH =
-      COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
+    const TABLE_WIDTH = CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
 
     const ROW_HEIGHT = 17;
 
@@ -19655,18 +22522,8 @@ async function downloadDepartmentSlipPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     // =====================================================
-    // PAGE HEIGHT
+    // PAGE SETTINGS
     // =====================================================
-
-    /*
-      Thermal printers use roll paper.
-
-      We calculate the height according to
-      the number of rows.
-
-      If there are too many rows, we split
-      the department into multiple pages.
-    */
 
     const MAX_ROWS_PER_PAGE = 28;
 
@@ -19681,63 +22538,38 @@ async function downloadDepartmentSlipPDF(req, res) {
     }
 
     // =====================================================
-    // ROUND LOGO
-    // =====================================================
-
-    const LOGO_PATH = "/home/uploads/ShopMedia/1789809020026_logo.jpg";
-
-    function drawRoundLogo(doc) {
-      if (!fs.existsSync(LOGO_PATH)) {
-        return;
-      }
-
-      const logoSize = 38;
-
-      const x = (PAPER_WIDTH - logoSize) / 2;
-
-      const y = 6;
-
-      doc.save();
-
-      doc.circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2).clip();
-
-      doc.image(LOGO_PATH, x, y, {
-        width: logoSize,
-        height: logoSize,
-      });
-
-      doc.restore();
-
-      // Small circular outline
-      doc
-        .circle(x + logoSize / 2, y + logoSize / 2, logoSize / 2)
-        .lineWidth(0.5)
-        .stroke();
-
-      doc.y = y + logoSize + 4;
-    }
-
-    // =====================================================
     // CALCULATE PAGE HEIGHT
     // =====================================================
 
-    function calculatePageHeight(itemCount) {
+    function calculatePageHeight(itemCount, isFinalDepartmentPage = true) {
       /*
-        Logo                  48
-        Title                 18
-        Department            16
-        Separator              8
-        Order information     55
-        Separator              8
-        Table header          17
-        Items                 dynamic
-        Total                 20
-        Footer                25
-        Bottom margin         10
+        Jodhpur Sweets         22
+        Department             16
+        Separator               8
+        Order + Shop + Date    35
+        Separator               8
+        Table Header           17
+        Items                  dynamic
+        Total                  20
+        Footer                 25
+        Cut Line               28
+        Bottom Margin          10
       */
 
+      const CUTTING_SPACE = isFinalDepartmentPage ? 28 : 0;
+
       return (
-        48 + 18 + 16 + 8 + 55 + 8 + 17 + itemCount * ROW_HEIGHT + 20 + 25 + 10
+        22 +
+        16 +
+        8 +
+        35 +
+        8 +
+        17 +
+        itemCount * ROW_HEIGHT +
+        20 +
+        25 +
+        CUTTING_SPACE +
+        10
       );
     }
 
@@ -19749,7 +22581,12 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     const firstPages = splitItems(firstDepartment.items);
 
-    const firstPageHeight = calculatePageHeight(firstPages[0].length);
+    const firstPageIsFinal = firstPages.length === 1;
+
+    const firstPageHeight = calculatePageHeight(
+      firstPages[0].length,
+      firstPageIsFinal,
+    );
 
     // =====================================================
     // CREATE PDF
@@ -19773,37 +22610,28 @@ async function downloadDepartmentSlipPDF(req, res) {
     doc.pipe(writeStream);
 
     // =====================================================
-    // DRAW DEPARTMENT HEADER
+    // DRAW HEADER
     // =====================================================
 
     function drawHeader(department, isContinuation = false) {
       // -----------------------------------------------
-      // LOGO
-      // -----------------------------------------------
-
-      drawRoundLogo(doc);
-
-      // -----------------------------------------------
-      // TITLE
+      // BRAND NAME
       // -----------------------------------------------
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(11)
+        .fontSize(12)
         .fillColor("#000000")
-        .text(
-          isContinuation ? "DEPARTMENT SLIP - CONTINUED" : "DEPARTMENT SLIP",
-          {
-            width: CONTENT_WIDTH,
-            align: "center",
-            lineBreak: false,
-          },
-        );
+        .text("JODHPUR SWEETS", {
+          width: CONTENT_WIDTH,
+          align: "center",
+          lineBreak: false,
+        });
 
-      doc.moveDown(0.1);
+      doc.moveDown(0.15);
 
       // -----------------------------------------------
-      // DEPARTMENT
+      // DEPARTMENT NAME
       // -----------------------------------------------
 
       doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
@@ -19826,14 +22654,26 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.moveDown(0.35);
 
       // -----------------------------------------------
-      // ORDER INFO
+      // ORDER + SHOP
       // -----------------------------------------------
 
       doc.font("Helvetica").fontSize(7.5);
 
-      doc.text(`Order : ${orderDisplayId}`);
+      const orderShopText = `Order : ${orderDisplayId}    Shop : ${
+        order.shop_name || "-"
+      }`;
 
-      doc.text(`Shop  : ${order.shop_name || "-"}`);
+      doc.text(orderShopText, SIDE_MARGIN, doc.y, {
+        width: CONTENT_WIDTH,
+        align: "left",
+        lineBreak: false,
+      });
+
+      doc.moveDown(0.2);
+
+      // -----------------------------------------------
+      // DATE
+      // -----------------------------------------------
 
       doc.text(
         `Date  : ${
@@ -19841,9 +22681,11 @@ async function downloadDepartmentSlipPDF(req, res) {
             ? new Date(order.order_date).toLocaleDateString("en-IN")
             : "-"
         }`,
+        {
+          width: CONTENT_WIDTH,
+          lineBreak: false,
+        },
       );
-
-      doc.text(`Status: ${order.order_status}`);
 
       doc.moveDown(0.35);
 
@@ -19869,37 +22711,39 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
 
-      // Header line
+      // Top line
       doc
         .moveTo(SIDE_MARGIN, y)
         .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
         .lineWidth(0.5)
         .stroke();
 
-      doc.text("COUNTER", SIDE_MARGIN, y + 3, {
-        width: COUNTER_WIDTH,
-        align: "left",
-      });
+      // -----------------------------------------------
+      // CATEGORY
+      // -----------------------------------------------
 
-      doc.text("CATEGORY", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+      doc.text("CATEGORY", SIDE_MARGIN, y + 3, {
         width: CATEGORY_WIDTH,
         align: "left",
       });
 
-      doc.text("SWEET", SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH, y + 3, {
+      // -----------------------------------------------
+      // SWEET
+      // -----------------------------------------------
+
+      doc.text("SWEET", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
         width: SWEET_WIDTH,
         align: "left",
       });
 
-      doc.text(
-        "QTY",
-        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
-        y + 3,
-        {
-          width: QTY_WIDTH,
-          align: "center",
-        },
-      );
+      // -----------------------------------------------
+      // QTY
+      // -----------------------------------------------
+
+      doc.text("QTY", SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH, y + 3, {
+        width: QTY_WIDTH,
+        align: "center",
+      });
 
       doc.y = y + ROW_HEIGHT;
 
@@ -19922,36 +22766,34 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       doc.font("Helvetica").fontSize(7).fillColor("#000000");
 
-      // Counter
-      doc.text(item.counter_name || "-", SIDE_MARGIN, y + 3, {
-        width: COUNTER_WIDTH - 2,
-        ellipsis: true,
-      });
+      // -----------------------------------------------
+      // CATEGORY
+      // -----------------------------------------------
 
-      // Category
-      doc.text(item.category_name || "-", SIDE_MARGIN + COUNTER_WIDTH, y + 3, {
+      doc.text(item.category_name || "-", SIDE_MARGIN, y + 3, {
         width: CATEGORY_WIDTH - 2,
         ellipsis: true,
       });
 
-      // Sweet
-      doc.text(
-        item.sweet_name || "-",
-        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH,
-        y + 3,
-        {
-          width: SWEET_WIDTH - 2,
-          ellipsis: true,
-        },
-      );
+      // -----------------------------------------------
+      // SWEET
+      // -----------------------------------------------
 
-      // Quantity
+      doc.text(item.sweet_name || "-", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
+        width: SWEET_WIDTH - 2,
+        ellipsis: true,
+      });
+
+      // -----------------------------------------------
+      // QUANTITY
+      // -----------------------------------------------
+
       const quantityText =
         item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
 
       doc.text(
         quantityText,
-        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
         y + 3,
         {
           width: QTY_WIDTH,
@@ -19980,13 +22822,13 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
 
       doc.text("TOTAL", SIDE_MARGIN, y + 4, {
-        width: COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        width: CATEGORY_WIDTH + SWEET_WIDTH,
         align: "right",
       });
 
       doc.text(
         String(total),
-        SIDE_MARGIN + COUNTER_WIDTH + CATEGORY_WIDTH + SWEET_WIDTH,
+        SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
         y + 4,
         {
           width: QTY_WIDTH,
@@ -20014,17 +22856,54 @@ async function downloadDepartmentSlipPDF(req, res) {
         .font("Helvetica")
         .fontSize(6.5)
         .fillColor("#555555")
-        .text("Department Production Slip", {
+        .text("System Generated", {
           width: CONTENT_WIDTH,
           align: "center",
         });
 
-      doc.text("System Generated", {
-        width: CONTENT_WIDTH,
-        align: "center",
-      });
-
       doc.fillColor("#000000");
+    }
+
+    // =====================================================
+    // DRAW CUTTING LINE
+    // =====================================================
+
+    function drawCuttingLine() {
+      doc.moveDown(0.5);
+
+      const y = doc.y + 4;
+
+      // -----------------------------------------------
+      // DASHED CUT LINE
+      // -----------------------------------------------
+
+      doc
+        .save()
+        .dash(3, {
+          space: 3,
+        })
+        .moveTo(SIDE_MARGIN, y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, y)
+        .lineWidth(0.8)
+        .stroke()
+        .undash()
+        .restore();
+
+      // -----------------------------------------------
+      // CUT HERE
+      // -----------------------------------------------
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(7)
+        .fillColor("#000000")
+        .text("CUT HERE", SIDE_MARGIN, y - 4, {
+          width: CONTENT_WIDTH,
+          align: "center",
+          lineBreak: false,
+        });
+
+      doc.y = y + 14;
     }
 
     // =====================================================
@@ -20036,11 +22915,20 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       departmentPages.forEach((pageItems, pageIndex) => {
         // -----------------------------------------
+        // FINAL PAGE CHECK
+        // -----------------------------------------
+
+        const isFinalDepartmentPage = pageIndex === departmentPages.length - 1;
+
+        // -----------------------------------------
         // NEW PAGE
         // -----------------------------------------
 
         if (departmentIndex !== 0 || pageIndex !== 0) {
-          const pageHeight = calculatePageHeight(pageItems.length);
+          const pageHeight = calculatePageHeight(
+            pageItems.length,
+            isFinalDepartmentPage,
+          );
 
           doc.addPage({
             size: [PAPER_WIDTH, pageHeight],
@@ -20082,15 +22970,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         // TOTAL
         // -----------------------------------------
 
-        /*
-              Only show final total on the last
-              page of that department.
-
-              On continuation pages show
-              "Page Total".
-            */
-
-        if (pageIndex === departmentPages.length - 1) {
+        if (isFinalDepartmentPage) {
           const departmentTotal = department.items.reduce(
             (sum, item) => sum + Number(item.quantity || 0),
             0,
@@ -20122,6 +23002,14 @@ async function downloadDepartmentSlipPDF(req, res) {
         // -----------------------------------------
 
         drawFooter();
+
+        // -----------------------------------------
+        // CUTTING LINE
+        // -----------------------------------------
+
+        if (isFinalDepartmentPage) {
+          drawCuttingLine();
+        }
       });
     });
 

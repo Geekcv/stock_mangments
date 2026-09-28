@@ -3254,6 +3254,433 @@ async function createCounterRequest(req, res) {
   }
 }
 
+// async function createFinalOrder(req, res) {
+//   try {
+//     const user = req.data;
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const requestTable = schema + ".counter_requests";
+//     const counterTable = schema + ".counters";
+//     const supplierTable = schema + ".suppliers";
+//     const sweetTable = schema + ".sweets";
+
+//     const { supplier_id, request_ids, shop_id } = req.data || {};
+
+//     console.log("createFinalOrder request:", req.data);
+
+//     // =====================================
+//     // ROLE VALIDATION
+//     // =====================================
+
+//     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Access denied",
+//       });
+//     }
+
+//     // =====================================
+//     // SHOP VALIDATION
+//     // =====================================
+
+//     let finalShopId;
+
+//     if (user.user_role === "SHOP_ADMIN") {
+//       if (!user.shopId) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Shop ID not found in token",
+//         });
+//       }
+
+//       finalShopId = user.shopId;
+//     }
+
+//     if (user.user_role === "ADMIN") {
+//       if (!shop_id) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "shop_id is required",
+//         });
+//       }
+
+//       finalShopId = shop_id.trim();
+//     }
+
+//     // =====================================
+//     // BASIC VALIDATION
+//     // =====================================
+
+//     if (!supplier_id) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "supplier_id is required",
+//       });
+//     }
+
+//     if (!Array.isArray(request_ids) || request_ids.length === 0) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "request_ids are required",
+//       });
+//     }
+
+//     const supplierId = supplier_id.trim();
+
+//     // =====================================
+//     // UNIQUE REQUEST IDS
+//     // =====================================
+
+//     const uniqueRequestIds = [
+//       ...new Set(request_ids.filter(Boolean).map((id) => id.trim())),
+//     ];
+
+//     if (uniqueRequestIds.length === 0) {
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Valid request_ids are required",
+//       });
+//     }
+
+//     const requestIdsSql = uniqueRequestIds
+//       .map((id) => `'${id.replaceAll("'", "`")}'`)
+//       .join(",");
+
+//     // =====================================
+//     // BEGIN TRANSACTION
+//     // =====================================
+
+//     await connect_db.query("BEGIN");
+
+//     // =====================================
+//     // SUPPLIER VALIDATION
+//     // =====================================
+
+//     const supplierCheck = await db_query.customQuery(`
+//       SELECT
+//         row_id,
+//         supplier_name
+//       FROM ${supplierTable}
+//       WHERE row_id = '${supplierId.replaceAll("'", "`")}'
+//     `);
+
+//     if (!supplierCheck.data?.length) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Invalid supplier",
+//       });
+//     }
+
+//     // =====================================
+//     // FETCH REQUESTS
+//     // =====================================
+
+//     const requests = await db_query.customQuery(`
+//       SELECT
+//         r.row_id,
+//         r.counter_id,
+//         r.sweet_id,
+//         r.quantity,
+//         r.status,
+
+//         c.shop_id,
+//         c.counter_name,
+
+//         s.sweet_name,
+//         s.supplier_id AS sweet_supplier_id
+
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${counterTable} c
+//         ON c.row_id = r.counter_id
+
+//       LEFT JOIN ${sweetTable} s
+//         ON s.row_id = r.sweet_id
+
+//       WHERE r.row_id IN (${requestIdsSql})
+//       AND r.status = 'PENDING'
+//     `);
+
+//     // =====================================
+//     // REQUEST VALIDATION
+//     // =====================================
+
+//     if (!requests.data || requests.data.length === 0) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "No valid pending requests found",
+//       });
+//     }
+
+//     if (requests.data.length !== uniqueRequestIds.length) {
+//       await connect_db.query("ROLLBACK");
+
+//       return libFunc.sendResponse(res, {
+//         status: 1,
+//         msg: "Some request_ids are invalid or already processed",
+//       });
+//     }
+
+//     // =====================================
+//     // SHOP + SUPPLIER VALIDATION
+//     // =====================================
+
+//     for (const request of requests.data) {
+//       // -------------------------------------
+//       // Shop validation
+//       // -------------------------------------
+
+//       if (request.shop_id !== finalShopId) {
+//         await connect_db.query("ROLLBACK");
+
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "All requests must belong to your shop",
+//         });
+//       }
+
+//       // -------------------------------------
+//       // Supplier validation
+//       // -------------------------------------
+
+//       if (request.sweet_supplier_id !== supplierId) {
+//         await connect_db.query("ROLLBACK");
+
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: `Sweet "${request.sweet_name}" does not belong to selected supplier`,
+//         });
+//       }
+
+//       // -------------------------------------
+//       // Quantity validation
+//       // -------------------------------------
+
+//       if (
+//         request.quantity === null ||
+//         request.quantity === undefined ||
+//         Number(request.quantity) <= 0
+//       ) {
+//         await connect_db.query("ROLLBACK");
+
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: `Invalid quantity for sweet "${request.sweet_name}"`,
+//         });
+//       }
+//     }
+
+//     // =====================================
+//     // CREATE NORMAL ORDER
+//     // =====================================
+
+//     const orderRowId = libFunc.randomid();
+
+//     await db_query.addData(
+//       orderTable,
+//       {
+//         row_id: orderRowId,
+
+//         shop_id: finalShopId,
+
+//         supplier_id: supplierId,
+
+//         order_status: "PENDING",
+
+//         // ================================
+//         // REORDER FIELDS
+//         // ================================
+
+//         order_type: "NORMAL",
+
+//         // parent_order_id intentionally omitted
+//         // because this is a root/original order
+
+//         resolution_status: "OPEN",
+//       },
+//       null,
+//       "Order",
+//     );
+
+//     // =====================================
+//     // CREATE ORDER ITEMS
+//     //
+//     // ONE REQUEST = ONE ORDER ITEM
+//     // =====================================
+
+//     for (const request of requests.data) {
+//       await db_query.addData(
+//         itemTable,
+//         {
+//           row_id: libFunc.randomid(),
+
+//           order_id: orderRowId,
+
+//           // Exact counter request reference
+//           request_id: request.row_id,
+
+//           sweet_id: request.sweet_id,
+
+//           // Counter remains attached to item
+//           counter_id: request.counter_id,
+
+//           // Original requested quantity
+//           quantity: Number(request.quantity),
+
+//           // Supplier has not processed yet
+//           item_status: "PENDING",
+
+//           // Supplier supplied quantity
+//           supplied_quantity: 0,
+
+//           // ================================
+//           // REORDER FIELDS
+//           // ================================
+
+//           // parent_order_item_id intentionally omitted
+//           // because this is a root/original item
+
+//           // Nothing cancelled initially
+//           cancelled_quantity: 0,
+
+//           // No reorder/cancel action yet
+//           remaining_action: "PENDING",
+
+//           // remaining_action_on intentionally omitted
+//         },
+//         null,
+//         "Order Item",
+//       );
+//     }
+
+//     // =====================================
+//     // UPDATE REQUEST STATUS
+//     // =====================================
+
+//     await db_query.customQuery(`
+//       UPDATE ${requestTable}
+//       SET
+//         status = 'APPROVED',
+//         up_on = now()
+//       WHERE row_id IN (${requestIdsSql})
+//     `);
+
+//     // =====================================
+//     // COMMIT
+//     // =====================================
+
+//     await connect_db.query("COMMIT");
+
+//     // =====================================
+//     // NOTIFY SUPPLIER
+//     // =====================================
+
+//     const supplierUsers = await db_query.customQuery(`
+//       SELECT
+//         row_id
+//       FROM ${schema}.users
+//       WHERE supplier_id = '${supplierId.replaceAll("'", "`")}'
+//     `);
+
+//     if (supplierUsers.data?.length) {
+//       for (const supplierUser of supplierUsers.data) {
+//         await createNotification({
+//           user_id: supplierUser.row_id,
+
+//           title: "New Order Received",
+
+//           message: `New order created with ${requests.data.length} item(s)`,
+
+//           type: "ORDER",
+
+//           reference_id: orderRowId,
+//         });
+//       }
+//     }
+
+//     // =====================================
+//     // NOTIFY COUNTER USERS
+//     // =====================================
+
+//     const counterUsers = await db_query.customQuery(`
+//       SELECT
+//         u.row_id
+//       FROM ${requestTable} r
+
+//       LEFT JOIN ${schema}.users u
+//         ON u.counter_id = r.counter_id
+
+//       WHERE r.row_id IN (${requestIdsSql})
+//     `);
+
+//     if (counterUsers.data?.length) {
+//       const uniqueUsers = [...new Set(counterUsers.data.map((u) => u.row_id))];
+
+//       for (const userId of uniqueUsers) {
+//         await createNotification({
+//           user_id: userId,
+
+//           title: "Request Approved",
+
+//           message: `${uniqueRequestIds.length} request(s) approved`,
+
+//           type: "REQUEST",
+
+//           reference_id: orderRowId,
+//         });
+//       }
+//     }
+
+//     // =====================================
+//     // FINAL RESPONSE
+//     // =====================================
+
+//     return libFunc.sendResponse(res, {
+//       status: 0,
+
+//       msg: "Final order created successfully",
+
+//       data: {
+//         order_id: orderRowId,
+
+//         shop_id: finalShopId,
+
+//         supplier_id: supplierId,
+
+//         order_type: "NORMAL",
+
+//         parent_order_id: null,
+
+//         resolution_status: "OPEN",
+
+//         request_count: uniqueRequestIds.length,
+
+//         item_count: requests.data.length,
+//       },
+//     });
+//   } catch (error) {
+//     console.log("createFinalOrder ERROR:", error);
+
+//     try {
+//       await connect_db.query("ROLLBACK");
+//     } catch (e) {
+//       console.log("Rollback error:", e);
+//     }
+
+//     return libFunc.sendResponse(res, {
+//       status: 1,
+//       msg: "Something went wrong",
+//       error: error.message,
+//     });
+//   }
+// }
+
+
 async function createFinalOrder(req, res) {
   try {
     const user = req.data;
@@ -3265,13 +3692,23 @@ async function createFinalOrder(req, res) {
     const supplierTable = schema + ".suppliers";
     const sweetTable = schema + ".sweets";
 
-    const { supplier_id, request_ids, shop_id } = req.data || {};
+    // =====================================================
+    // FRONTEND WILL SEND ONLY:
+    // request_ids
+    // shop_id -> only required for ADMIN
+    //
+    // supplier_id IS NO LONGER REQUIRED FROM FRONTEND
+    // =====================================================
 
+    const { request_ids, shop_id } = req.data || {};
+
+    console.log("========================================");
     console.log("createFinalOrder request:", req.data);
+    console.log("========================================");
 
-    // =====================================
+    // =====================================================
     // ROLE VALIDATION
-    // =====================================
+    // =====================================================
 
     if (!["ADMIN", "SHOP_ADMIN"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
@@ -3280,9 +3717,9 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    // =====================================
+    // =====================================================
     // SHOP VALIDATION
-    // =====================================
+    // =====================================================
 
     let finalShopId;
 
@@ -3308,16 +3745,9 @@ async function createFinalOrder(req, res) {
       finalShopId = shop_id.trim();
     }
 
-    // =====================================
+    // =====================================================
     // BASIC VALIDATION
-    // =====================================
-
-    if (!supplier_id) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "supplier_id is required",
-      });
-    }
+    // =====================================================
 
     if (!Array.isArray(request_ids) || request_ids.length === 0) {
       return libFunc.sendResponse(res, {
@@ -3326,14 +3756,17 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    const supplierId = supplier_id.trim();
-
-    // =====================================
+    // =====================================================
     // UNIQUE REQUEST IDS
-    // =====================================
+    // =====================================================
 
     const uniqueRequestIds = [
-      ...new Set(request_ids.filter(Boolean).map((id) => id.trim())),
+      ...new Set(
+        request_ids
+          .filter(Boolean)
+          .map((id) => String(id).trim())
+          .filter(Boolean)
+      ),
     ];
 
     if (uniqueRequestIds.length === 0) {
@@ -3344,39 +3777,22 @@ async function createFinalOrder(req, res) {
     }
 
     const requestIdsSql = uniqueRequestIds
-      .map((id) => `'${id.replaceAll("'", "`")}'`)
+      .map((id) => `'${id.replaceAll("'", "''")}'`)
       .join(",");
 
-    // =====================================
+    // =====================================================
     // BEGIN TRANSACTION
-    // =====================================
+    // =====================================================
 
     await connect_db.query("BEGIN");
 
-    // =====================================
-    // SUPPLIER VALIDATION
-    // =====================================
-
-    const supplierCheck = await db_query.customQuery(`
-      SELECT
-        row_id,
-        supplier_name
-      FROM ${supplierTable}
-      WHERE row_id = '${supplierId.replaceAll("'", "`")}'
-    `);
-
-    if (!supplierCheck.data?.length) {
-      await connect_db.query("ROLLBACK");
-
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Invalid supplier",
-      });
-    }
-
-    // =====================================
+    // =====================================================
     // FETCH REQUESTS
-    // =====================================
+    //
+    // IMPORTANT:
+    // Supplier is taken from sweets.supplier_id
+    // NOT from frontend
+    // =====================================================
 
     const requests = await db_query.customQuery(`
       SELECT
@@ -3390,7 +3806,9 @@ async function createFinalOrder(req, res) {
         c.counter_name,
 
         s.sweet_name,
-        s.supplier_id AS sweet_supplier_id
+        s.supplier_id AS sweet_supplier_id,
+
+        sp.supplier_name
 
       FROM ${requestTable} r
 
@@ -3400,13 +3818,16 @@ async function createFinalOrder(req, res) {
       LEFT JOIN ${sweetTable} s
         ON s.row_id = r.sweet_id
 
+      LEFT JOIN ${supplierTable} sp
+        ON sp.row_id = s.supplier_id
+
       WHERE r.row_id IN (${requestIdsSql})
       AND r.status = 'PENDING'
     `);
 
-    // =====================================
+    // =====================================================
     // REQUEST VALIDATION
-    // =====================================
+    // =====================================================
 
     if (!requests.data || requests.data.length === 0) {
       await connect_db.query("ROLLBACK");
@@ -3426,14 +3847,15 @@ async function createFinalOrder(req, res) {
       });
     }
 
-    // =====================================
-    // SHOP + SUPPLIER VALIDATION
-    // =====================================
+    // =====================================================
+    // VALIDATE SHOP + SUPPLIER + QUANTITY
+    // =====================================================
 
     for (const request of requests.data) {
-      // -------------------------------------
-      // Shop validation
-      // -------------------------------------
+
+      // ---------------------------------------------------
+      // SHOP VALIDATION
+      // ---------------------------------------------------
 
       if (request.shop_id !== finalShopId) {
         await connect_db.query("ROLLBACK");
@@ -3444,22 +3866,37 @@ async function createFinalOrder(req, res) {
         });
       }
 
-      // -------------------------------------
-      // Supplier validation
-      // -------------------------------------
+      // ---------------------------------------------------
+      // SUPPLIER VALIDATION
+      //
+      // Sweet MUST have supplier_id
+      // ---------------------------------------------------
 
-      if (request.sweet_supplier_id !== supplierId) {
+      if (!request.sweet_supplier_id) {
         await connect_db.query("ROLLBACK");
 
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: `Sweet "${request.sweet_name}" does not belong to selected supplier`,
+          msg: `Supplier is not assigned to sweet "${request.sweet_name}"`,
         });
       }
 
-      // -------------------------------------
-      // Quantity validation
-      // -------------------------------------
+      // ---------------------------------------------------
+      // SUPPLIER MUST EXIST
+      // ---------------------------------------------------
+
+      if (!request.supplier_name) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Invalid supplier for sweet "${request.sweet_name}"`,
+        });
+      }
+
+      // ---------------------------------------------------
+      // QUANTITY VALIDATION
+      // ---------------------------------------------------
 
       if (
         request.quantity === null ||
@@ -3475,92 +3912,175 @@ async function createFinalOrder(req, res) {
       }
     }
 
-    // =====================================
-    // CREATE NORMAL ORDER
-    // =====================================
+    // =====================================================
+    // GROUP REQUESTS BY SUPPLIER
+    // =====================================================
 
-    const orderRowId = libFunc.randomid();
-
-    await db_query.addData(
-      orderTable,
-      {
-        row_id: orderRowId,
-
-        shop_id: finalShopId,
-
-        supplier_id: supplierId,
-
-        order_status: "PENDING",
-
-        // ================================
-        // REORDER FIELDS
-        // ================================
-
-        order_type: "NORMAL",
-
-        // parent_order_id intentionally omitted
-        // because this is a root/original order
-
-        resolution_status: "OPEN",
-      },
-      null,
-      "Order",
-    );
-
-    // =====================================
-    // CREATE ORDER ITEMS
-    //
-    // ONE REQUEST = ONE ORDER ITEM
-    // =====================================
+    const supplierGroups = {};
 
     for (const request of requests.data) {
-      await db_query.addData(
-        itemTable,
-        {
-          row_id: libFunc.randomid(),
+      const supplierId = request.sweet_supplier_id;
 
-          order_id: orderRowId,
+      if (!supplierGroups[supplierId]) {
+        supplierGroups[supplierId] = [];
+      }
 
-          // Exact counter request reference
-          request_id: request.row_id,
-
-          sweet_id: request.sweet_id,
-
-          // Counter remains attached to item
-          counter_id: request.counter_id,
-
-          // Original requested quantity
-          quantity: Number(request.quantity),
-
-          // Supplier has not processed yet
-          item_status: "PENDING",
-
-          // Supplier supplied quantity
-          supplied_quantity: 0,
-
-          // ================================
-          // REORDER FIELDS
-          // ================================
-
-          // parent_order_item_id intentionally omitted
-          // because this is a root/original item
-
-          // Nothing cancelled initially
-          cancelled_quantity: 0,
-
-          // No reorder/cancel action yet
-          remaining_action: "PENDING",
-
-          // remaining_action_on intentionally omitted
-        },
-        null,
-        "Order Item",
-      );
+      supplierGroups[supplierId].push(request);
     }
 
-    // =====================================
-    // UPDATE REQUEST STATUS
-    // =====================================
+    console.log("========================================");
+    console.log(
+      "Supplier Groups:",
+      Object.keys(supplierGroups).map((supplierId) => ({
+        supplier_id: supplierId,
+        request_count: supplierGroups[supplierId].length,
+      }))
+    );
+    console.log("========================================");
+
+    // =====================================================
+    // CREATE SUPPLIER-WISE ORDERS
+    // =====================================================
+
+    const createdOrders = [];
+
+    for (const supplierId of Object.keys(supplierGroups)) {
+
+      const supplierRequests = supplierGroups[supplierId];
+
+      // ---------------------------------------------------
+      // VALIDATE SUPPLIER
+      // ---------------------------------------------------
+
+      const supplierCheck = await db_query.customQuery(`
+        SELECT
+          row_id,
+          supplier_name
+        FROM ${supplierTable}
+        WHERE row_id = '${supplierId.replaceAll("'", "''")}'
+      `);
+
+      if (!supplierCheck.data?.length) {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid supplier assigned to one or more sweets",
+        });
+      }
+
+      const supplierName = supplierCheck.data[0].supplier_name;
+
+      // ---------------------------------------------------
+      // CREATE ORDER
+      // ---------------------------------------------------
+
+      const orderRowId = libFunc.randomid();
+
+      await db_query.addData(
+        orderTable,
+        {
+          row_id: orderRowId,
+
+          shop_id: finalShopId,
+
+          // IMPORTANT:
+          // Supplier automatically comes from sweet.supplier_id
+          supplier_id: supplierId,
+
+          order_status: "PENDING",
+
+          order_type: "NORMAL",
+
+          // Root/original order
+          // parent_order_id: null,
+
+          resolution_status: "OPEN",
+        },
+        null,
+        "Order"
+      );
+
+      console.log("Created Order:", {
+        order_id: orderRowId,
+        supplier_id: supplierId,
+        supplier_name: supplierName,
+        item_count: supplierRequests.length,
+      });
+
+      // ---------------------------------------------------
+      // CREATE ORDER ITEMS
+      // ---------------------------------------------------
+
+      for (const request of supplierRequests) {
+
+        await db_query.addData(
+          itemTable,
+          {
+            row_id: libFunc.randomid(),
+
+            order_id: orderRowId,
+
+            // Exact counter request reference
+            request_id: request.row_id,
+
+            sweet_id: request.sweet_id,
+
+            // Counter remains attached to item
+            counter_id: request.counter_id,
+
+            // Original requested quantity
+            quantity: Number(request.quantity),
+
+            // Supplier has not processed yet
+            item_status: "PENDING",
+
+            // Supplier supplied quantity
+            supplied_quantity: 0,
+
+            // Root/original item
+            // parent_order_item_id: null,
+
+            // Nothing cancelled initially
+            cancelled_quantity: 0,
+
+            // No reorder/cancel action yet
+            remaining_action: "PENDING",
+
+            // Unit
+            // unit: null,
+          },
+          null,
+          "Order Item"
+        );
+      }
+
+      // ---------------------------------------------------
+      // SAVE ORDER INFORMATION
+      // ---------------------------------------------------
+
+      createdOrders.push({
+        order_id: orderRowId,
+        supplier_id: supplierId,
+        supplier_name: supplierName,
+        item_count: supplierRequests.length,
+        request_ids: supplierRequests.map(
+          (request) => request.row_id
+        ),
+        items: supplierRequests.map((request) => ({
+          sweet_id: request.sweet_id,
+          sweet_name: request.sweet_name,
+          quantity: Number(request.quantity),
+          counter_id: request.counter_id,
+          counter_name: request.counter_name,
+          request_id: request.row_id,
+        })),
+      });
+    }
+
+    // =====================================================
+    // UPDATE ALL REQUEST STATUS
+    // =====================================================
 
     await db_query.customQuery(`
       UPDATE ${requestTable}
@@ -3570,42 +4090,47 @@ async function createFinalOrder(req, res) {
       WHERE row_id IN (${requestIdsSql})
     `);
 
-    // =====================================
+    // =====================================================
     // COMMIT
-    // =====================================
+    // =====================================================
 
     await connect_db.query("COMMIT");
 
-    // =====================================
-    // NOTIFY SUPPLIER
-    // =====================================
+    // =====================================================
+    // NOTIFY SUPPLIERS
+    // =====================================================
 
-    const supplierUsers = await db_query.customQuery(`
-      SELECT
-        row_id
-      FROM ${schema}.users
-      WHERE supplier_id = '${supplierId.replaceAll("'", "`")}'
-    `);
+    for (const order of createdOrders) {
 
-    if (supplierUsers.data?.length) {
-      for (const supplierUser of supplierUsers.data) {
-        await createNotification({
-          user_id: supplierUser.row_id,
+      const supplierUsers = await db_query.customQuery(`
+        SELECT
+          row_id
+        FROM ${schema}.users
+        WHERE supplier_id = '${order.supplier_id.replaceAll("'", "''")}'
+      `);
 
-          title: "New Order Received",
+      if (supplierUsers.data?.length) {
 
-          message: `New order created with ${requests.data.length} item(s)`,
+        for (const supplierUser of supplierUsers.data) {
 
-          type: "ORDER",
+          await createNotification({
+            user_id: supplierUser.row_id,
 
-          reference_id: orderRowId,
-        });
+            title: "New Order Received",
+
+            message: `New order created with ${order.item_count} item(s)`,
+
+            type: "ORDER",
+
+            reference_id: order.order_id,
+          });
+        }
       }
     }
 
-    // =====================================
+    // =====================================================
     // NOTIFY COUNTER USERS
-    // =====================================
+    // =====================================================
 
     const counterUsers = await db_query.customQuery(`
       SELECT
@@ -3619,9 +4144,17 @@ async function createFinalOrder(req, res) {
     `);
 
     if (counterUsers.data?.length) {
-      const uniqueUsers = [...new Set(counterUsers.data.map((u) => u.row_id))];
+
+      const uniqueUsers = [
+        ...new Set(
+          counterUsers.data
+            .map((u) => u.row_id)
+            .filter(Boolean)
+        ),
+      ];
 
       for (const userId of uniqueUsers) {
+
         await createNotification({
           user_id: userId,
 
@@ -3631,40 +4164,44 @@ async function createFinalOrder(req, res) {
 
           type: "REQUEST",
 
-          reference_id: orderRowId,
+          // Multiple orders can be created.
+          // Therefore reference_id is not used for a single order.
+          reference_id: null,
         });
       }
     }
 
-    // =====================================
+    // =====================================================
     // FINAL RESPONSE
-    // =====================================
+    // =====================================================
 
     return libFunc.sendResponse(res, {
       status: 0,
 
-      msg: "Final order created successfully",
+      msg: "Final orders created successfully",
 
       data: {
-        order_id: orderRowId,
-
         shop_id: finalShopId,
-
-        supplier_id: supplierId,
 
         order_type: "NORMAL",
 
-        parent_order_id: null,
+        total_requests: uniqueRequestIds.length,
 
-        resolution_status: "OPEN",
+        total_orders: createdOrders.length,
 
-        request_count: uniqueRequestIds.length,
+        total_items: requests.data.length,
 
-        item_count: requests.data.length,
+        orders: createdOrders,
       },
     });
+
   } catch (error) {
+
     console.log("createFinalOrder ERROR:", error);
+
+    // =====================================================
+    // ROLLBACK
+    // =====================================================
 
     try {
       await connect_db.query("ROLLBACK");

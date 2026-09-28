@@ -1796,6 +1796,8 @@ async function createSweet(req, res) {
       category_id,
       supplier_id,
       sweet_name,
+      hindi_sweets_name = "",
+      hsn_code = "",
       unit = "KG",
       price = 0,
       shelf_life_days = 0,
@@ -1837,6 +1839,9 @@ async function createSweet(req, res) {
     const supplierId = supplier_id.trim();
 
     const sweetName = sweet_name.trim().replaceAll("'", "`");
+
+    const hindiSweetName = (hindi_sweets_name || "").trim();
+const hsnCode = (hsn_code || "").trim();
 
     // =====================================
     // Check Department exists
@@ -1912,7 +1917,7 @@ async function createSweet(req, res) {
       // =====================================
       // Duplicate check
       // Same sweet cannot exist under
-      // same department + category + supplier
+      // same category + supplier
       // =====================================
       const duplicate = await db_query.customQuery(`
         SELECT row_id
@@ -1939,6 +1944,8 @@ async function createSweet(req, res) {
           category_id = '${categoryId}',
           supplier_id = '${supplierId}',
           sweet_name = '${sweetName}',
+          hindi_sweets_name = '${hindiSweetName}',
+          hsn_code = '${hsnCode}',
           unit = '${unit}',
           price = ${Number(price) || 0},
           shelf_life_days = '${shelf_life_days}',
@@ -1982,6 +1989,8 @@ async function createSweet(req, res) {
       category_id: categoryId,
       supplier_id: supplierId,
       sweet_name: sweetName,
+      hindi_sweets_name: hindiSweetName,
+      hsn_code: hsnCode,
       unit,
       price,
       shelf_life_days,
@@ -3680,7 +3689,6 @@ async function createCounterRequest(req, res) {
 //   }
 // }
 
-
 async function createFinalOrder(req, res) {
   try {
     const user = req.data;
@@ -3765,7 +3773,7 @@ async function createFinalOrder(req, res) {
         request_ids
           .filter(Boolean)
           .map((id) => String(id).trim())
-          .filter(Boolean)
+          .filter(Boolean),
       ),
     ];
 
@@ -3852,7 +3860,6 @@ async function createFinalOrder(req, res) {
     // =====================================================
 
     for (const request of requests.data) {
-
       // ---------------------------------------------------
       // SHOP VALIDATION
       // ---------------------------------------------------
@@ -3934,7 +3941,7 @@ async function createFinalOrder(req, res) {
       Object.keys(supplierGroups).map((supplierId) => ({
         supplier_id: supplierId,
         request_count: supplierGroups[supplierId].length,
-      }))
+      })),
     );
     console.log("========================================");
 
@@ -3945,7 +3952,6 @@ async function createFinalOrder(req, res) {
     const createdOrders = [];
 
     for (const supplierId of Object.keys(supplierGroups)) {
-
       const supplierRequests = supplierGroups[supplierId];
 
       // ---------------------------------------------------
@@ -3998,7 +4004,7 @@ async function createFinalOrder(req, res) {
           resolution_status: "OPEN",
         },
         null,
-        "Order"
+        "Order",
       );
 
       console.log("Created Order:", {
@@ -4013,7 +4019,6 @@ async function createFinalOrder(req, res) {
       // ---------------------------------------------------
 
       for (const request of supplierRequests) {
-
         await db_query.addData(
           itemTable,
           {
@@ -4051,7 +4056,7 @@ async function createFinalOrder(req, res) {
             // unit: null,
           },
           null,
-          "Order Item"
+          "Order Item",
         );
       }
 
@@ -4064,9 +4069,7 @@ async function createFinalOrder(req, res) {
         supplier_id: supplierId,
         supplier_name: supplierName,
         item_count: supplierRequests.length,
-        request_ids: supplierRequests.map(
-          (request) => request.row_id
-        ),
+        request_ids: supplierRequests.map((request) => request.row_id),
         items: supplierRequests.map((request) => ({
           sweet_id: request.sweet_id,
           sweet_name: request.sweet_name,
@@ -4101,7 +4104,6 @@ async function createFinalOrder(req, res) {
     // =====================================================
 
     for (const order of createdOrders) {
-
       const supplierUsers = await db_query.customQuery(`
         SELECT
           row_id
@@ -4110,9 +4112,7 @@ async function createFinalOrder(req, res) {
       `);
 
       if (supplierUsers.data?.length) {
-
         for (const supplierUser of supplierUsers.data) {
-
           await createNotification({
             user_id: supplierUser.row_id,
 
@@ -4144,17 +4144,11 @@ async function createFinalOrder(req, res) {
     `);
 
     if (counterUsers.data?.length) {
-
       const uniqueUsers = [
-        ...new Set(
-          counterUsers.data
-            .map((u) => u.row_id)
-            .filter(Boolean)
-        ),
+        ...new Set(counterUsers.data.map((u) => u.row_id).filter(Boolean)),
       ];
 
       for (const userId of uniqueUsers) {
-
         await createNotification({
           user_id: userId,
 
@@ -4194,9 +4188,7 @@ async function createFinalOrder(req, res) {
         orders: createdOrders,
       },
     });
-
   } catch (error) {
-
     console.log("createFinalOrder ERROR:", error);
 
     // =====================================================
@@ -22891,6 +22883,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         oi.counter_id,
 
         sw.row_id AS sweet_id,
+        sw.hindi_sweets_name,
 
         COALESCE(
           sw.sweet_name,
@@ -23316,7 +23309,7 @@ async function downloadDepartmentSlipPDF(req, res) {
       // SWEET
       // -----------------------------------------------
 
-      doc.text(item.sweet_name || "-", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
+      doc.text(item.hindi_sweets_name || "-", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
         width: SWEET_WIDTH - 2,
         ellipsis: true,
       });

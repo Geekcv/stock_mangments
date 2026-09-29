@@ -1841,7 +1841,7 @@ async function createSweet(req, res) {
     const sweetName = sweet_name.trim().replaceAll("'", "`");
 
     const hindiSweetName = (hindi_sweets_name || "").trim();
-const hsnCode = (hsn_code || "").trim();
+    const hsnCode = (hsn_code || "").trim();
 
     // =====================================
     // Check Department exists
@@ -11266,6 +11266,7 @@ async function downloadChalanPDF(req, res) {
 
         sw.sweet_name,
         sw.unit,
+        sw.hsn_code,
 
         -- =================================================
         -- CATEGORY
@@ -13415,6 +13416,7 @@ async function downloadOrderRequestPDF(req, res) {
         -- ===============================================
 
         sw.row_id AS sweet_id,
+        sw.hsn_code,
 
         COALESCE(
           sw.sweet_name,
@@ -22840,6 +22842,747 @@ async function fetchCounterSweets(req, res) {
 
 ////// test
 
+// async function downloadDepartmentSlipPDF(req, res) {
+//   try {
+//     const { order_id } = req.data || {};
+
+//     if (!order_id) {
+//       return res.status(400).send("Order ID required");
+//     }
+
+//     const orderTable = schema + ".orders";
+//     const itemTable = schema + ".order_items";
+//     const shopTable = schema + ".shops";
+//     const sweetTable = schema + ".sweets";
+//     const categoryTable = schema + ".categories";
+//     const departmentTable = schema + ".departments";
+
+//     const safeOrderId = String(order_id).trim().replaceAll("'", "''");
+
+//     // =====================================================
+//     // GET ORDER + CHECK SUPPLIER ACCEPTANCE
+//     // =====================================================
+
+//     const result = await db_query.customQuery(`
+//       SELECT
+
+//         o.id AS order_serial_id,
+//         o.row_id AS order_id,
+//         o.order_status,
+//         o.order_date,
+//         o.supplier_id,
+
+//         sh.row_id AS shop_id,
+//         sh.shop_name,
+//         sh.address AS shop_address,
+//         sh.city,
+//         sh.state,
+//         sh.phone AS shop_phone,
+
+//         oi.row_id AS order_item_id,
+//         oi.quantity,
+//         oi.item_status,
+//         oi.counter_id,
+
+//         sw.row_id AS sweet_id,
+//         sw.hindi_sweets_name,
+
+//         COALESCE(
+//           sw.sweet_name,
+//           'Unknown Sweet'
+//         ) AS sweet_name,
+
+//         COALESCE(
+//           sw.unit,
+//           '-'
+//         ) AS unit,
+
+//         cat.row_id AS category_id,
+
+//         COALESCE(
+//           cat.category_name,
+//           'Others'
+//         ) AS category_name,
+
+//         d.row_id AS department_id,
+
+//         COALESCE(
+//           d.department_name,
+//           'Others'
+//         ) AS department_name
+
+//       FROM ${orderTable} o
+
+//       LEFT JOIN ${shopTable} sh
+//         ON sh.row_id = o.shop_id
+
+//       LEFT JOIN ${itemTable} oi
+//         ON oi.order_id = o.row_id
+
+//       LEFT JOIN ${sweetTable} sw
+//         ON sw.row_id = oi.sweet_id
+
+//       LEFT JOIN ${categoryTable} cat
+//         ON cat.row_id = sw.category_id
+
+//       LEFT JOIN ${departmentTable} d
+//         ON d.row_id = cat.department_id
+
+//       WHERE
+//         o.row_id = '${safeOrderId}'
+//         AND o.order_status IN (
+//           'ACCEPTED',
+//           'PARTIAL',
+//           'DISPATCHED',
+//           'DELIVERED'
+//         )
+
+//       ORDER BY
+//         d.department_name ASC,
+//         cat.category_name ASC,
+//         sw.sweet_name ASC
+//     `);
+
+//     const data = result.data || [];
+
+//     // =====================================================
+//     // SUPPLIER HAS NOT ACCEPTED
+//     // =====================================================
+
+//     if (data.length === 0) {
+//       const orderCheck = await db_query.customQuery(`
+//         SELECT
+//           row_id,
+//           order_status
+//         FROM ${orderTable}
+//         WHERE row_id = '${safeOrderId}'
+//       `);
+
+//       const orderData = orderCheck.data || [];
+
+//       if (orderData.length === 0) {
+//         return res.status(404).send("Order not found");
+//       }
+
+//       console.log("orderData[0].order_status", orderData[0].order_status);
+
+//       if (
+//         !["ACCEPTED", "PARTIAL", "DISPATCHED", "DELIVERED"].includes(
+//           orderData[0].order_status,
+//         )
+//       ) {
+//         return libFunc.sendResponse(res, {
+//           status: 1,
+//           msg: "Department slip is not available. Supplier must accept the order first.",
+//         });
+//       }
+
+//       return res.status(404).send("No department items found");
+//     }
+
+//     const order = data[0];
+
+//     // =====================================================
+//     // DISPLAY ORDER ID
+//     // =====================================================
+
+//     const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(6, "0")}`;
+
+//     // =====================================================
+//     // GROUP DATA BY DEPARTMENT
+//     // =====================================================
+
+//     const departmentGrouped = {};
+
+//     data.forEach((item) => {
+//       const departmentId = item.department_id || "NO_DEPARTMENT";
+
+//       const departmentName = item.department_name || "Others";
+
+//       if (!departmentGrouped[departmentId]) {
+//         departmentGrouped[departmentId] = {
+//           department_name: departmentName,
+//           items: [],
+//         };
+//       }
+
+//       departmentGrouped[departmentId].items.push(item);
+//     });
+
+//     const departments = Object.values(departmentGrouped);
+
+//     // =====================================================
+//     // THERMAL PAPER SETTINGS
+//     // =====================================================
+
+//     // 80mm thermal paper
+//     const PAPER_WIDTH = 226.77;
+
+//     const SIDE_MARGIN = 8;
+
+//     const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
+
+//     // =====================================================
+//     // TABLE WIDTHS
+//     // =====================================================
+
+//     // Counter removed
+//     const CATEGORY_WIDTH = 65;
+//     const SWEET_WIDTH = 112;
+//     const QTY_WIDTH = 41;
+
+//     const TABLE_WIDTH = CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
+
+//     const ROW_HEIGHT = 17;
+
+//     // =====================================================
+//     // FILE SETUP
+//     // =====================================================
+
+//     const BASE_UPLOAD_PATH = "/home/uploads";
+
+//     const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
+
+//     if (!fs.existsSync(folder)) {
+//       fs.mkdirSync(folder, {
+//         recursive: true,
+//       });
+//     }
+
+//     const fileName = `DepartmentSlip_${Date.now()}.pdf`;
+
+//     const filePath = path.join(folder, fileName);
+
+//     // =====================================================
+//     // PAGE SETTINGS
+//     // =====================================================
+
+//     const MAX_ROWS_PER_PAGE = 28;
+
+//     function splitItems(items) {
+//       const pages = [];
+
+//       for (let i = 0; i < items.length; i += MAX_ROWS_PER_PAGE) {
+//         pages.push(items.slice(i, i + MAX_ROWS_PER_PAGE));
+//       }
+
+//       return pages;
+//     }
+
+//     // =====================================================
+//     // CALCULATE PAGE HEIGHT
+//     // =====================================================
+
+//     function calculatePageHeight(itemCount, isFinalDepartmentPage = true) {
+//       /*
+//         Jodhpur Sweets         22
+//         Department             16
+//         Separator               8
+//         Order + Shop + Date    35
+//         Separator               8
+//         Table Header           17
+//         Items                  dynamic
+//         Total                  20
+//         Footer                 25
+//         Cut Line               28
+//         Bottom Margin          10
+//       */
+
+//       const CUTTING_SPACE = isFinalDepartmentPage ? 28 : 0;
+
+//       return (
+//         22 +
+//         16 +
+//         8 +
+//         35 +
+//         8 +
+//         17 +
+//         itemCount * ROW_HEIGHT +
+//         20 +
+//         25 +
+//         CUTTING_SPACE +
+//         10
+//       );
+//     }
+
+//     // =====================================================
+//     // FIRST PAGE
+//     // =====================================================
+
+//     const firstDepartment = departments[0];
+
+//     const firstPages = splitItems(firstDepartment.items);
+
+//     const firstPageIsFinal = firstPages.length === 1;
+
+//     const firstPageHeight = calculatePageHeight(
+//       firstPages[0].length,
+//       firstPageIsFinal,
+//     );
+
+//     // =====================================================
+//     // CREATE PDF
+//     // =====================================================
+
+//     const doc = new PDFDocument({
+//       size: [PAPER_WIDTH, firstPageHeight],
+
+//       margins: {
+//         top: 6,
+//         bottom: 6,
+//         left: SIDE_MARGIN,
+//         right: SIDE_MARGIN,
+//       },
+
+//       autoFirstPage: true,
+//     });
+
+//     const writeStream = fs.createWriteStream(filePath);
+
+//     doc.pipe(writeStream);
+
+//     // =====================================================
+//     // DRAW HEADER
+//     // =====================================================
+
+//     function drawHeader(department, isContinuation = false) {
+//       // -----------------------------------------------
+//       // BRAND NAME
+//       // -----------------------------------------------
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(12)
+//         .fillColor("#000000")
+//         .text("JODHPUR SWEETS", {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//           lineBreak: false,
+//         });
+
+//       doc.moveDown(0.15);
+
+//       // -----------------------------------------------
+//       // DEPARTMENT NAME
+//       // -----------------------------------------------
+
+//       doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
+//         width: CONTENT_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // TOP SEPARATOR
+//       // -----------------------------------------------
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // ORDER + SHOP
+//       // -----------------------------------------------
+
+//       doc.font("Helvetica").fontSize(7.5);
+
+//       const orderShopText = `Order : ${orderDisplayId}    Shop : ${
+//         order.shop_name || "-"
+//       }`;
+
+//       doc.text(orderShopText, SIDE_MARGIN, doc.y, {
+//         width: CONTENT_WIDTH,
+//         align: "left",
+//         lineBreak: false,
+//       });
+
+//       doc.moveDown(0.2);
+
+//       // -----------------------------------------------
+//       // DATE
+//       // -----------------------------------------------
+
+//       doc.text(
+//         `Date  : ${
+//           order.order_date
+//             ? new Date(order.order_date).toLocaleDateString("en-IN")
+//             : "-"
+//         }`,
+//         {
+//           width: CONTENT_WIDTH,
+//           lineBreak: false,
+//         },
+//       );
+
+//       doc.moveDown(0.35);
+
+//       // -----------------------------------------------
+//       // SECOND SEPARATOR
+//       // -----------------------------------------------
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+
+//       doc.moveDown(0.35);
+//     }
+
+//     // =====================================================
+//     // DRAW TABLE HEADER
+//     // =====================================================
+
+//     function drawTableHeader() {
+//       const y = doc.y;
+
+//       doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
+
+//       // Top line
+//       doc
+//         .moveTo(SIDE_MARGIN, y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
+//         .lineWidth(0.5)
+//         .stroke();
+
+//       // -----------------------------------------------
+//       // CATEGORY
+//       // -----------------------------------------------
+
+//       doc.text("CATEGORY", SIDE_MARGIN, y + 3, {
+//         width: CATEGORY_WIDTH,
+//         align: "left",
+//       });
+
+//       // -----------------------------------------------
+//       // SWEET
+//       // -----------------------------------------------
+
+//       doc.text("SWEET", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
+//         width: SWEET_WIDTH,
+//         align: "left",
+//       });
+
+//       // -----------------------------------------------
+//       // QTY
+//       // -----------------------------------------------
+
+//       doc.text("QTY", SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH, y + 3, {
+//         width: QTY_WIDTH,
+//         align: "center",
+//       });
+
+//       doc.y = y + ROW_HEIGHT;
+
+//       // Bottom line
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.5)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW ITEM
+//     // =====================================================
+
+//     function drawItem(item) {
+//       const y = doc.y;
+
+//       const qty = Number(item.quantity || 0);
+
+//       doc.font("Helvetica").fontSize(7).fillColor("#000000");
+
+//       // -----------------------------------------------
+//       // CATEGORY
+//       // -----------------------------------------------
+
+//       doc.text(item.category_name || "-", SIDE_MARGIN, y + 3, {
+//         width: CATEGORY_WIDTH - 2,
+//         ellipsis: true,
+//       });
+
+//       // -----------------------------------------------
+//       // SWEET
+//       // -----------------------------------------------
+
+//       doc.text(item.hindi_sweets_name || "-", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
+//         width: SWEET_WIDTH - 2,
+//         ellipsis: true,
+//       });
+
+//       // -----------------------------------------------
+//       // QUANTITY
+//       // -----------------------------------------------
+
+//       const quantityText =
+//         item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+
+//       doc.text(
+//         quantityText,
+//         SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
+//         y + 3,
+//         {
+//           width: QTY_WIDTH,
+//           align: "center",
+//           ellipsis: true,
+//         },
+//       );
+
+//       doc.y = y + ROW_HEIGHT;
+
+//       // Row separator
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.25)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW TOTAL
+//     // =====================================================
+
+//     function drawTotal(total) {
+//       const y = doc.y;
+
+//       doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+
+//       doc.text("TOTAL", SIDE_MARGIN, y + 4, {
+//         width: CATEGORY_WIDTH + SWEET_WIDTH,
+//         align: "right",
+//       });
+
+//       doc.text(
+//         String(total),
+//         SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
+//         y + 4,
+//         {
+//           width: QTY_WIDTH,
+//           align: "center",
+//         },
+//       );
+
+//       doc.y = y + 20;
+
+//       doc
+//         .moveTo(SIDE_MARGIN, doc.y)
+//         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//         .lineWidth(0.7)
+//         .stroke();
+//     }
+
+//     // =====================================================
+//     // DRAW FOOTER
+//     // =====================================================
+
+//     function drawFooter() {
+//       doc.moveDown(0.5);
+
+//       doc
+//         .font("Helvetica")
+//         .fontSize(6.5)
+//         .fillColor("#555555")
+//         .text("System Generated", {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//         });
+
+//       doc.fillColor("#000000");
+//     }
+
+//     // =====================================================
+//     // DRAW CUTTING LINE
+//     // =====================================================
+
+//     function drawCuttingLine() {
+//       doc.moveDown(0.5);
+
+//       const y = doc.y + 4;
+
+//       // -----------------------------------------------
+//       // DASHED CUT LINE
+//       // -----------------------------------------------
+
+//       doc
+//         .save()
+//         .dash(3, {
+//           space: 3,
+//         })
+//         .moveTo(SIDE_MARGIN, y)
+//         .lineTo(PAPER_WIDTH - SIDE_MARGIN, y)
+//         .lineWidth(0.8)
+//         .stroke()
+//         .undash()
+//         .restore();
+
+//       // -----------------------------------------------
+//       // CUT HERE
+//       // -----------------------------------------------
+
+//       doc
+//         .font("Helvetica-Bold")
+//         .fontSize(7)
+//         .fillColor("#000000")
+//         .text("CUT HERE", SIDE_MARGIN, y - 4, {
+//           width: CONTENT_WIDTH,
+//           align: "center",
+//           lineBreak: false,
+//         });
+
+//       doc.y = y + 14;
+//     }
+
+//     // =====================================================
+//     // PROCESS DEPARTMENTS
+//     // =====================================================
+
+//     departments.forEach((department, departmentIndex) => {
+//       const departmentPages = splitItems(department.items);
+
+//       departmentPages.forEach((pageItems, pageIndex) => {
+//         // -----------------------------------------
+//         // FINAL PAGE CHECK
+//         // -----------------------------------------
+
+//         const isFinalDepartmentPage = pageIndex === departmentPages.length - 1;
+
+//         // -----------------------------------------
+//         // NEW PAGE
+//         // -----------------------------------------
+
+//         if (departmentIndex !== 0 || pageIndex !== 0) {
+//           const pageHeight = calculatePageHeight(
+//             pageItems.length,
+//             isFinalDepartmentPage,
+//           );
+
+//           doc.addPage({
+//             size: [PAPER_WIDTH, pageHeight],
+
+//             margins: {
+//               top: 6,
+//               bottom: 6,
+//               left: SIDE_MARGIN,
+//               right: SIDE_MARGIN,
+//             },
+//           });
+//         }
+
+//         // -----------------------------------------
+//         // HEADER
+//         // -----------------------------------------
+
+//         drawHeader(department, pageIndex > 0);
+
+//         // -----------------------------------------
+//         // TABLE HEADER
+//         // -----------------------------------------
+
+//         drawTableHeader();
+
+//         // -----------------------------------------
+//         // ITEMS
+//         // -----------------------------------------
+
+//         let pageTotal = 0;
+
+//         pageItems.forEach((item) => {
+//           pageTotal += Number(item.quantity || 0);
+
+//           drawItem(item);
+//         });
+
+//         // -----------------------------------------
+//         // TOTAL
+//         // -----------------------------------------
+
+//         if (isFinalDepartmentPage) {
+//           const departmentTotal = department.items.reduce(
+//             (sum, item) => sum + Number(item.quantity || 0),
+//             0,
+//           );
+
+//           drawTotal(departmentTotal);
+//         } else {
+//           const y = doc.y;
+
+//           doc
+//             .font("Helvetica-Bold")
+//             .fontSize(7.5)
+//             .text(`PAGE TOTAL: ${pageTotal}`, SIDE_MARGIN, y + 4, {
+//               width: TABLE_WIDTH,
+//               align: "right",
+//             });
+
+//           doc.y = y + 20;
+
+//           doc
+//             .moveTo(SIDE_MARGIN, doc.y)
+//             .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+//             .lineWidth(0.5)
+//             .stroke();
+//         }
+
+//         // -----------------------------------------
+//         // FOOTER
+//         // -----------------------------------------
+
+//         drawFooter();
+
+//         // -----------------------------------------
+//         // CUTTING LINE
+//         // -----------------------------------------
+
+//         if (isFinalDepartmentPage) {
+//           drawCuttingLine();
+//         }
+//       });
+//     });
+
+//     // =====================================================
+//     // END PDF
+//     // =====================================================
+
+//     doc.end();
+
+//     // =====================================================
+//     // SEND RESPONSE AFTER PDF CREATED
+//     // =====================================================
+
+//     writeStream.on("finish", () => {
+//       const fileUrl = `/uploads/DepartmentSlips/${fileName}`;
+
+//       const serverUrl = "https://api.joswee.cloud";
+
+//       return libFunc.sendResponse(res, {
+//         status: 0,
+//         msg: "Department slip generated successfully",
+//         filePath: serverUrl + fileUrl,
+//       });
+//     });
+
+//     writeStream.on("error", (error) => {
+//       console.log("Department PDF write error:", error);
+
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error writing department slip");
+//       }
+//     });
+//   } catch (error) {
+//     console.log("downloadDepartmentSlipPDF error:", error);
+
+//     if (!res.headersSent) {
+//       return res.status(500).send("Error generating department slip");
+//     }
+//   }
+// }
+
 async function downloadDepartmentSlipPDF(req, res) {
   try {
     const { order_id } = req.data || {};
@@ -23024,7 +23767,6 @@ async function downloadDepartmentSlipPDF(req, res) {
     // TABLE WIDTHS
     // =====================================================
 
-    // Counter removed
     const CATEGORY_WIDTH = 65;
     const SWEET_WIDTH = 112;
     const QTY_WIDTH = 41;
@@ -23032,6 +23774,56 @@ async function downloadDepartmentSlipPDF(req, res) {
     const TABLE_WIDTH = CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
 
     const ROW_HEIGHT = 17;
+
+    // =====================================================
+    // HINDI FONT SETUP
+    // =====================================================
+
+    /*
+      Project structure:
+
+      STOCK_MANGMENTS/
+      |
+      |-- fonts/
+      |   |-- NotoSansDevanagari-Regular.ttf
+      |   |-- NotoSansDevanagari-Bold.ttf
+      |
+      |-- public/
+          |-- lib/
+              |-- library.js
+
+      process.cwd() = project root
+    */
+
+    const HINDI_FONT_REGULAR = path.join(
+      process.cwd(),
+      "fonts",
+      "NotoSansDevanagari-Regular.ttf",
+    );
+
+    const HINDI_FONT_BOLD = path.join(
+      process.cwd(),
+      "fonts",
+      "NotoSansDevanagari-Bold.ttf",
+    );
+
+    // Check Hindi regular font
+    if (!fs.existsSync(HINDI_FONT_REGULAR)) {
+      console.log("Hindi regular font not found:", HINDI_FONT_REGULAR);
+
+      return res
+        .status(500)
+        .send(`Hindi regular font not found: ${HINDI_FONT_REGULAR}`);
+    }
+
+    // Check Hindi bold font
+    if (!fs.existsSync(HINDI_FONT_BOLD)) {
+      console.log("Hindi bold font not found:", HINDI_FONT_BOLD);
+
+      return res
+        .status(500)
+        .send(`Hindi bold font not found: ${HINDI_FONT_BOLD}`);
+    }
 
     // =====================================================
     // FILE SETUP
@@ -23135,6 +23927,18 @@ async function downloadDepartmentSlipPDF(req, res) {
       autoFirstPage: true,
     });
 
+    // =====================================================
+    // REGISTER HINDI FONTS
+    // =====================================================
+
+    doc.registerFont("Hindi", HINDI_FONT_REGULAR);
+
+    doc.registerFont("Hindi-Bold", HINDI_FONT_BOLD);
+
+    // =====================================================
+    // PDF STREAM
+    // =====================================================
+
     const writeStream = fs.createWriteStream(filePath);
 
     doc.pipe(writeStream);
@@ -23145,7 +23949,7 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     function drawHeader(department, isContinuation = false) {
       // -----------------------------------------------
-      // BRAND NAME
+      // BRAND NAME - ENGLISH
       // -----------------------------------------------
 
       doc
@@ -23161,7 +23965,7 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.moveDown(0.15);
 
       // -----------------------------------------------
-      // DEPARTMENT NAME
+      // DEPARTMENT NAME - ENGLISH
       // -----------------------------------------------
 
       doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
@@ -23184,7 +23988,7 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.moveDown(0.35);
 
       // -----------------------------------------------
-      // ORDER + SHOP
+      // ORDER + SHOP - ENGLISH
       // -----------------------------------------------
 
       doc.font("Helvetica").fontSize(7.5);
@@ -23202,7 +24006,7 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.moveDown(0.2);
 
       // -----------------------------------------------
-      // DATE
+      // DATE - ENGLISH
       // -----------------------------------------------
 
       doc.text(
@@ -23239,9 +24043,13 @@ async function downloadDepartmentSlipPDF(req, res) {
     function drawTableHeader() {
       const y = doc.y;
 
+      // ENGLISH FONT
       doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
 
-      // Top line
+      // -----------------------------------------------
+      // TOP LINE
+      // -----------------------------------------------
+
       doc
         .moveTo(SIDE_MARGIN, y)
         .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
@@ -23277,7 +24085,10 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       doc.y = y + ROW_HEIGHT;
 
-      // Bottom line
+      // -----------------------------------------------
+      // BOTTOM LINE
+      // -----------------------------------------------
+
       doc
         .moveTo(SIDE_MARGIN, doc.y)
         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
@@ -23294,32 +24105,41 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       const qty = Number(item.quantity || 0);
 
-      doc.font("Helvetica").fontSize(7).fillColor("#000000");
+      // ==========================================
+      // CATEGORY - ENGLISH
+      // ==========================================
 
-      // -----------------------------------------------
-      // CATEGORY
-      // -----------------------------------------------
+      doc.font("Helvetica").fontSize(7).fillColor("#000000");
 
       doc.text(item.category_name || "-", SIDE_MARGIN, y + 3, {
         width: CATEGORY_WIDTH - 2,
         ellipsis: true,
       });
 
-      // -----------------------------------------------
-      // SWEET
-      // -----------------------------------------------
+      // ==========================================
+      // SWEET NAME - HINDI
+      // ==========================================
 
-      doc.text(item.hindi_sweets_name || "-", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
-        width: SWEET_WIDTH - 2,
-        ellipsis: true,
-      });
+      doc.font("Hindi").fontSize(7);
 
-      // -----------------------------------------------
-      // QUANTITY
-      // -----------------------------------------------
+      doc.text(
+        item.hindi_sweets_name || "-",
+        SIDE_MARGIN + CATEGORY_WIDTH,
+        y + 3,
+        {
+          width: SWEET_WIDTH - 2,
+          ellipsis: true,
+        },
+      );
+
+      // ==========================================
+      // QUANTITY - ENGLISH
+      // ==========================================
 
       const quantityText =
         item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+
+      doc.font("Helvetica").fontSize(7);
 
       doc.text(
         quantityText,
@@ -23334,7 +24154,10 @@ async function downloadDepartmentSlipPDF(req, res) {
 
       doc.y = y + ROW_HEIGHT;
 
-      // Row separator
+      // ==========================================
+      // ROW SEPARATOR
+      // ==========================================
+
       doc
         .moveTo(SIDE_MARGIN, doc.y)
         .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
@@ -23349,6 +24172,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     function drawTotal(total) {
       const y = doc.y;
 
+      // ENGLISH
       doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
 
       doc.text("TOTAL", SIDE_MARGIN, y + 4, {
@@ -23382,6 +24206,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     function drawFooter() {
       doc.moveDown(0.5);
 
+      // ENGLISH
       doc
         .font("Helvetica")
         .fontSize(6.5)
@@ -23420,7 +24245,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         .restore();
 
       // -----------------------------------------------
-      // CUT HERE
+      // CUT HERE - ENGLISH
       // -----------------------------------------------
 
       doc

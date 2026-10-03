@@ -11720,7 +11720,7 @@ async function downloadChalanPDF(req, res) {
         .fontSize(8)
         .fillColor("#000000")
         .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 8, y + 10, {
-          width: 170,
+          width: 120,
         });
 
       // ---------------------------------------------------
@@ -11729,10 +11729,10 @@ async function downloadChalanPDF(req, res) {
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(13)
+        .fontSize(12)
         .fillColor("#000000")
-        .text("DISPATCH CHALLAN", MARGIN + 175, y + 8, {
-          width: 190,
+        .text("DISPATCH CHALLAN", MARGIN + 125, y + 4, {
+          width: 230,
           align: "center",
         });
 
@@ -11742,10 +11742,10 @@ async function downloadChalanPDF(req, res) {
 
       doc
         .font("Helvetica-Bold")
-        .fontSize(7)
+        .fontSize(6.5)
         .fillColor("#000000")
-        .text("FOR MOVEMENT OF GOODS", PAGE_WIDTH - MARGIN - 155, y + 10, {
-          width: 147,
+        .text("FOR MOVEMENT OF GOODS",  MARGIN +  125, y + 19, {
+          width: 230,
           align: "right",
         });
 

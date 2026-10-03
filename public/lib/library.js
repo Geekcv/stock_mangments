@@ -2767,7 +2767,11 @@ async function getStockHistory(req, res) {
 
         st.sweet_id,
         s.sweet_name,
-        s.unit,
+        CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit,
         s.price,
 
         st.transaction_type,
@@ -2930,7 +2934,11 @@ async function getInventory(req, res) {
 
         i.sweet_id,
         s.sweet_name,
-        s.unit,
+        CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit,
         s.price,
         s.image_url,
 
@@ -4694,7 +4702,11 @@ async function getShopOrders(req, res) {
         -- =====================================
 
         s.sweet_name,
-        s.unit
+        CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit
 
       FROM ${schema}.orders o
 
@@ -6119,7 +6131,11 @@ async function getCounterRequests(req, res) {
 
         s.sweet_name,
 
-        s.unit,
+        CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit,
 
         /* NEW: BULK UNIT */
         s.bulk_unit,
@@ -8135,7 +8151,7 @@ async function getAllChalans(req, res) {
 
         -- Sweet
         s.sweet_name,
-        s.unit
+        o.order_unit as unit
 
       FROM ${chalanTable} ch
 
@@ -8402,7 +8418,7 @@ async function getSupplierOrders(req, res) {
         -- SWEET
         -- =========================
         s.sweet_name,
-        s.unit,
+        o.order_unit as unit,
 
         -- =========================
         -- REORDER SUPPLIED QUANTITY
@@ -16319,7 +16335,11 @@ async function getAllCounterRequestsByShop(req, res) {
 
         s.sweet_name,
 
-        s.unit,
+        CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit,
 
         -- =====================================
         -- COUNTER

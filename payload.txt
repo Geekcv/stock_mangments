@@ -142,3 +142,41 @@ data: {
     request_ids: [ '1774187557132_iHkK', '1774187557145_A0Fw' ]
   }
 }
+
+
+
+
+Unit showing ui side  (basic or bulk)
+supplier side 
+* order reviced 
+* view chllan 
+
+Shop side 
+* counter request 
+* track order 
+Stock 
+*history 
+* inventory
+* view challan
+
+counter side
+* track request
+* inventory
+
+
+
+fet_stock_his
+fet_inv
+fe_expairy_items
+fe_or_details
+fe_challan
+fe_my_ord
+fe_order_req
+fe_all_req_counter
+
+
+CASE
+  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
+    THEN s.bulk_unit
+  ELSE s.unit
+END AS unit,

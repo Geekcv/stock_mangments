@@ -11462,13 +11462,15 @@ async function downloadChalanPDF(req, res) {
         oi.quantity AS ordered_quantity,
         oi.supplied_quantity,
         oi.item_status,
+        oi.order_unit,
+
 
         -- =================================================
         -- SWEET
         -- =================================================
 
         sw.sweet_name,
-        sw.unit,
+        COALESCE(oi.order_unit, sw.unit, '-') AS unit,
         sw.hsn_code,
 
         -- =================================================
@@ -11569,7 +11571,7 @@ async function downloadChalanPDF(req, res) {
     // =====================================================
 
     const PAGE_WIDTH = 419.53;
-   const PAGE_HEIGHT = 595.28;
+    const PAGE_HEIGHT = 595.28;
 
     const MARGIN = 28;
 
@@ -11744,7 +11746,7 @@ async function downloadChalanPDF(req, res) {
         .font("Helvetica-Bold")
         .fontSize(6.5)
         .fillColor("#000000")
-        .text("FOR MOVEMENT OF GOODS",  MARGIN +  125, y + 19, {
+        .text("FOR MOVEMENT OF GOODS", MARGIN + 125, y + 19, {
           width: 230,
           align: "center",
         });
@@ -12210,13 +12212,28 @@ async function downloadChalanPDF(req, res) {
 
       const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
 
+      // const quantity = formatQuantity(item.supplied_quantity);
+
+      // doc
+      //   .font("Helvetica")
+      //   .fontSize(8)
+      //   .fillColor("#000000")
+      //   .text(quantity, qtyX + 6, y + 9, {
+      //     width: QTY_WIDTH - 12,
+      //     align: "center",
+      //     lineBreak: false,
+      //   });
+
       const quantity = formatQuantity(item.supplied_quantity);
+
+      const quantityText =
+        item.unit && item.unit !== "-" ? `${quantity} ${item.unit}` : quantity;
 
       doc
         .font("Helvetica")
         .fontSize(8)
         .fillColor("#000000")
-        .text(quantity, qtyX + 6, y + 9, {
+        .text(quantityText, qtyX + 6, y + 9, {
           width: QTY_WIDTH - 12,
           align: "center",
           lineBreak: false,
@@ -13630,6 +13647,7 @@ async function downloadOrderRequestPDF(req, res) {
         oi.quantity,
         oi.item_status,
         oi.counter_id,
+        oi.order_unit,
 
         -- ===============================================
         -- SWEET
@@ -13644,6 +13662,7 @@ async function downloadOrderRequestPDF(req, res) {
         ) AS sweet_name,
 
         COALESCE(
+        oi.order_unit,
           sw.unit,
           '-'
         ) AS unit,
@@ -13899,7 +13918,7 @@ async function downloadOrderRequestPDF(req, res) {
         .font("Helvetica-Bold")
         .fontSize(7)
         .fillColor("#000000")
-        .text("FOR MOVEMENT OF GOODS", MARGIN +  125, startY + 19, {
+        .text("FOR MOVEMENT OF GOODS", MARGIN + 125, startY + 19, {
           width: 230,
           align: "center",
         });
@@ -14372,7 +14391,13 @@ async function downloadOrderRequestPDF(req, res) {
       // QUANTITY
       // ===================================================
 
-      const quantityText = formatQuantity(item.quantity);
+      // const quantityText = formatQuantity(item.quantity);
+      const quantity = formatQuantity(item.quantity);
+
+const quantityText =
+  item.unit && item.unit !== "-"
+    ? `${quantity} ${item.unit}`
+    : quantity;
 
       const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
 
@@ -24214,82 +24239,76 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     function drawHeader(department, isContinuation = false) {
       // -----------------------------------------------
-// BRAND NAME - ENGLISH
-// -----------------------------------------------
+      // BRAND NAME - ENGLISH
+      // -----------------------------------------------
 
-doc
-  .font("Helvetica-Bold")
-  .fontSize(12)
-  .fillColor("#000000")
-  .text("JODHPUR SWEETS", {
-    width: CONTENT_WIDTH,
-    align: "center",
-    lineBreak: false,
-  });
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(12)
+        .fillColor("#000000")
+        .text("JODHPUR SWEETS", {
+          width: CONTENT_WIDTH,
+          align: "center",
+          lineBreak: false,
+        });
 
-doc.moveDown(0.15);
+      doc.moveDown(0.15);
 
-// -----------------------------------------------
-// COMPANY DETAILS
-// -----------------------------------------------
+      // -----------------------------------------------
+      // COMPANY DETAILS
+      // -----------------------------------------------
 
-doc
-  .font("Helvetica")
-  .fontSize(5.5)
-  .fillColor("#000000")
-  .text(
-    "Regd.off. : 889/4, 8th C Road, Sardarpura, Jodhpur, 342001.",
-    {
-      width: CONTENT_WIDTH,
-      align: "center",
-      lineBreak: false,
-    },
-  );
+      doc
+        .font("Helvetica")
+        .fontSize(5.5)
+        .fillColor("#000000")
+        .text("Regd.off. : 889/4, 8th C Road, Sardarpura, Jodhpur, 342001.", {
+          width: CONTENT_WIDTH,
+          align: "center",
+          lineBreak: false,
+        });
 
-doc.text(
-  "Factory : 55-a, Industrial Area, New Power House, Jodhpur, 342003.",
-  {
-    width: CONTENT_WIDTH,
-    align: "center",
-    lineBreak: false,
-  },
-);
+      doc.text(
+        "Factory : 55-a, Industrial Area, New Power House, Jodhpur, 342003.",
+        {
+          width: CONTENT_WIDTH,
+          align: "center",
+          lineBreak: false,
+        },
+      );
 
-doc.text("9th C' ROAD, SARDARPURA JODHPUR-342003", {
-  width: CONTENT_WIDTH,
-  align: "center",
-  lineBreak: false,
-});
+      doc.text("9th C' ROAD, SARDARPURA JODHPUR-342003", {
+        width: CONTENT_WIDTH,
+        align: "center",
+        lineBreak: false,
+      });
 
-doc.text(
-  "Email : info@jodhpursweets.com    PHONE : 0291-2633762",
-  {
-    width: CONTENT_WIDTH,
-    align: "center",
-    lineBreak: false,
-  },
-);
+      doc.text("Email : info@jodhpursweets.com    PHONE : 0291-2633762", {
+        width: CONTENT_WIDTH,
+        align: "center",
+        lineBreak: false,
+      });
 
-// =================================================
-// EXTRA TOP GAP BEFORE DEPARTMENT
-// =================================================
+      // =================================================
+      // EXTRA TOP GAP BEFORE DEPARTMENT
+      // =================================================
 
-doc.moveDown(0.7);
+      doc.moveDown(0.7);
 
-// -----------------------------------------------
-// DEPARTMENT NAME - ENGLISH
-// -----------------------------------------------
+      // -----------------------------------------------
+      // DEPARTMENT NAME - ENGLISH
+      // -----------------------------------------------
 
-doc
-  .font("Helvetica")
-  .fontSize(9)
-  .fillColor("#000000")
-  .text(department.department_name, {
-    width: CONTENT_WIDTH,
-    align: "center",
-  });
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .fillColor("#000000")
+        .text(department.department_name, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
 
-doc.moveDown(0.5);
+      doc.moveDown(0.5);
 
       // -----------------------------------------------
       // TOP SEPARATOR
@@ -24455,10 +24474,10 @@ doc.moveDown(0.5);
       // const quantityText =
       //   item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
 
-        const quantityText =
-  item.unit && item.unit !== "-"
-    ? `${qty} ${String(item.unit).toUpperCase()}`
-    : `${qty}`;
+      const quantityText =
+        item.unit && item.unit !== "-"
+          ? `${qty} ${String(item.unit).toUpperCase()}`
+          : `${qty}`;
 
       doc.font("Helvetica").fontSize(7);
 
@@ -24570,37 +24589,37 @@ doc.moveDown(0.5);
       // -----------------------------------------------
 
       // -----------------------------------------------
-// SCISSORS ICON - RIGHT SIDE
-// -----------------------------------------------
+      // SCISSORS ICON - RIGHT SIDE
+      // -----------------------------------------------
 
-const scissorsX = PAPER_WIDTH - SIDE_MARGIN - 12;
-const scissorsY = y - 1;
+      const scissorsX = PAPER_WIDTH - SIDE_MARGIN - 12;
+      const scissorsY = y - 1;
 
-doc
-  .save()
-  .lineWidth(0.8)
+      doc
+        .save()
+        .lineWidth(0.8)
 
-  // Upper handle
-  .circle(scissorsX - 4, scissorsY - 2, 2.5)
-  .stroke()
+        // Upper handle
+        .circle(scissorsX - 4, scissorsY - 2, 2.5)
+        .stroke()
 
-  // Lower handle
-  .circle(scissorsX - 4, scissorsY + 5, 2.5)
-  .stroke()
+        // Lower handle
+        .circle(scissorsX - 4, scissorsY + 5, 2.5)
+        .stroke()
 
-  // Upper blade
-  .moveTo(scissorsX - 2, scissorsY)
-  .lineTo(scissorsX + 7, scissorsY + 7)
-  .stroke()
+        // Upper blade
+        .moveTo(scissorsX - 2, scissorsY)
+        .lineTo(scissorsX + 7, scissorsY + 7)
+        .stroke()
 
-  // Lower blade
-  .moveTo(scissorsX - 2, scissorsY + 3)
-  .lineTo(scissorsX + 7, scissorsY - 4)
-  .stroke()
+        // Lower blade
+        .moveTo(scissorsX - 2, scissorsY + 3)
+        .lineTo(scissorsX + 7, scissorsY - 4)
+        .stroke()
 
-  .restore();
+        .restore();
 
-doc.y = y + 14;
+      doc.y = y + 14;
     }
 
     // =====================================================

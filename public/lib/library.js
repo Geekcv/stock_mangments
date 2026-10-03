@@ -11646,10 +11646,10 @@ async function downloadChalanPDF(req, res) {
       const number = Number(value || 0);
 
       if (!Number.isFinite(number)) {
-        return "0.00";
+        return "0";
       }
 
-      return number.toFixed(2);
+      return number;
     };
 
     // =====================================================
@@ -13847,10 +13847,10 @@ async function downloadOrderRequestPDF(req, res) {
       const qty = Number(value || 0);
 
       if (Number.isNaN(qty)) {
-        return "0.00";
+        return "0";
       }
 
-      return qty.toFixed(2);
+      return qty;
     }
 
     // =====================================================

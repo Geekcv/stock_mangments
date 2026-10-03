@@ -23884,6 +23884,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         sh.phone AS shop_phone,
 
         oi.row_id AS order_item_id,
+        oi.order_unit,
         oi.quantity,
         oi.item_status,
         oi.counter_id,
@@ -23897,6 +23898,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         ) AS sweet_name,
 
         COALESCE(
+          oi.order_unit,
           sw.unit,
           '-'
         ) AS unit,
@@ -24450,8 +24452,13 @@ doc.moveDown(0.5);
       // QUANTITY - ENGLISH
       // ==========================================
 
-      const quantityText =
-        item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+      // const quantityText =
+      //   item.unit && item.unit !== "-" ? `${qty} ${item.unit}` : `${qty}`;
+
+        const quantityText =
+  item.unit && item.unit !== "-"
+    ? `${qty} ${String(item.unit).toUpperCase()}`
+    : `${qty}`;
 
       doc.font("Helvetica").fontSize(7);
 

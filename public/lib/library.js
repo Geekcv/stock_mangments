@@ -24144,7 +24144,7 @@ async function downloadDepartmentSlipPDF(req, res) {
       const CUTTING_SPACE = isFinalDepartmentPage ? 28 : 0;
 
       return (
-        22 +
+        52 +
         16 +
         8 +
         35 +
@@ -24225,18 +24225,74 @@ async function downloadDepartmentSlipPDF(req, res) {
           lineBreak: false,
         });
 
+      // doc.moveDown(0.15);
+
+      // // -----------------------------------------------
+      // // DEPARTMENT NAME - ENGLISH
+      // // -----------------------------------------------
+
+      // doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
+      //   width: CONTENT_WIDTH,
+      //   align: "center",
+      // });
+
+      // doc.moveDown(0.35);
+
       doc.moveDown(0.15);
 
-      // -----------------------------------------------
-      // DEPARTMENT NAME - ENGLISH
-      // -----------------------------------------------
+// -----------------------------------------------
+// COMPANY DETAILS
+// -----------------------------------------------
 
-      doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
-        width: CONTENT_WIDTH,
-        align: "center",
-      });
+doc
+  .font("Helvetica")
+  .fontSize(5.5)
+  .fillColor("#000000")
+  .text(
+    "Regd.off. : 889/4, 8th C Road, Sardarpura, Jodhpur, 342001.",
+    {
+      width: CONTENT_WIDTH,
+      align: "center",
+      lineBreak: false,
+    },
+  );
 
-      doc.moveDown(0.35);
+doc.text(
+  "Factory : 55-a, Industrial Area, New Power House, Jodhpur, 342003.",
+  {
+    width: CONTENT_WIDTH,
+    align: "center",
+    lineBreak: false,
+  },
+);
+
+doc.text("9th C' ROAD, SARDARPURA JODHPUR-342003", {
+  width: CONTENT_WIDTH,
+  align: "center",
+  lineBreak: false,
+});
+
+doc.text(
+  "Email : info@jodhpursweets.com    PHONE : 0291-2633762",
+  {
+    width: CONTENT_WIDTH,
+    align: "center",
+    lineBreak: false,
+  },
+);
+
+doc.moveDown(0.15);
+
+// -----------------------------------------------
+// DEPARTMENT NAME - ENGLISH
+// -----------------------------------------------
+
+doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
+  width: CONTENT_WIDTH,
+  align: "center",
+});
+
+doc.moveDown(0.35);
 
       // -----------------------------------------------
       // TOP SEPARATOR
@@ -24511,18 +24567,51 @@ async function downloadDepartmentSlipPDF(req, res) {
       // CUT HERE - ENGLISH
       // -----------------------------------------------
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor("#000000")
-        .text("CUT HERE", SIDE_MARGIN, y - 4, {
-          width: CONTENT_WIDTH,
-          align: "center",
-          lineBreak: false,
-        });
+    //   doc
+    //     .font("Helvetica-Bold")
+    //     .fontSize(7)
+    //     .fillColor("#000000")
+    //     .text("CUT HERE", SIDE_MARGIN, y - 4, {
+    //       width: CONTENT_WIDTH,
+    //       align: "center",
+    //       lineBreak: false,
+    //     });
 
-      doc.y = y + 14;
-    }
+    //   doc.y = y + 14;
+    // }
+
+    // -----------------------------------------------
+// SCISSORS ICON - RIGHT SIDE
+// -----------------------------------------------
+
+const scissorsX = PAPER_WIDTH - SIDE_MARGIN - 12;
+const scissorsY = y - 1;
+
+doc
+  .save()
+  .lineWidth(0.8)
+
+  // Upper handle
+  .circle(scissorsX - 4, scissorsY - 2, 2.5)
+  .stroke()
+
+  // Lower handle
+  .circle(scissorsX - 4, scissorsY + 5, 2.5)
+  .stroke()
+
+  // Upper blade
+  .moveTo(scissorsX - 2, scissorsY)
+  .lineTo(scissorsX + 7, scissorsY + 7)
+  .stroke()
+
+  // Lower blade
+  .moveTo(scissorsX - 2, scissorsY + 3)
+  .lineTo(scissorsX + 7, scissorsY - 4)
+  .stroke()
+
+  .restore();
+
+doc.y = y + 14;
 
     // =====================================================
     // PROCESS DEPARTMENTS

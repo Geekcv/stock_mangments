@@ -8151,7 +8151,7 @@ async function getAllChalans(req, res) {
 
         -- Sweet
         s.sweet_name,
-        o.order_unit as unit
+        oi.order_unit as unit
 
       FROM ${chalanTable} ch
 
@@ -8418,7 +8418,7 @@ async function getSupplierOrders(req, res) {
         -- SWEET
         -- =========================
         s.sweet_name,
-        o.order_unit as unit,
+        oi.order_unit as unit,
 
         -- =========================
         -- REORDER SUPPLIED QUANTITY

@@ -11565,11 +11565,11 @@ async function downloadChalanPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     // =====================================================
-    // A4 DOCUMENT
+    // A5  DOCUMENT
     // =====================================================
 
-    const PAGE_WIDTH = 595.28;
-    const PAGE_HEIGHT = 841.89;
+    const PAGE_WIDTH = 419.53;
+   const PAGE_HEIGHT = 595.28;
 
     const MARGIN = 28;
 
@@ -11578,7 +11578,7 @@ async function downloadChalanPDF(req, res) {
     const SAFE_BOTTOM = PAGE_HEIGHT - MARGIN - 25;
 
     const doc = new PDFDocument({
-      size: "A4",
+      size: "A5",
 
       margins: {
         top: MARGIN,
@@ -12019,11 +12019,11 @@ async function downloadChalanPDF(req, res) {
     // TABLE CONFIG
     // =====================================================
 
-    const SERIAL_WIDTH = 42;
+    const SERIAL_WIDTH = 38;
 
-    const PRODUCT_WIDTH = 300;
+    const PRODUCT_WIDTH = 175;
 
-    const HSN_WIDTH = 105;
+    const HSN_WIDTH = 85;
 
     const QTY_WIDTH = CONTENT_WIDTH - SERIAL_WIDTH - PRODUCT_WIDTH - HSN_WIDTH;
 
@@ -12393,7 +12393,7 @@ async function downloadChalanPDF(req, res) {
 
       if (tableY + ROW_HEIGHT + 120 > SAFE_BOTTOM) {
         doc.addPage({
-          size: "A4",
+          size: "A5",
 
           margins: {
             top: MARGIN,

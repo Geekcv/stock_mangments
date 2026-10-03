@@ -2619,6 +2619,7 @@ async function getStockHistory(req, res) {
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
     const shopTable = schema + ".shops";
+    const orderItemTable = schema + ".order_items";
 
     const user = req.data;
 
@@ -2767,11 +2768,9 @@ async function getStockHistory(req, res) {
 
         st.sweet_id,
         s.sweet_name,
-        CASE
-  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
-    THEN s.bulk_unit
-  ELSE s.unit
-END AS unit,
+
+        COALESCE(latest_order_item.order_unit, s.unit) AS unit,
+
         s.price,
 
         st.transaction_type,
@@ -2797,6 +2796,19 @@ END AS unit,
 
       LEFT JOIN ${shopTable} sh
         ON sh.row_id = c.shop_id
+
+      LEFT JOIN LATERAL (
+        SELECT
+          oi.order_unit
+        FROM ${orderItemTable} oi
+        WHERE oi.sweet_id = st.sweet_id
+          AND oi.counter_id = st.counter_id
+          AND oi.order_unit IS NOT NULL
+          AND TRIM(oi.order_unit) <> ''
+        ORDER BY oi.cr_on DESC
+        LIMIT 1
+      ) latest_order_item
+        ON TRUE
 
       ${whereClause}
 
@@ -2839,6 +2851,7 @@ END AS unit,
   }
 }
 
+
 // {
 //   "counter_id": "counter_123",
 //   "sweet_id": "sweet_1",
@@ -2853,95 +2866,63 @@ async function getInventory(req, res) {
     const sweetTable = schema + ".sweets";
     const counterTable = schema + ".counters";
     const shopTable = schema + ".shops";
+    const orderItemTable = schema + ".order_items";
 
     const user = req.data;
-
-    // ==============================
-    // ROLE VALIDATION
-    // ==============================
 
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Access denied",
+        msg: "Access denied"
       });
     }
 
     let whereConditions = ["i.quantity::NUMERIC > 0"];
 
-    // ==============================
-    // SHOP ADMIN
-    // ==============================
-
     if (user.user_role === "SHOP_ADMIN") {
       if (!user.shopId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Shop ID not found in token",
+          msg: "Shop ID is required"
         });
       }
 
-      // Only counters belonging to this shop
       whereConditions.push(
-        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`,
+        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`
       );
     }
-
-    // ==============================
-    // COUNTER USER
-    // ==============================
 
     if (user.user_role === "COUNTER_USER") {
       if (!user.counterId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Counter ID not found in token",
+          msg: "Counter ID is required"
         });
       }
 
-      // Only own counter inventory
       whereConditions.push(
-        `i.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`,
+        `i.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`
       );
     }
 
-    // ==============================
-    // ADMIN
-    // ==============================
-
-    // ADMIN can see all inventory.
-    // No additional filter required.
-
-    const whereClause = `
-      WHERE ${whereConditions.join(" AND ")}
-    `;
-
-    // ==============================
-    // FETCH INVENTORY
-    // ==============================
+    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
     const result = await db_query.customQuery(`
       SELECT
-
         i.row_id AS inventory_id,
-
         i.counter_id,
         c.counter_name,
         c.location,
-
         c.shop_id,
         sh.shop_name,
-
         i.sweet_id,
         s.sweet_name,
-        CASE
-  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
-    THEN s.bulk_unit
-  ELSE s.unit
-END AS unit,
+
+        /* Counter ne jis unit me order/request kiya tha */
+        COALESCE(latest_order_item.order_unit, s.unit) AS unit,
+
         s.price,
         s.image_url,
-
         i.quantity,
         i.min_stock,
         i.max_stock,
@@ -2955,7 +2936,7 @@ END AS unit,
 
         CASE
           WHEN i.max_stock > 0
-          AND i.quantity::NUMERIC >= i.max_stock
+            AND i.quantity::NUMERIC >= i.max_stock
           THEN true
           ELSE false
         END AS max_stock_reached,
@@ -2980,45 +2961,36 @@ END AS unit,
       LEFT JOIN ${shopTable} sh
         ON sh.row_id = c.shop_id
 
+      LEFT JOIN LATERAL (
+        SELECT
+          oi.order_unit
+        FROM ${orderItemTable} oi
+        WHERE oi.sweet_id = i.sweet_id
+          AND oi.counter_id = i.counter_id
+          AND oi.order_unit IS NOT NULL
+          AND TRIM(oi.order_unit) <> ''
+        ORDER BY oi.cr_on DESC
+        LIMIT 1
+      ) latest_order_item
+        ON TRUE
+
       ${whereClause}
 
-      ORDER BY
-        i.cr_on DESC
+      ORDER BY i.cr_on DESC
     `);
-
-    console.log("getInventory result:", result);
-
-    const inventoryData =
-      result.status === 0 && Array.isArray(result.data) ? result.data : [];
-
-    // ==============================
-    // NO DATA
-    // ==============================
-
-    if (inventoryData.length === 0) {
-      return libFunc.sendResponse(res, {
-        status: 0,
-        msg: "No inventory found",
-        data: [],
-      });
-    }
-
-    // ==============================
-    // SUCCESS
-    // ==============================
 
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Inventory fetched successfully",
-      data: inventoryData,
+      data: result
     });
+
   } catch (error) {
     console.log("getInventory error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Something went wrong",
-      error: error.message,
+      msg: "Something went wrong"
     });
   }
 }
@@ -4702,11 +4674,8 @@ async function getShopOrders(req, res) {
         -- =====================================
 
         s.sweet_name,
-        CASE
-  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
-    THEN s.bulk_unit
-  ELSE s.unit
-END AS unit
+        oi.order_unit AS unit
+        
 
       FROM ${schema}.orders o
 
@@ -6131,11 +6100,7 @@ async function getCounterRequests(req, res) {
 
         s.sweet_name,
 
-        CASE
-  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
-    THEN s.bulk_unit
-  ELSE s.unit
-END AS unit,
+        r.request_unit AS unit, 
 
         /* NEW: BULK UNIT */
         s.bulk_unit,
@@ -16335,11 +16300,7 @@ async function getAllCounterRequestsByShop(req, res) {
 
         s.sweet_name,
 
-        CASE
-  WHEN s.bulk_unit IS NOT NULL AND TRIM(s.bulk_unit) <> ''
-    THEN s.bulk_unit
-  ELSE s.unit
-END AS unit,
+        r.request_unit AS unit,
 
         -- =====================================
         -- COUNTER

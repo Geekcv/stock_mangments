@@ -180,3 +180,8 @@ CASE
     THEN s.bulk_unit
   ELSE s.unit
 END AS unit,
+
+request_unit
+
+oi.order_unit AS unit
+r.request_unit AS unit 

@@ -11746,7 +11746,7 @@ async function downloadChalanPDF(req, res) {
         .fillColor("#000000")
         .text("FOR MOVEMENT OF GOODS",  MARGIN +  125, y + 19, {
           width: 230,
-          align: "right",
+          align: "center",
         });
 
       // ===================================================
@@ -13901,7 +13901,7 @@ async function downloadOrderRequestPDF(req, res) {
         .fillColor("#000000")
         .text("FOR MOVEMENT OF GOODS", MARGIN +  125, startY + 19, {
           width: 230,
-          align: "right",
+          align: "center",
         });
 
       // ===================================================

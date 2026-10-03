@@ -24212,33 +24212,20 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     function drawHeader(department, isContinuation = false) {
       // -----------------------------------------------
-      // BRAND NAME - ENGLISH
-      // -----------------------------------------------
+// BRAND NAME - ENGLISH
+// -----------------------------------------------
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(12)
-        .fillColor("#000000")
-        .text("JODHPUR SWEETS", {
-          width: CONTENT_WIDTH,
-          align: "center",
-          lineBreak: false,
-        });
+doc
+  .font("Helvetica-Bold")
+  .fontSize(12)
+  .fillColor("#000000")
+  .text("JODHPUR SWEETS", {
+    width: CONTENT_WIDTH,
+    align: "center",
+    lineBreak: false,
+  });
 
-      // doc.moveDown(0.15);
-
-      // // -----------------------------------------------
-      // // DEPARTMENT NAME - ENGLISH
-      // // -----------------------------------------------
-
-      // doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
-      //   width: CONTENT_WIDTH,
-      //   align: "center",
-      // });
-
-      // doc.moveDown(0.35);
-
-      doc.moveDown(0.15);
+doc.moveDown(0.15);
 
 // -----------------------------------------------
 // COMPANY DETAILS
@@ -24281,18 +24268,26 @@ doc.text(
   },
 );
 
-doc.moveDown(0.15);
+// =================================================
+// EXTRA TOP GAP BEFORE DEPARTMENT
+// =================================================
+
+doc.moveDown(0.7);
 
 // -----------------------------------------------
 // DEPARTMENT NAME - ENGLISH
 // -----------------------------------------------
 
-doc.font("Helvetica-Bold").fontSize(9).text(department.department_name, {
-  width: CONTENT_WIDTH,
-  align: "center",
-});
+doc
+  .font("Helvetica")
+  .fontSize(9)
+  .fillColor("#000000")
+  .text(department.department_name, {
+    width: CONTENT_WIDTH,
+    align: "center",
+  });
 
-doc.moveDown(0.35);
+doc.moveDown(0.5);
 
       // -----------------------------------------------
       // TOP SEPARATOR

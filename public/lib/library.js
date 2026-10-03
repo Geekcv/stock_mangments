@@ -17609,16 +17609,37 @@ async function runExpiryCheck() {
   }
 }
 
-// daily 8 o clock
+// // daily 8 o clock
+// cron.schedule(
+//   "00 08 * * *",
+//   () => {
+//     console.log("🕒 Running daily expiry check via cron...");
+//     runExpiryCheck();
+//   },
+//   {
+//     timezone: "Asia/Kolkata",
+//   },
+// );
+
 cron.schedule(
   "00 08 * * *",
   () => {
-    console.log("🕒 Running daily expiry check via cron...");
+    console.log("=================================");
+    console.log("🕒 CRON TRIGGERED");
+    console.log("Server time:", new Date().toISOString());
+    console.log(
+      "India time:",
+      new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+      })
+    );
+    console.log("=================================");
+
     runExpiryCheck();
   },
   {
     timezone: "Asia/Kolkata",
-  },
+  }
 );
 
 // Fetch Expiry Logs

@@ -391,16 +391,40 @@ ADD COLUMN IF NOT EXISTS remaining_action_on TIMESTAMP;
 
 
 
-// testing 
-SELECT * FROM sms.counter_requests
-ORDER BY row_id ASC 
-
-
-ALTER TABLE sms.order_items
-ADD COLUMN unit TEXT;
-
 
 
 ALTER TABLE sms.sweets
 ADD COLUMN hsn_code TEXT,
 ADD COLUMN hindi_sweets_name TEXT;
+
+
+
+
+-- sweets
+ALTER TABLE sms.sweets
+ADD COLUMN IF NOT EXISTS bulk_unit TEXT,
+ADD COLUMN IF NOT EXISTS bulk_conversion NUMERIC(12,3),
+ADD COLUMN IF NOT EXISTS bulk_price NUMERIC(10,2);
+
+
+-- counter request
+ALTER TABLE sms.counter_requests
+ADD COLUMN IF NOT EXISTS request_unit TEXT,
+ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);
+
+
+-- order items
+ALTER TABLE sms.order_items
+ADD COLUMN IF NOT EXISTS order_unit TEXT,
+ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);
+
+
+ALTER TABLE sms.stock_transactions
+ADD COLUMN IF NOT EXISTS unit TEXT,
+ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);
+
+
+
+ALTER TABLE sms.inventory
+ADD COLUMN IF NOT EXISTS unit TEXT,
+ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);

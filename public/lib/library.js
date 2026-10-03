@@ -1798,7 +1798,15 @@ async function createSweet(req, res) {
       sweet_name,
       hindi_sweets_name = "",
       hsn_code = "",
+
+      // Basic Unit
       unit = "KG",
+
+      // Bulk Unit
+      bulk_unit = "",
+      bulk_conversion = 0,
+      bulk_price = 0,
+
       price = 0,
       shelf_life_days = 0,
       description = "",
@@ -1842,6 +1850,54 @@ async function createSweet(req, res) {
 
     const hindiSweetName = (hindi_sweets_name || "").trim();
     const hsnCode = (hsn_code || "").trim();
+
+    // =====================================
+    // UNIT VALIDATION
+    // =====================================
+
+    // Basic units - frontend static
+    const BASIC_UNITS = ["KG", "GM", "PCS"];
+
+    // Bulk units - frontend static
+    const BULK_UNITS = ["BOX", "CARTON", "TRAY", "CONTAINER"];
+
+    const basicUnit = String(unit || "KG")
+      .trim()
+      .toUpperCase();
+    const bulkUnit = String(bulk_unit || "")
+      .trim()
+      .toUpperCase();
+
+    const bulkConversionValue = Number(bulk_conversion) || 0;
+    const basicPrice = Number(price) || 0;
+    const bulkPriceValue = Number(bulk_price) || 0;
+
+    // Validate Basic Unit
+    if (!BASIC_UNITS.includes(basicUnit)) {
+      return libFunc.sendResponse(res, {
+        status: 1,
+        msg: "Invalid basic unit. Allowed units: KG, GM, PCS",
+      });
+    }
+
+    // Bulk Unit is optional
+    if (bulkUnit) {
+      // Validate Bulk Unit
+      if (!BULK_UNITS.includes(bulkUnit)) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Invalid bulk unit. Allowed units: BOX, CARTON, TRAY, CONTAINER",
+        });
+      }
+
+      // Bulk conversion required when bulk unit is selected
+      if (bulkConversionValue <= 0) {
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Bulk conversion must be greater than 0",
+        });
+      }
+    }
 
     // =====================================
     // Check Department exists
@@ -1946,13 +2002,19 @@ async function createSweet(req, res) {
           sweet_name = '${sweetName}',
           hindi_sweets_name = '${hindiSweetName}',
           hsn_code = '${hsnCode}',
-          unit = '${unit}',
-          price = ${Number(price) || 0},
+
+          unit = '${basicUnit}',
+          bulk_unit = ${bulkUnit ? `'${bulkUnit}'` : "NULL"},
+          bulk_conversion = ${bulkUnit ? bulkConversionValue : "NULL"},
+          price = ${basicPrice},
+          bulk_price = ${bulkUnit ? bulkPriceValue : "NULL"},
+
           shelf_life_days = '${shelf_life_days}',
           description = '${description.trim().replaceAll("'", "`")}',
           image_url = '${image_url.trim().replaceAll("'", "`")}',
           return_type = '${return_type}',
           up_on = now()
+
         WHERE row_id = '${row_id}'
       `);
 
@@ -1988,11 +2050,22 @@ async function createSweet(req, res) {
       row_id: libFunc.randomid(),
       category_id: categoryId,
       supplier_id: supplierId,
+
       sweet_name: sweetName,
       hindi_sweets_name: hindiSweetName,
       hsn_code: hsnCode,
-      unit,
-      price,
+
+      // Basic Unit
+      unit: basicUnit || "",
+
+      // Bulk Unit
+      bulk_unit: bulkUnit || "",
+      bulk_conversion: bulkUnit ? bulkConversionValue : 0,
+
+      // Prices
+      price: basicPrice,
+      bulk_price: bulkUnit ? bulkPriceValue : 0,
+
       shelf_life_days,
       description: description.trim(),
       image_url: image_url.trim(),
@@ -2107,8 +2180,18 @@ async function fetchAllSweets(req, res) {
       SELECT
         s.row_id,
         s.sweet_name,
+
+        -- Basic Unit
         s.unit,
+
+        -- Basic Price
         s.price,
+
+        -- Bulk Unit Configuration
+        s.bulk_unit,
+        s.bulk_conversion,
+        s.bulk_price,
+
         s.shelf_life_days,
         s.description,
         s.image_url,
@@ -2241,6 +2324,7 @@ async function addStock(req, res) {
     }
 
     const qty = Number(quantity);
+
     if (isNaN(qty) || qty <= 0) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2249,6 +2333,7 @@ async function addStock(req, res) {
     }
 
     const validTypes = ["IN", "OUT", "ADJUST"];
+
     if (!validTypes.includes(transaction_type)) {
       return libFunc.sendResponse(res, {
         status: 1,
@@ -2257,27 +2342,42 @@ async function addStock(req, res) {
     }
 
     // 🍬 Sweet validation
+    const counterSweetTable = schema + ".counter_sweets";
+
     const sweetCheck = await db_query.customQuery(`
-      SELECT d.shop_id
-      FROM ${sweetTable} s
-      LEFT JOIN ${categoryTable} c ON c.row_id = s.category_id
-      LEFT JOIN ${deptTable} d ON d.row_id = c.department_id
-      WHERE s.row_id = '${sweet_id}'
+      SELECT
+        cs.row_id,
+        cs.counter_id,
+        cs.sweet_id,
+        cs.shop_id,
+        cs.is_active,
+        s.unit,
+        s.bulk_unit,
+        s.bulk_conversion
+      FROM ${counterSweetTable} cs
+      INNER JOIN ${sweetTable} s
+        ON s.row_id = cs.sweet_id
+      WHERE cs.counter_id = '${finalCounterId}'
+        AND cs.sweet_id = '${sweet_id}'
+        AND cs.shop_id = '${counterShopId}'
+        AND cs.is_active = TRUE
     `);
 
     if (!sweetCheck.data?.length) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Invalid sweet",
+        msg: "Sweet is not mapped to this counter",
       });
     }
 
-    if (sweetCheck.data[0].shop_id !== counterShopId) {
-      return libFunc.sendResponse(res, {
-        status: 1,
-        msg: "Sweet & counter mismatch",
-      });
-    }
+    // 🍬 Sweet master unit
+    const sweetData = sweetCheck.data[0];
+
+    const baseUnit = sweetData.unit || "KG";
+
+    // Frontend does not send unit.
+    // Unit is maintained internally from sweets master data.
+    const basicQty = qty;
 
     // 🟢 START TRANSACTION
     await connect_db.query("BEGIN");
@@ -2291,6 +2391,8 @@ async function addStock(req, res) {
         sweet_id,
         transaction_type,
         quantity: qty,
+        unit: baseUnit,
+        basic_quantity: basicQty,
         reference_id,
         notes,
       },
@@ -2311,25 +2413,33 @@ async function addStock(req, res) {
 
     if (existing.data?.length) {
       const row = existing.data[0];
+
       previousQty = Number(row.quantity);
       minStockValue = Number(row.min_stock || 0);
 
-      if (transaction_type === "IN") newQty = previousQty + qty;
-      else if (transaction_type === "OUT") {
+      if (transaction_type === "IN") {
+        newQty = previousQty + qty;
+      } else if (transaction_type === "OUT") {
         if (previousQty < qty) {
           await connect_db.query("ROLLBACK");
+
           return libFunc.sendResponse(res, {
             status: 1,
             msg: "Insufficient stock",
           });
         }
+
         newQty = previousQty - qty;
-      } else newQty = qty;
+      } else {
+        newQty = qty;
+      }
 
       await db_query.addData(
         inventoryTable,
         {
           quantity: newQty,
+          unit: baseUnit,
+          basic_quantity: newQty,
           expiry_date,
           ...(min_stock !== null && { min_stock }),
           ...(max_stock !== null && { max_stock }),
@@ -2340,6 +2450,7 @@ async function addStock(req, res) {
     } else {
       if (transaction_type !== "IN") {
         await connect_db.query("ROLLBACK");
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "No stock available",
@@ -2357,6 +2468,8 @@ async function addStock(req, res) {
           counter_id: finalCounterId,
           sweet_id,
           quantity: qty,
+          unit: baseUnit,
+          basic_quantity: qty,
           expiry_date,
           min_stock: min_stock || 0,
           max_stock: max_stock || 0,
@@ -3032,7 +3145,7 @@ async function createCounterRequest(req, res) {
       console.log("--------------------------------");
       console.log("Processing item:", item);
 
-      const { sweet_id, quantity } = item;
+      const { sweet_id, quantity, request_unit } = item;
 
       // =====================================
       // Item validation
@@ -3041,18 +3154,24 @@ async function createCounterRequest(req, res) {
         !sweet_id ||
         quantity === undefined ||
         quantity === null ||
-        Number(quantity) <= 0
+        Number(quantity) <= 0 ||
+        !request_unit
       ) {
         await connect_db.query("ROLLBACK");
 
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Invalid item data",
+          msg: "Sweet, quantity and unit are required",
         });
       }
 
       const sweetId = sweet_id.trim();
       const requestQuantity = Number(quantity);
+      const requestUnit = String(request_unit).trim().toUpperCase();
+
+      console.log("Sweet ID:", sweetId);
+      console.log("Request Quantity:", requestQuantity);
+      console.log("Request Unit:", requestUnit);
 
       // =====================================
       // Check Sweet
@@ -3061,6 +3180,9 @@ async function createCounterRequest(req, res) {
         SELECT
           row_id,
           sweet_name,
+          unit,
+          bulk_unit,
+          bulk_conversion,
           is_active
         FROM ${sweetTable}
         WHERE row_id = '${sweetId}'
@@ -3073,6 +3195,69 @@ async function createCounterRequest(req, res) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: `Invalid or inactive sweet: ${sweetId}`,
+        });
+      }
+
+      const sweetData = sweetCheck.data[0];
+
+      console.log("Sweet Data:", sweetData);
+
+      // =====================================
+      // Unit / Conversion
+      // =====================================
+
+      const basicUnit = String(sweetData.unit || "")
+        .trim()
+        .toUpperCase();
+
+      const bulkUnit = String(sweetData.bulk_unit || "")
+        .trim()
+        .toUpperCase();
+
+      const bulkConversion = Number(sweetData.bulk_conversion) || 0;
+
+      let basicQuantity = requestQuantity;
+
+      // -------------------------------------
+      // BASIC UNIT
+      // -------------------------------------
+      if (requestUnit === basicUnit) {
+        basicQuantity = requestQuantity;
+
+        console.log(`Basic unit selected: ${requestQuantity} ${requestUnit}`);
+      }
+
+      // -------------------------------------
+      // BULK UNIT
+      // -------------------------------------
+      else if (bulkUnit && requestUnit === bulkUnit) {
+        if (bulkConversion <= 0) {
+          await connect_db.query("ROLLBACK");
+
+          return libFunc.sendResponse(res, {
+            status: 1,
+            msg: `Bulk conversion is not configured for ${sweetData.sweet_name}`,
+          });
+        }
+
+        basicQuantity = requestQuantity * bulkConversion;
+
+        console.log(
+          `Bulk conversion: ${requestQuantity} ${requestUnit} × ${bulkConversion} ${basicUnit} = ${basicQuantity} ${basicUnit}`,
+        );
+      }
+
+      // -------------------------------------
+      // INVALID UNIT
+      // -------------------------------------
+      else {
+        await connect_db.query("ROLLBACK");
+
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: `Invalid unit "${requestUnit}" for ${sweetData.sweet_name}. Allowed units: ${basicUnit}${
+            bulkUnit ? `, ${bulkUnit}` : ""
+          }`,
         });
       }
 
@@ -3098,7 +3283,7 @@ async function createCounterRequest(req, res) {
 
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: `Sweet "${sweetCheck.data[0].sweet_name}" is not assigned to this counter`,
+          msg: `Sweet "${sweetData.sweet_name}" is not assigned to this counter`,
         });
       }
 
@@ -3123,7 +3308,9 @@ async function createCounterRequest(req, res) {
       const existing = await db_query.customQuery(`
         SELECT
           row_id,
-          quantity
+          quantity,
+          request_unit,
+          basic_quantity
         FROM ${table}
         WHERE counter_id = '${finalCounterId}'
         AND sweet_id = '${sweetId}'
@@ -3150,7 +3337,16 @@ async function createCounterRequest(req, res) {
           row_id: libFunc.randomid(),
           counter_id: finalCounterId,
           sweet_id: sweetId,
+
+          // Original requested quantity
           quantity: requestQuantity,
+
+          // Selected unit by counter user
+          request_unit: requestUnit,
+
+          // Converted quantity in basic unit
+          basic_quantity: basicQuantity,
+
           status: "PENDING",
         },
         null,
@@ -3160,11 +3356,20 @@ async function createCounterRequest(req, res) {
       createdItems.push({
         sweet_id: sweetId,
         quantity: requestQuantity,
+        request_unit: requestUnit,
+        basic_quantity: basicQuantity,
+        basic_unit: basicUnit,
       });
 
       isRequestCreated = true;
 
-      console.log("Counter request created:", sweetId);
+      console.log("Counter request created:", {
+        sweet_id: sweetId,
+        quantity: requestQuantity,
+        request_unit: requestUnit,
+        basic_quantity: basicQuantity,
+        basic_unit: basicUnit,
+      });
     }
 
     // =====================================
@@ -3205,7 +3410,6 @@ async function createCounterRequest(req, res) {
     // Final Response
     // =====================================
     console.log("Created Items:", createdItems);
-
     console.log("Skipped Items:", skippedItems);
 
     // Some items created + some already pending
@@ -3246,7 +3450,6 @@ async function createCounterRequest(req, res) {
     });
   } catch (error) {
     console.log("createCounterRequest error:", error);
-
     console.log("Error message:", error.message);
 
     try {
@@ -3808,6 +4011,11 @@ async function createFinalOrder(req, res) {
         r.counter_id,
         r.sweet_id,
         r.quantity,
+
+        /* NEW */
+        r.request_unit,
+        r.basic_quantity,
+
         r.status,
 
         c.shop_id,
@@ -4037,6 +4245,12 @@ async function createFinalOrder(req, res) {
             // Original requested quantity
             quantity: Number(request.quantity),
 
+            // NEW: Requested unit
+            order_unit: request.request_unit,
+
+            // NEW: Converted basic quantity
+            basic_quantity: Number(request.basic_quantity),
+
             // Supplier has not processed yet
             item_status: "PENDING",
 
@@ -4073,7 +4287,13 @@ async function createFinalOrder(req, res) {
         items: supplierRequests.map((request) => ({
           sweet_id: request.sweet_id,
           sweet_name: request.sweet_name,
+
           quantity: Number(request.quantity),
+
+          // NEW
+          request_unit: request.request_unit,
+          basic_quantity: Number(request.basic_quantity),
+
           counter_id: request.counter_id,
           counter_name: request.counter_name,
           request_id: request.row_id,
@@ -5863,6 +6083,12 @@ async function getCounterRequests(req, res) {
 
         r.quantity::numeric AS requested_quantity,
 
+        /* NEW: REQUEST UNIT */
+        r.request_unit,
+
+        /* NEW: BASIC QUANTITY */
+        r.basic_quantity::numeric AS basic_quantity,
+
         r.status AS shop_status,
 
         TO_CHAR(
@@ -5894,6 +6120,15 @@ async function getCounterRequests(req, res) {
         s.sweet_name,
 
         s.unit,
+
+        /* NEW: BULK UNIT */
+        s.bulk_unit,
+
+        /* NEW: BULK CONVERSION */
+        s.bulk_conversion,
+
+        /* NEW: BULK PRICE */
+        s.bulk_price,
 
 
         /* =================================================
@@ -5992,7 +6227,7 @@ async function getCounterRequests(req, res) {
         /* =================================================
            REORDER SUPPLIED QUANTITY
            EXISTING KEY
-           
+
            Only VERIFIED challan supply count hogi.
         ================================================= */
 
@@ -6046,7 +6281,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            NEW: REORDER REQUESTED QUANTITY
-           
+
            IMPORTANT:
            order_items.quantity is TEXT
            so default is '0', then numeric cast.
@@ -6105,7 +6340,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            TOTAL SUPPLIED
-           
+
            Existing key.
            Original verified supply
            +
@@ -6216,9 +6451,9 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            REMAINING QUANTITY
-           
+
            Existing key.
-           
+
            Requested
            -
            Original verified supplied
@@ -6342,13 +6577,6 @@ async function getCounterRequests(req, res) {
         ================================================= */
 
         CASE
-
-          /* ===============================================
-             COMPLETED
-             
-             Remaining = 0
-             AND at least some quantity supplied
-          =============================================== */
 
           WHEN
             GREATEST(
@@ -6525,10 +6753,6 @@ async function getCounterRequests(req, res) {
           THEN 'COMPLETED'
 
 
-          /* ===============================================
-             FULLY CANCELLED
-          =============================================== */
-
           WHEN
             (
               COALESCE(
@@ -6568,10 +6792,6 @@ async function getCounterRequests(req, res) {
           THEN 'CANCELLED'
 
 
-          /* ===============================================
-             REORDER EXISTS
-          =============================================== */
-
           WHEN
             COALESCE(
               (
@@ -6596,10 +6816,6 @@ async function getCounterRequests(req, res) {
           THEN 'REORDER_PENDING'
 
 
-          /* ===============================================
-             ORIGINAL PARTIALLY SUPPLIED
-          =============================================== */
-
           WHEN
             (
               CASE
@@ -6614,10 +6830,6 @@ async function getCounterRequests(req, res) {
 
           THEN 'PARTIAL'
 
-
-          /* ===============================================
-             NOTHING YET
-          =============================================== */
 
           ELSE 'PENDING'
 
@@ -6678,7 +6890,7 @@ async function getCounterRequests(req, res) {
 
         /* =================================================
            REORDER ORDERS
-           
+
            EXISTING RESPONSE STRUCTURE PRESERVED
         ================================================= */
 
@@ -6897,7 +7109,7 @@ async function getCounterRequests(req, res) {
 
       /* ===================================================
          ROOT ORDER
-         
+
          NORMAL → itself
          REORDER → parent order
       =================================================== */
@@ -8158,6 +8370,12 @@ async function getSupplierOrders(req, res) {
         oi.sweet_id,
         oi.quantity,
 
+        /* NEW: ORDER UNIT */
+        oi.order_unit,
+
+        /* NEW: BASIC QUANTITY */
+        oi.basic_quantity,
+
         -- =========================
         -- ITEM PROCESSING
         -- =========================
@@ -8378,6 +8596,12 @@ async function getSupplierOrders(req, res) {
           sweet_id: row.sweet_id,
           sweet_name: row.sweet_name,
           unit: row.unit,
+
+          // NEW: REQUESTED ORDER UNIT
+          order_unit: row.order_unit,
+
+          // NEW: BASIC QUANTITY
+          basic_quantity: Number(row.basic_quantity || 0),
 
           // =========================
           // QUANTITY
@@ -18712,6 +18936,9 @@ async function verifyChalan(req, res) {
         oi.item_status,
 
         s.sweet_name,
+        s.unit,
+        s.bulk_unit,
+        s.bulk_conversion,
         s.shelf_life_days
 
       FROM ${schema}.order_items oi
@@ -18749,6 +18976,13 @@ async function verifyChalan(req, res) {
       const counterId = item.counter_id;
 
       const qty = Number(item.supplied_quantity || 0);
+
+      // Sweet master unit
+      const baseUnit = item.unit || "KG";
+
+      // Chalan supplied quantity is maintained
+      // internally as basic quantity
+      const basicQty = qty;
 
       // ================================================
       // COUNTER VALIDATION
@@ -18801,6 +19035,8 @@ async function verifyChalan(req, res) {
           counter_id,
           sweet_id,
           quantity,
+          unit,
+          basic_quantity,
           expiry_date
         )
         VALUES
@@ -18809,6 +19045,8 @@ async function verifyChalan(req, res) {
           '${counterId}',
           '${sweetId}',
           ${qty},
+          '${baseUnit}',
+          ${basicQty},
           '${expiryDate}'
         )
 
@@ -18826,6 +19064,17 @@ async function verifyChalan(req, res) {
             )
             +
             EXCLUDED.quantity::numeric,
+
+          unit =
+            EXCLUDED.unit,
+
+          basic_quantity =
+            COALESCE(
+              ${schema}.inventory.basic_quantity,
+              0
+            )
+            +
+            EXCLUDED.basic_quantity,
 
           expiry_date =
             EXCLUDED.expiry_date,
@@ -18845,6 +19094,8 @@ async function verifyChalan(req, res) {
           sweet_id,
           transaction_type,
           quantity,
+          unit,
+          basic_quantity,
           reference_id,
           notes
         )
@@ -18855,6 +19106,8 @@ async function verifyChalan(req, res) {
           '${sweetId}',
           'IN',
           ${qty},
+          '${baseUnit}',
+          ${basicQty},
           '${chalanId}',
           'Chalan verified - stock received'
         )
@@ -18956,7 +19209,9 @@ async function verifyChalan(req, res) {
         order_status: "DELIVERED",
 
         resolution_status:
-          chalan.order_type === "REORDER" ? "UPDATED_ON_ROOT_ORDER" : "UPDATED",
+          chalan.order_type === "REORDER"
+            ? "UPDATED_ON_ROOT_ORDER"
+            : "UPDATED",
 
         inventory_items: inventoryItems,
       },
@@ -21026,10 +21281,24 @@ async function fetchCounterSweets(req, res) {
     // =====================================
     const sql = `
       SELECT
-        s.row_id ,
+        s.row_id,
         s.sweet_name,
+
+        /* BASIC UNIT */
         s.unit,
+
+        /* BULK UNIT */
+        s.bulk_unit,
+
+        /* BASIC → BULK CONVERSION */
+        s.bulk_conversion,
+
+        /* BASIC PRICE */
         s.price,
+
+        /* BULK PRICE */
+        s.bulk_price,
+
         s.shelf_life_days,
         s.description,
         s.image_url,
@@ -24962,7 +25231,7 @@ async function reorderRemaining(req, res) {
         items
           .map((x) => x.order_item_id)
           .filter(Boolean)
-          .map((id) => String(id).trim()),
+          .map((id) => String(id).trim())
       ),
     ];
 
@@ -25009,7 +25278,7 @@ async function reorderRemaining(req, res) {
 
     const orderResult = await db_query.customQuery(
       orderQuery,
-      "Check Reorder Source Order",
+      "Check Reorder Source Order"
     );
 
     if (!orderResult.data?.length) {
@@ -25028,7 +25297,11 @@ async function reorderRemaining(req, res) {
     // VALID ORDER TYPE
     // =====================================================
 
-    if (!["NORMAL", "REORDER"].includes(selectedOrder.order_type || "NORMAL")) {
+    if (
+      !["NORMAL", "REORDER"].includes(
+        selectedOrder.order_type || "NORMAL"
+      )
+    ) {
       await connect_db.query("ROLLBACK");
 
       return libFunc.sendResponse(res, {
@@ -25057,7 +25330,9 @@ async function reorderRemaining(req, res) {
       rootOrderId = selectedOrder.parent_order_id;
     }
 
-    rootOrderId = String(rootOrderId).trim().replaceAll("'", "`");
+    rootOrderId = String(rootOrderId)
+      .trim()
+      .replaceAll("'", "`");
 
     // =====================================================
     // FETCH ROOT ORDER
@@ -25081,7 +25356,7 @@ async function reorderRemaining(req, res) {
 
     const rootOrderResult = await db_query.customQuery(
       rootOrderQuery,
-      "Check Root Order",
+      "Check Root Order"
     );
 
     if (!rootOrderResult.data?.length) {
@@ -25123,7 +25398,7 @@ async function reorderRemaining(req, res) {
 
     if (
       !["DELIVERED", "DISPATCHED", "ACCEPTED", "PARTIAL"].includes(
-        selectedOrder.order_status,
+        selectedOrder.order_status
       )
     ) {
       await connect_db.query("ROLLBACK");
@@ -25169,7 +25444,7 @@ async function reorderRemaining(req, res) {
 
     const resolveRootItemsResult = await db_query.customQuery(
       resolveRootItemsQuery,
-      "Resolve Root Order Items",
+      "Resolve Root Order Items"
     );
 
     const resolvedRows = resolveRootItemsResult.data || [];
@@ -25180,7 +25455,9 @@ async function reorderRemaining(req, res) {
 
     const rootItemIds = [
       ...new Set(
-        resolvedRows.map((item) => item.root_order_item_id).filter(Boolean),
+        resolvedRows
+          .map((item) => item.root_order_item_id)
+          .filter(Boolean)
       ),
     ];
 
@@ -25211,6 +25488,9 @@ async function reorderRemaining(req, res) {
     // IMPORTANT:
     // quantity is TEXT in order_items,
     // therefore ::numeric is required.
+    //
+    // NEW:
+    // order_unit and basic_quantity are preserved.
     // =====================================================
 
     const remainingQuery = `
@@ -25224,6 +25504,12 @@ async function reorderRemaining(req, res) {
 
         root.quantity,
 
+        /* NEW: ORDER UNIT */
+        root.order_unit,
+
+        /* NEW: BASIC QUANTITY */
+        root.basic_quantity,
+
         root.supplied_quantity,
 
         root.cancelled_quantity,
@@ -25231,7 +25517,6 @@ async function reorderRemaining(req, res) {
         root.remaining_action,
 
         root.remaining_action_on,
-
 
         /* ================================================
            REORDER SUPPLIED
@@ -25253,7 +25538,6 @@ async function reorderRemaining(req, res) {
           ),
           0
         )::numeric AS reorder_supplied_quantity,
-
 
         /* ================================================
            ACTUAL REMAINING
@@ -25300,7 +25584,6 @@ async function reorderRemaining(req, res) {
 
         ) AS remaining_quantity
 
-
       FROM sms.order_items root
 
       WHERE root.row_id IN (
@@ -25316,7 +25599,7 @@ async function reorderRemaining(req, res) {
 
     const remainingResult = await db_query.customQuery(
       remainingQuery,
-      "Calculate Root Remaining Quantity",
+      "Calculate Root Remaining Quantity"
     );
 
     const rootItems = remainingResult.data || [];
@@ -25340,7 +25623,7 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const validItems = (remainingResult.data || []).filter(
-      (item) => Number(item.remaining_quantity) > 0,
+      (item) => Number(item.remaining_quantity) > 0
     );
 
     if (validItems.length === 0) {
@@ -25358,7 +25641,8 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const validRootItemIds = validItems.map(
-      (item) => `'${String(item.order_item_id).replaceAll("'", "`")}'`,
+      (item) =>
+        `'${String(item.order_item_id).replaceAll("'", "`")}'`
     );
 
     // =====================================================
@@ -25378,94 +25662,94 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const activeReorderQuery = `
-  SELECT
+      SELECT
 
-    child.parent_order_item_id
-      AS root_order_item_id,
+        child.parent_order_item_id
+          AS root_order_item_id,
 
-    child.order_id
-      AS reorder_order_id,
+        child.order_id
+          AS reorder_order_id,
 
-    child.row_id
-      AS reorder_order_item_id,
+        child.row_id
+          AS reorder_order_item_id,
 
-    child.quantity::numeric
-      AS reorder_quantity,
+        child.quantity::numeric
+          AS reorder_quantity,
 
-    COALESCE(
-      child.supplied_quantity,
-      0
-    )::numeric AS supplied_quantity,
+        COALESCE(
+          child.supplied_quantity,
+          0
+        )::numeric AS supplied_quantity,
 
-    COALESCE(
-      child.cancelled_quantity,
-      0
-    )::numeric AS cancelled_quantity,
+        COALESCE(
+          child.cancelled_quantity,
+          0
+        )::numeric AS cancelled_quantity,
 
-    GREATEST(
-      child.quantity::numeric
-      -
-      COALESCE(
-        child.supplied_quantity,
+        GREATEST(
+          child.quantity::numeric
+          -
+          COALESCE(
+            child.supplied_quantity,
+            0
+          )::numeric
+          -
+          COALESCE(
+            child.cancelled_quantity,
+            0
+          )::numeric,
+          0
+        ) AS reorder_remaining_quantity,
+
+        child.item_status,
+
+        reorder.order_status,
+
+        reorder.resolution_status,
+
+        reorder.order_type,
+
+        reorder.parent_order_id
+
+      FROM sms.order_items child
+
+      INNER JOIN sms.orders reorder
+        ON reorder.row_id = child.order_id
+
+      WHERE child.parent_order_item_id IN (
+        ${validRootItemIds.join(",")}
+      )
+
+      AND reorder.order_type = 'REORDER'
+
+      AND GREATEST(
+        child.quantity::numeric
+        -
+        COALESCE(
+          child.supplied_quantity,
+          0
+        )::numeric
+        -
+        COALESCE(
+          child.cancelled_quantity,
+          0
+        )::numeric,
         0
-      )::numeric
-      -
-      COALESCE(
-        child.cancelled_quantity,
-        0
-      )::numeric,
-      0
-    ) AS reorder_remaining_quantity,
+      ) > 0
 
-    child.item_status,
+      AND child.item_status IN (
+        'PENDING',
+        'ACCEPTED'
+      )
 
-    reorder.order_status,
+      ORDER BY reorder.cr_on DESC
 
-    reorder.resolution_status,
-
-    reorder.order_type,
-
-    reorder.parent_order_id
-
-  FROM sms.order_items child
-
-  INNER JOIN sms.orders reorder
-    ON reorder.row_id = child.order_id
-
-  WHERE child.parent_order_item_id IN (
-    ${validRootItemIds.join(",")}
-  )
-
-  AND reorder.order_type = 'REORDER'
-
-  AND GREATEST(
-    child.quantity::numeric
-    -
-    COALESCE(
-      child.supplied_quantity,
-      0
-    )::numeric
-    -
-    COALESCE(
-      child.cancelled_quantity,
-      0
-    )::numeric,
-    0
-  ) > 0
-
-  AND child.item_status IN (
-    'PENDING',
-    'ACCEPTED'
-  )
-
-  ORDER BY reorder.cr_on DESC
-
-  LIMIT 1
-`;
+      LIMIT 1
+    `;
 
     const activeReorderResult = await db_query.customQuery(
       activeReorderQuery,
-      "Check Active Reorder",
+      "Check Active Reorder"
     );
 
     const activeReorders = activeReorderResult.data || [];
@@ -25489,13 +25773,21 @@ async function reorderRemaining(req, res) {
 
           reorder_order_item_id: item.reorder_order_item_id,
 
-          reorder_quantity: Number(item.reorder_quantity || 0),
+          reorder_quantity: Number(
+            item.reorder_quantity || 0
+          ),
 
-          supplied_quantity: Number(item.supplied_quantity || 0),
+          supplied_quantity: Number(
+            item.supplied_quantity || 0
+          ),
 
-          cancelled_quantity: Number(item.cancelled_quantity || 0),
+          cancelled_quantity: Number(
+            item.cancelled_quantity || 0
+          ),
 
-          remaining_quantity: Number(item.reorder_remaining_quantity || 0),
+          remaining_quantity: Number(
+            item.reorder_remaining_quantity || 0
+          ),
 
           item_status: item.item_status,
 
@@ -25515,7 +25807,9 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const reorderOrderId =
-      Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 7);
 
     const createOrderQuery = `
       INSERT INTO sms.orders (
@@ -25559,7 +25853,10 @@ async function reorderRemaining(req, res) {
       )
     `;
 
-    await db_query.customQuery(createOrderQuery, "Create Reorder Order");
+    await db_query.customQuery(
+      createOrderQuery,
+      "Create Reorder Order"
+    );
 
     // =====================================================
     // CREATE REORDER ITEMS
@@ -25569,7 +25866,9 @@ async function reorderRemaining(req, res) {
 
     for (const item of validItems) {
       const reorderItemId =
-        Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+        Date.now() +
+        "_" +
+        Math.random().toString(36).substring(2, 7);
 
       const quantity = Number(item.remaining_quantity);
 
@@ -25580,6 +25879,21 @@ async function reorderRemaining(req, res) {
       if (!Number.isFinite(quantity) || quantity <= 0) {
         continue;
       }
+
+      // ===================================================
+      // BASIC QUANTITY FOR REORDER
+      //
+      // Keep existing remaining quantity logic.
+      // Preserve original unit.
+      // ===================================================
+
+      const orderUnit = item.order_unit || null;
+
+      const basicQuantity =
+        item.basic_quantity !== null &&
+        item.basic_quantity !== undefined
+          ? Number(item.basic_quantity)
+          : quantity;
 
       // ===================================================
       // CREATE REORDER ITEM
@@ -25598,6 +25912,10 @@ async function reorderRemaining(req, res) {
             sweet_id,
 
             quantity,
+
+            order_unit,
+
+            basic_quantity,
 
             counter_id,
 
@@ -25627,6 +25945,17 @@ async function reorderRemaining(req, res) {
 
             ${quantity},
 
+            ${
+              orderUnit
+                ? `'${String(orderUnit)
+                    .replaceAll("'", "`")
+                    .trim()
+                    .toUpperCase()}'`
+                : "NULL"
+            },
+
+            ${basicQuantity},
+
             '${item.counter_id}',
 
             0,
@@ -25643,7 +25972,7 @@ async function reorderRemaining(req, res) {
 
           )
         `,
-        "Create Reorder Item",
+        "Create Reorder Item"
       );
 
       // ===================================================
@@ -25665,7 +25994,7 @@ async function reorderRemaining(req, res) {
           WHERE row_id =
                 '${item.order_item_id}'
         `,
-        "Mark Root Item Reordered",
+        "Mark Root Item Reordered"
       );
 
       // ===================================================
@@ -25683,10 +26012,16 @@ async function reorderRemaining(req, res) {
 
         reorder_quantity: quantity,
 
-        previous_supplied_quantity: Number(item.supplied_quantity || 0),
+        order_unit: orderUnit,
+
+        basic_quantity: basicQuantity,
+
+        previous_supplied_quantity: Number(
+          item.supplied_quantity || 0
+        ),
 
         previous_reorder_supplied_quantity: Number(
-          item.reorder_supplied_quantity || 0,
+          item.reorder_supplied_quantity || 0
         ),
 
         remaining_quantity: quantity,
@@ -25729,7 +26064,7 @@ async function reorderRemaining(req, res) {
         WHERE row_id =
               '${rootOrderId}'
       `,
-      "Keep Root Order Open",
+      "Keep Root Order Open"
     );
 
     // =====================================================
@@ -25745,15 +26080,15 @@ async function reorderRemaining(req, res) {
     try {
       const supplierUsers = await db_query.customQuery(
         `
-            SELECT
-              row_id
+          SELECT
+            row_id
 
-            FROM sms.users
+          FROM sms.users
 
-            WHERE supplier_id =
-                  '${rootOrder.supplier_id}'
-          `,
-        "Get Supplier Users",
+          WHERE supplier_id =
+                '${rootOrder.supplier_id}'
+        `,
+        "Get Supplier Users"
       );
 
       if (supplierUsers.data?.length) {
@@ -25779,7 +26114,10 @@ async function reorderRemaining(req, res) {
       // Notification failure should not
       // make successful reorder fail.
 
-      console.log("Reorder notification error:", notificationError);
+      console.log(
+        "Reorder notification error:",
+        notificationError
+      );
     }
 
     // =====================================================

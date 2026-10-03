@@ -24567,20 +24567,7 @@ doc.moveDown(0.35);
       // CUT HERE - ENGLISH
       // -----------------------------------------------
 
-    //   doc
-    //     .font("Helvetica-Bold")
-    //     .fontSize(7)
-    //     .fillColor("#000000")
-    //     .text("CUT HERE", SIDE_MARGIN, y - 4, {
-    //       width: CONTENT_WIDTH,
-    //       align: "center",
-    //       lineBreak: false,
-    //     });
-
-    //   doc.y = y + 14;
-    // }
-
-    // -----------------------------------------------
+      // -----------------------------------------------
 // SCISSORS ICON - RIGHT SIDE
 // -----------------------------------------------
 
@@ -24612,6 +24599,7 @@ doc
   .restore();
 
 doc.y = y + 14;
+    }
 
     // =====================================================
     // PROCESS DEPARTMENTS

@@ -13784,11 +13784,11 @@ async function downloadOrderRequestPDF(req, res) {
     const filePath = path.join(folder, fileName);
 
     // =====================================================
-    // A4 PAGE SETTINGS
+    // A5 PAGE SETTINGS
     // =====================================================
 
-    const PAGE_WIDTH = 595.28;
-    const PAGE_HEIGHT = 841.89;
+    const PAGE_WIDTH = 419.53;
+    const PAGE_HEIGHT = 595.28;
 
     const MARGIN = 28;
 
@@ -13799,7 +13799,7 @@ async function downloadOrderRequestPDF(req, res) {
     // =====================================================
 
     const doc = new PDFDocument({
-      size: "A4",
+      size: "A5",
 
       margins: {
         top: MARGIN,
@@ -13864,7 +13864,7 @@ async function downloadOrderRequestPDF(req, res) {
       // TOP HEADER BOX
       // ===================================================
 
-      doc.rect(MARGIN, startY, CONTENT_WIDTH, 28).lineWidth(0.8).stroke();
+      doc.rect(MARGIN, startY, CONTENT_WIDTH, 30).lineWidth(0.8).stroke();
 
       // ===================================================
       // GSTIN
@@ -13874,8 +13874,8 @@ async function downloadOrderRequestPDF(req, res) {
         .font("Helvetica-Bold")
         .fontSize(8)
         .fillColor("#000000")
-        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 6, startY + 9, {
-          width: 180,
+        .text(`GSTIN : ${COMPANY_GSTIN}`, MARGIN + 8, startY + 10, {
+          width: 120,
         });
 
       // ===================================================
@@ -13886,8 +13886,8 @@ async function downloadOrderRequestPDF(req, res) {
         .font("Helvetica-Bold")
         .fontSize(12)
         .fillColor("#000000")
-        .text("Order Request", MARGIN + 180, startY + 7, {
-          width: 180,
+        .text("Order Request", MARGIN + 125, startY + 4, {
+          width: 230,
           align: "center",
         });
 
@@ -13899,8 +13899,8 @@ async function downloadOrderRequestPDF(req, res) {
         .font("Helvetica-Bold")
         .fontSize(7)
         .fillColor("#000000")
-        .text("FOR MOVEMENT OF GOODS", PAGE_WIDTH - MARGIN - 150, startY + 9, {
-          width: 144,
+        .text("FOR MOVEMENT OF GOODS", MARGIN +  125, startY + 19, {
+          width: 230,
           align: "right",
         });
 
@@ -14164,11 +14164,11 @@ async function downloadOrderRequestPDF(req, res) {
       at the table right border.
     */
 
-    const SERIAL_WIDTH = 40;
+    const SERIAL_WIDTH = 38;
 
-    const PRODUCT_WIDTH = 285;
+    const PRODUCT_WIDTH = 175;
 
-    const HSN_WIDTH = 110;
+    const HSN_WIDTH = 85;
 
     const QTY_WIDTH = CONTENT_WIDTH - SERIAL_WIDTH - PRODUCT_WIDTH - HSN_WIDTH;
 
@@ -14595,7 +14595,7 @@ async function downloadOrderRequestPDF(req, res) {
 
       if (doc.y + requiredSpace > PAGE_HEIGHT - MARGIN) {
         doc.addPage({
-          size: "A4",
+          size: "A5",
 
           margins: {
             top: MARGIN,

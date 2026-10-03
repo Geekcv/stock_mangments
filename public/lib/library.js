@@ -2851,7 +2851,6 @@ async function getStockHistory(req, res) {
   }
 }
 
-
 // {
 //   "counter_id": "counter_123",
 //   "sweet_id": "sweet_1",
@@ -2873,7 +2872,7 @@ async function getInventory(req, res) {
     if (!["ADMIN", "SHOP_ADMIN", "COUNTER_USER"].includes(user.user_role)) {
       return libFunc.sendResponse(res, {
         status: 1,
-        msg: "Access denied"
+        msg: "Access denied",
       });
     }
 
@@ -2883,12 +2882,12 @@ async function getInventory(req, res) {
       if (!user.shopId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Shop ID is required"
+          msg: "Shop ID is required",
         });
       }
 
       whereConditions.push(
-        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`
+        `c.shop_id = '${user.shopId.trim().replaceAll("'", "`")}'`,
       );
     }
 
@@ -2896,12 +2895,12 @@ async function getInventory(req, res) {
       if (!user.counterId) {
         return libFunc.sendResponse(res, {
           status: 1,
-          msg: "Counter ID is required"
+          msg: "Counter ID is required",
         });
       }
 
       whereConditions.push(
-        `i.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`
+        `i.counter_id = '${user.counterId.trim().replaceAll("'", "`")}'`,
       );
     }
 
@@ -2982,15 +2981,14 @@ async function getInventory(req, res) {
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Inventory fetched successfully",
-      data: result
+      data: result,
     });
-
   } catch (error) {
     console.log("getInventory error:", error);
 
     return libFunc.sendResponse(res, {
       status: 1,
-      msg: "Something went wrong"
+      msg: "Something went wrong",
     });
   }
 }
@@ -11922,6 +11920,23 @@ async function downloadChalanPDF(req, res) {
         );
 
       // ===================================================
+      // VERIFICATION CODE
+      // ===================================================
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Verification Code :", MARGIN + 4, y + 12);
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .text(safeText(firstRow.verification_code), MARGIN + 100, y + 12, {
+          width: halfWidth - 105,
+          ellipsis: true,
+        });
+
+      // ===================================================
       // FROM / TO
       // ===================================================
 
@@ -19190,9 +19205,7 @@ async function verifyChalan(req, res) {
         order_status: "DELIVERED",
 
         resolution_status:
-          chalan.order_type === "REORDER"
-            ? "UPDATED_ON_ROOT_ORDER"
-            : "UPDATED",
+          chalan.order_type === "REORDER" ? "UPDATED_ON_ROOT_ORDER" : "UPDATED",
 
         inventory_items: inventoryItems,
       },
@@ -25212,7 +25225,7 @@ async function reorderRemaining(req, res) {
         items
           .map((x) => x.order_item_id)
           .filter(Boolean)
-          .map((id) => String(id).trim())
+          .map((id) => String(id).trim()),
       ),
     ];
 
@@ -25259,7 +25272,7 @@ async function reorderRemaining(req, res) {
 
     const orderResult = await db_query.customQuery(
       orderQuery,
-      "Check Reorder Source Order"
+      "Check Reorder Source Order",
     );
 
     if (!orderResult.data?.length) {
@@ -25278,11 +25291,7 @@ async function reorderRemaining(req, res) {
     // VALID ORDER TYPE
     // =====================================================
 
-    if (
-      !["NORMAL", "REORDER"].includes(
-        selectedOrder.order_type || "NORMAL"
-      )
-    ) {
+    if (!["NORMAL", "REORDER"].includes(selectedOrder.order_type || "NORMAL")) {
       await connect_db.query("ROLLBACK");
 
       return libFunc.sendResponse(res, {
@@ -25311,9 +25320,7 @@ async function reorderRemaining(req, res) {
       rootOrderId = selectedOrder.parent_order_id;
     }
 
-    rootOrderId = String(rootOrderId)
-      .trim()
-      .replaceAll("'", "`");
+    rootOrderId = String(rootOrderId).trim().replaceAll("'", "`");
 
     // =====================================================
     // FETCH ROOT ORDER
@@ -25337,7 +25344,7 @@ async function reorderRemaining(req, res) {
 
     const rootOrderResult = await db_query.customQuery(
       rootOrderQuery,
-      "Check Root Order"
+      "Check Root Order",
     );
 
     if (!rootOrderResult.data?.length) {
@@ -25379,7 +25386,7 @@ async function reorderRemaining(req, res) {
 
     if (
       !["DELIVERED", "DISPATCHED", "ACCEPTED", "PARTIAL"].includes(
-        selectedOrder.order_status
+        selectedOrder.order_status,
       )
     ) {
       await connect_db.query("ROLLBACK");
@@ -25425,7 +25432,7 @@ async function reorderRemaining(req, res) {
 
     const resolveRootItemsResult = await db_query.customQuery(
       resolveRootItemsQuery,
-      "Resolve Root Order Items"
+      "Resolve Root Order Items",
     );
 
     const resolvedRows = resolveRootItemsResult.data || [];
@@ -25436,9 +25443,7 @@ async function reorderRemaining(req, res) {
 
     const rootItemIds = [
       ...new Set(
-        resolvedRows
-          .map((item) => item.root_order_item_id)
-          .filter(Boolean)
+        resolvedRows.map((item) => item.root_order_item_id).filter(Boolean),
       ),
     ];
 
@@ -25580,7 +25585,7 @@ async function reorderRemaining(req, res) {
 
     const remainingResult = await db_query.customQuery(
       remainingQuery,
-      "Calculate Root Remaining Quantity"
+      "Calculate Root Remaining Quantity",
     );
 
     const rootItems = remainingResult.data || [];
@@ -25604,7 +25609,7 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const validItems = (remainingResult.data || []).filter(
-      (item) => Number(item.remaining_quantity) > 0
+      (item) => Number(item.remaining_quantity) > 0,
     );
 
     if (validItems.length === 0) {
@@ -25622,8 +25627,7 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const validRootItemIds = validItems.map(
-      (item) =>
-        `'${String(item.order_item_id).replaceAll("'", "`")}'`
+      (item) => `'${String(item.order_item_id).replaceAll("'", "`")}'`,
     );
 
     // =====================================================
@@ -25730,7 +25734,7 @@ async function reorderRemaining(req, res) {
 
     const activeReorderResult = await db_query.customQuery(
       activeReorderQuery,
-      "Check Active Reorder"
+      "Check Active Reorder",
     );
 
     const activeReorders = activeReorderResult.data || [];
@@ -25754,21 +25758,13 @@ async function reorderRemaining(req, res) {
 
           reorder_order_item_id: item.reorder_order_item_id,
 
-          reorder_quantity: Number(
-            item.reorder_quantity || 0
-          ),
+          reorder_quantity: Number(item.reorder_quantity || 0),
 
-          supplied_quantity: Number(
-            item.supplied_quantity || 0
-          ),
+          supplied_quantity: Number(item.supplied_quantity || 0),
 
-          cancelled_quantity: Number(
-            item.cancelled_quantity || 0
-          ),
+          cancelled_quantity: Number(item.cancelled_quantity || 0),
 
-          remaining_quantity: Number(
-            item.reorder_remaining_quantity || 0
-          ),
+          remaining_quantity: Number(item.reorder_remaining_quantity || 0),
 
           item_status: item.item_status,
 
@@ -25788,9 +25784,7 @@ async function reorderRemaining(req, res) {
     // =====================================================
 
     const reorderOrderId =
-      Date.now() +
-      "_" +
-      Math.random().toString(36).substring(2, 7);
+      Date.now() + "_" + Math.random().toString(36).substring(2, 7);
 
     const createOrderQuery = `
       INSERT INTO sms.orders (
@@ -25834,10 +25828,7 @@ async function reorderRemaining(req, res) {
       )
     `;
 
-    await db_query.customQuery(
-      createOrderQuery,
-      "Create Reorder Order"
-    );
+    await db_query.customQuery(createOrderQuery, "Create Reorder Order");
 
     // =====================================================
     // CREATE REORDER ITEMS
@@ -25847,9 +25838,7 @@ async function reorderRemaining(req, res) {
 
     for (const item of validItems) {
       const reorderItemId =
-        Date.now() +
-        "_" +
-        Math.random().toString(36).substring(2, 7);
+        Date.now() + "_" + Math.random().toString(36).substring(2, 7);
 
       const quantity = Number(item.remaining_quantity);
 
@@ -25871,8 +25860,7 @@ async function reorderRemaining(req, res) {
       const orderUnit = item.order_unit || null;
 
       const basicQuantity =
-        item.basic_quantity !== null &&
-        item.basic_quantity !== undefined
+        item.basic_quantity !== null && item.basic_quantity !== undefined
           ? Number(item.basic_quantity)
           : quantity;
 
@@ -25953,7 +25941,7 @@ async function reorderRemaining(req, res) {
 
           )
         `,
-        "Create Reorder Item"
+        "Create Reorder Item",
       );
 
       // ===================================================
@@ -25975,7 +25963,7 @@ async function reorderRemaining(req, res) {
           WHERE row_id =
                 '${item.order_item_id}'
         `,
-        "Mark Root Item Reordered"
+        "Mark Root Item Reordered",
       );
 
       // ===================================================
@@ -25997,12 +25985,10 @@ async function reorderRemaining(req, res) {
 
         basic_quantity: basicQuantity,
 
-        previous_supplied_quantity: Number(
-          item.supplied_quantity || 0
-        ),
+        previous_supplied_quantity: Number(item.supplied_quantity || 0),
 
         previous_reorder_supplied_quantity: Number(
-          item.reorder_supplied_quantity || 0
+          item.reorder_supplied_quantity || 0,
         ),
 
         remaining_quantity: quantity,
@@ -26045,7 +26031,7 @@ async function reorderRemaining(req, res) {
         WHERE row_id =
               '${rootOrderId}'
       `,
-      "Keep Root Order Open"
+      "Keep Root Order Open",
     );
 
     // =====================================================
@@ -26069,7 +26055,7 @@ async function reorderRemaining(req, res) {
           WHERE supplier_id =
                 '${rootOrder.supplier_id}'
         `,
-        "Get Supplier Users"
+        "Get Supplier Users",
       );
 
       if (supplierUsers.data?.length) {
@@ -26095,10 +26081,7 @@ async function reorderRemaining(req, res) {
       // Notification failure should not
       // make successful reorder fail.
 
-      console.log(
-        "Reorder notification error:",
-        notificationError
-      );
+      console.log("Reorder notification error:", notificationError);
     }
 
     // =====================================================

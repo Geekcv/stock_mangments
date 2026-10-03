@@ -185,3 +185,6 @@ request_unit
 
 oi.order_unit AS unit
 r.request_unit AS unit 
+
+
+verification_code

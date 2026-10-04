@@ -21389,7 +21389,7 @@ async function fetchCounterSweets(req, res) {
       ORDER BY s.cr_on DESC
     `;
 
-    console.log("Final Query:", sql);
+    // console.log("Final Query:", sql);
 
     const result = await db_query.customQuery(sql);
 

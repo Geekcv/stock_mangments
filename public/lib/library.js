@@ -2234,6 +2234,8 @@ async function fetchAllSweets(req, res) {
 
     const result = await db_query.customQuery(sql);
 
+    console.log("results",result)
+
     return libFunc.sendResponse(res, result);
   } catch (error) {
     console.log("fetchAllSweets error:", error);

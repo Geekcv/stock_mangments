@@ -2234,7 +2234,7 @@ async function fetchAllSweets(req, res) {
 
     const result = await db_query.customQuery(sql);
 
-    console.log("results",result)
+    console.log("results", result);
 
     return libFunc.sendResponse(res, result);
   } catch (error) {
@@ -2984,7 +2984,7 @@ async function getInventory(req, res) {
     return libFunc.sendResponse(res, {
       status: 0,
       msg: "Inventory fetched successfully",
-      data: result,
+      data: result.data,
     });
   } catch (error) {
     console.log("getInventory error:", error);
@@ -14400,10 +14400,8 @@ async function downloadOrderRequestPDF(req, res) {
       // const quantityText = formatQuantity(item.quantity);
       const quantity = formatQuantity(item.quantity);
 
-const quantityText =
-  item.unit && item.unit !== "-"
-    ? `${quantity} ${item.unit}`
-    : quantity;
+      const quantityText =
+        item.unit && item.unit !== "-" ? `${quantity} ${item.unit}` : quantity;
 
       const qtyX = MARGIN + SERIAL_WIDTH + PRODUCT_WIDTH + HSN_WIDTH;
 
@@ -17637,7 +17635,7 @@ cron.schedule(
       "India time:",
       new Date().toLocaleString("en-IN", {
         timeZone: "Asia/Kolkata",
-      })
+      }),
     );
     console.log("=================================");
 
@@ -17645,7 +17643,7 @@ cron.schedule(
   },
   {
     timezone: "Asia/Kolkata",
-  }
+  },
 );
 
 // Fetch Expiry Logs

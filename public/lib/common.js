@@ -52,7 +52,19 @@ router.post("/acube-24", async function (req, res) {
 });
 
 router.post("/", verifyToken, function (req, res, next) {
-  let data = JSON.parse(atob(req.body.payload));
+  // let data = JSON.parse(atob(req.body.payload));
+
+  let data = JSON.parse(
+    decodeURIComponent(
+        atob(req.body.payload)
+            .split("")
+            .map(char =>
+                "%" + char.charCodeAt(0).toString(16).padStart(2, "0")
+            )
+            .join("")
+    )
+);
+
   // console.log("data=======direct=====");
   console.log(data);
   data.data.userId = req.userId;

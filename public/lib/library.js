@@ -2227,7 +2227,7 @@ async function fetchAllSweets(req, res) {
 
       ${whereClause}
 
-      ORDER BY s.cr_on ASC
+      ORDER BY s.cr_on DESC
     `;
 
     console.log("Final Query:", sql);
@@ -21386,7 +21386,7 @@ async function fetchCounterSweets(req, res) {
 
       WHERE ${conditions.join(" AND ")}
 
-      ORDER BY s.cr_on ASC
+      ORDER BY s.cr_on DESC
     `;
 
     console.log("Final Query:", sql);

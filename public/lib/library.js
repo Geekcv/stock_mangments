@@ -2180,6 +2180,7 @@ async function fetchAllSweets(req, res) {
       SELECT
         s.row_id,
         s.sweet_name,
+        s.hindi_sweets_name,
 
         -- Basic Unit
         s.unit,
@@ -6097,6 +6098,7 @@ async function getCounterRequests(req, res) {
         s.row_id AS sweet_id,
 
         s.sweet_name,
+        s.hindi_sweets_name,
 
         r.request_unit AS unit, 
 
@@ -8114,6 +8116,7 @@ async function getAllChalans(req, res) {
 
         -- Sweet
         s.sweet_name,
+        s.hindi_sweets_name,
         oi.order_unit as unit
 
       FROM ${chalanTable} ch
@@ -8381,6 +8384,7 @@ async function getSupplierOrders(req, res) {
         -- SWEET
         -- =========================
         s.sweet_name,
+        s.hindi_sweets_name,
         oi.order_unit as unit,
 
         -- =========================
@@ -21323,6 +21327,7 @@ async function fetchCounterSweets(req, res) {
       SELECT
         s.row_id,
         s.sweet_name,
+        s.hindi_sweets_name,
 
         /* BASIC UNIT */
         s.unit,

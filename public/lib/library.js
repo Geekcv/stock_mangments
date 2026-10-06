@@ -18118,10 +18118,12 @@ async function updateOrderStatusBasedOnItems(order_id) {
 async function updateOrderItemsBySupplier(req, res) {
   try {
     const { order_id, items } = req.data || {};
+
     const user = req.data;
 
     const orderTable = schema + ".orders";
     const orderItemTable = schema + ".order_items";
+    const sweetTable = schema + ".sweets";
 
     console.log("updateOrderItemsBySupplier:", req.data);
 
@@ -18227,7 +18229,9 @@ async function updateOrderItemsBySupplier(req, res) {
       // DUPLICATE ITEM CHECK
       // ===================================================
 
-      const itemIds = items.map((item) => item.order_item_id).filter(Boolean);
+      const itemIds = items
+        .map((item) => item.order_item_id)
+        .filter(Boolean);
 
       const uniqueItemIds = [...new Set(itemIds)];
 
@@ -18300,19 +18304,25 @@ async function updateOrderItemsBySupplier(req, res) {
         // ===============================================
 
         const itemCheck = await db_query.customQuery(`
-            SELECT
-              oi.row_id,
-              oi.order_id,
-              oi.quantity,
-              oi.supplied_quantity,
-              oi.cancelled_quantity,
-              oi.item_status,
-              oi.parent_order_item_id
-            FROM ${orderItemTable} oi
-            WHERE oi.row_id = '${orderItemId}'
-            AND oi.order_id = '${orderId}'
-            LIMIT 1
-          `);
+          SELECT
+            oi.row_id,
+            oi.order_id,
+            oi.quantity,
+            oi.supplied_quantity,
+            oi.cancelled_quantity,
+            oi.item_status,
+            oi.parent_order_item_id,
+            oi.order_unit,
+            s.unit,
+            s.bulk_unit,
+            s.bulk_conversion
+          FROM ${orderItemTable} oi
+          LEFT JOIN ${sweetTable} s
+            ON s.row_id = oi.sweet_id
+          WHERE oi.row_id = '${orderItemId}'
+          AND oi.order_id = '${orderId}'
+          LIMIT 1
+        `);
 
         if (!itemCheck.data?.length) {
           await connect_db.query("ROLLBACK");
@@ -18427,6 +18437,25 @@ async function updateOrderItemsBySupplier(req, res) {
         }
 
         // ===============================================
+        // CALCULATE BASIC QUANTITY
+        // ===============================================
+
+        const orderUnit = String(orderItem.order_unit || "").trim().toUpperCase();
+
+        const bulkConversion = Number(orderItem.bulk_conversion || 0);
+
+        let suppliedBasicQuantity = suppliedQty;
+
+        if (
+          orderUnit &&
+          orderItem.bulk_unit &&
+          String(orderItem.bulk_unit).trim().toUpperCase() === orderUnit &&
+          bulkConversion > 0
+        ) {
+          suppliedBasicQuantity = suppliedQty * bulkConversion;
+        }
+
+        // ===============================================
         // SAFE REASON
         // ===============================================
 
@@ -18443,6 +18472,7 @@ async function updateOrderItemsBySupplier(req, res) {
           SET
             item_status = '${status}',
             supplied_quantity = ${suppliedQty},
+            basic_quantity = ${suppliedBasicQuantity},
             up_on = NOW()
           WHERE row_id = '${orderItemId}'
           AND order_id = '${orderId}'
@@ -18457,16 +18487,6 @@ async function updateOrderItemsBySupplier(req, res) {
 
       // ===================================================
       // UPDATE ROOT ORDER RESOLUTION
-      // ===================================================
-      //
-      // NORMAL:
-      //   root order = current order
-      //
-      // REORDER:
-      //   root order = parent_order_id
-      //
-      // Reorder child supplied quantity must be counted
-      // against original/root item.
       // ===================================================
 
       let rootOrderId = orderId;
@@ -18496,6 +18516,7 @@ async function updateOrderItemsBySupplier(req, res) {
           root_order_id: rootOrderId,
         },
       });
+
     } catch (transactionError) {
       try {
         await connect_db.query("ROLLBACK");
@@ -18505,6 +18526,7 @@ async function updateOrderItemsBySupplier(req, res) {
 
       throw transactionError;
     }
+
   } catch (error) {
     console.log("updateOrderItemsBySupplier error:", error);
 

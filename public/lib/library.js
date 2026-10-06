@@ -2771,6 +2771,7 @@ async function getStockHistory(req, res) {
 
         st.sweet_id,
         s.sweet_name,
+        st.basic_quantity,
         CONCAT(
           COALESCE(st.basic_quantity, 0)::numeric::integer,
           ' ',
@@ -19023,6 +19024,7 @@ async function verifyChalan(req, res) {
 
         oi.sweet_id,
         oi.counter_id,
+        oi.basic_quantity,
 
         oi.quantity AS ordered_quantity,
 
@@ -19074,6 +19076,7 @@ async function verifyChalan(req, res) {
       const counterId = item.counter_id;
 
       const qty = Number(item.supplied_quantity || 0);
+      const basic_quantity = Number(item.basic_quantity || 0);
 
       // Sweet master unit
       const baseUnit = item.unit || "KG";
@@ -19081,6 +19084,7 @@ async function verifyChalan(req, res) {
       // Chalan supplied quantity is maintained
       // internally as basic quantity
       const basicQty = qty;
+      const basic_qty = basic_quantity;
 
       // ================================================
       // COUNTER VALIDATION
@@ -19144,7 +19148,7 @@ async function verifyChalan(req, res) {
           '${sweetId}',
           ${qty},
           '${baseUnit}',
-          ${basicQty},
+          ${basic_qty},
           '${expiryDate}'
         )
 
@@ -19205,7 +19209,7 @@ async function verifyChalan(req, res) {
           'IN',
           ${qty},
           '${baseUnit}',
-          ${basicQty},
+          ${basic_qty},
           '${chalanId}',
           'Chalan verified - stock received'
         )
@@ -23964,9 +23968,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     const categoryTable = schema + ".categories";
     const departmentTable = schema + ".departments";
 
-    const safeOrderId = String(order_id)
-      .trim()
-      .replaceAll("'", "''");
+    const safeOrderId = String(order_id).trim().replaceAll("'", "''");
 
     // =====================================================
     // GET ORDER + CHECK SUPPLIER ACCEPTANCE
@@ -24076,18 +24078,12 @@ async function downloadDepartmentSlipPDF(req, res) {
         return res.status(404).send("Order not found");
       }
 
-      console.log(
-        "orderData[0].order_status",
-        orderData[0].order_status
-      );
+      console.log("orderData[0].order_status", orderData[0].order_status);
 
       if (
-        ![
-          "ACCEPTED",
-          "PARTIAL",
-          "DISPATCHED",
-          "DELIVERED",
-        ].includes(orderData[0].order_status)
+        !["ACCEPTED", "PARTIAL", "DISPATCHED", "DELIVERED"].includes(
+          orderData[0].order_status,
+        )
       ) {
         return libFunc.sendResponse(res, {
           status: 1,
@@ -24104,9 +24100,10 @@ async function downloadDepartmentSlipPDF(req, res) {
     // DISPLAY ORDER ID
     // =====================================================
 
-    const orderDisplayId = `ORD-${String(
-      order.order_serial_id
-    ).padStart(6, "0")}`;
+    const orderDisplayId = `ORD-${String(order.order_serial_id).padStart(
+      6,
+      "0",
+    )}`;
 
     // =====================================================
     // GROUP DATA BY DEPARTMENT
@@ -24115,11 +24112,9 @@ async function downloadDepartmentSlipPDF(req, res) {
     const departmentGrouped = {};
 
     data.forEach((item) => {
-      const departmentId =
-        item.department_id || "NO_DEPARTMENT";
+      const departmentId = item.department_id || "NO_DEPARTMENT";
 
-      const departmentName =
-        item.department_name || "Others";
+      const departmentName = item.department_name || "Others";
 
       if (!departmentGrouped[departmentId]) {
         departmentGrouped[departmentId] = {
@@ -24142,8 +24137,7 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     const SIDE_MARGIN = 8;
 
-    const CONTENT_WIDTH =
-      PAPER_WIDTH - SIDE_MARGIN * 2;
+    const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 
     // =====================================================
     // TABLE WIDTHS
@@ -24153,10 +24147,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     const SWEET_WIDTH = 112;
     const QTY_WIDTH = 41;
 
-    const TABLE_WIDTH =
-      CATEGORY_WIDTH +
-      SWEET_WIDTH +
-      QTY_WIDTH;
+    const TABLE_WIDTH = CATEGORY_WIDTH + SWEET_WIDTH + QTY_WIDTH;
 
     const ROW_HEIGHT = 17;
 
@@ -24183,41 +24174,31 @@ async function downloadDepartmentSlipPDF(req, res) {
     const HINDI_FONT_REGULAR = path.join(
       process.cwd(),
       "fonts",
-      "NotoSansDevanagari-Regular.ttf"
+      "NotoSansDevanagari-Regular.ttf",
     );
 
     const HINDI_FONT_BOLD = path.join(
       process.cwd(),
       "fonts",
-      "NotoSansDevanagari-Bold.ttf"
+      "NotoSansDevanagari-Bold.ttf",
     );
 
     // Check Hindi regular font
     if (!fs.existsSync(HINDI_FONT_REGULAR)) {
-      console.log(
-        "Hindi regular font not found:",
-        HINDI_FONT_REGULAR
-      );
+      console.log("Hindi regular font not found:", HINDI_FONT_REGULAR);
 
       return res
         .status(500)
-        .send(
-          `Hindi regular font not found: ${HINDI_FONT_REGULAR}`
-        );
+        .send(`Hindi regular font not found: ${HINDI_FONT_REGULAR}`);
     }
 
     // Check Hindi bold font
     if (!fs.existsSync(HINDI_FONT_BOLD)) {
-      console.log(
-        "Hindi bold font not found:",
-        HINDI_FONT_BOLD
-      );
+      console.log("Hindi bold font not found:", HINDI_FONT_BOLD);
 
       return res
         .status(500)
-        .send(
-          `Hindi bold font not found: ${HINDI_FONT_BOLD}`
-        );
+        .send(`Hindi bold font not found: ${HINDI_FONT_BOLD}`);
     }
 
     // =====================================================
@@ -24226,10 +24207,7 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     const BASE_UPLOAD_PATH = "/home/uploads";
 
-    const folder = path.join(
-      BASE_UPLOAD_PATH,
-      "DepartmentSlips"
-    );
+    const folder = path.join(BASE_UPLOAD_PATH, "DepartmentSlips");
 
     if (!fs.existsSync(folder)) {
       fs.mkdirSync(folder, {
@@ -24237,13 +24215,9 @@ async function downloadDepartmentSlipPDF(req, res) {
       });
     }
 
-    const fileName =
-      `DepartmentSlip_${Date.now()}.pdf`;
+    const fileName = `DepartmentSlip_${Date.now()}.pdf`;
 
-    const filePath = path.join(
-      folder,
-      fileName
-    );
+    const filePath = path.join(folder, fileName);
 
     // =====================================================
     // PAGE SETTINGS
@@ -24254,17 +24228,8 @@ async function downloadDepartmentSlipPDF(req, res) {
     function splitItems(items) {
       const pages = [];
 
-      for (
-        let i = 0;
-        i < items.length;
-        i += MAX_ROWS_PER_PAGE
-      ) {
-        pages.push(
-          items.slice(
-            i,
-            i + MAX_ROWS_PER_PAGE
-          )
-        );
+      for (let i = 0; i < items.length; i += MAX_ROWS_PER_PAGE) {
+        pages.push(items.slice(i, i + MAX_ROWS_PER_PAGE));
       }
 
       return pages;
@@ -24274,10 +24239,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     // CALCULATE PAGE HEIGHT
     // =====================================================
 
-    function calculatePageHeight(
-      itemCount,
-      isFinalDepartmentPage = true
-    ) {
+    function calculatePageHeight(itemCount, isFinalDepartmentPage = true) {
       /*
         Jodhpur Sweets       22
         Department           16
@@ -24292,8 +24254,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         Bottom Margin        10
       */
 
-      const CUTTING_SPACE =
-        isFinalDepartmentPage ? 28 : 0;
+      const CUTTING_SPACE = isFinalDepartmentPage ? 28 : 0;
 
       return (
         52 +
@@ -24316,27 +24277,21 @@ async function downloadDepartmentSlipPDF(req, res) {
 
     const firstDepartment = departments[0];
 
-    const firstPages =
-      splitItems(firstDepartment.items);
+    const firstPages = splitItems(firstDepartment.items);
 
-    const firstPageIsFinal =
-      firstPages.length === 1;
+    const firstPageIsFinal = firstPages.length === 1;
 
-    const firstPageHeight =
-      calculatePageHeight(
-        firstPages[0].length,
-        firstPageIsFinal
-      );
+    const firstPageHeight = calculatePageHeight(
+      firstPages[0].length,
+      firstPageIsFinal,
+    );
 
     // =====================================================
     // CREATE PDF
     // =====================================================
 
     const doc = new PDFDocument({
-      size: [
-        PAPER_WIDTH,
-        firstPageHeight,
-      ],
+      size: [PAPER_WIDTH, firstPageHeight],
 
       margins: {
         top: 6,
@@ -24352,22 +24307,15 @@ async function downloadDepartmentSlipPDF(req, res) {
     // REGISTER HINDI FONTS
     // =====================================================
 
-    doc.registerFont(
-      "Hindi",
-      HINDI_FONT_REGULAR
-    );
+    doc.registerFont("Hindi", HINDI_FONT_REGULAR);
 
-    doc.registerFont(
-      "Hindi-Bold",
-      HINDI_FONT_BOLD
-    );
+    doc.registerFont("Hindi-Bold", HINDI_FONT_BOLD);
 
     // =====================================================
     // PDF STREAM
     // =====================================================
 
-    const writeStream =
-      fs.createWriteStream(filePath);
+    const writeStream = fs.createWriteStream(filePath);
 
     doc.pipe(writeStream);
 
@@ -24375,10 +24323,7 @@ async function downloadDepartmentSlipPDF(req, res) {
     // DRAW HEADER
     // =====================================================
 
-    function drawHeader(
-      department,
-      isContinuation = false
-    ) {
+    function drawHeader(department, isContinuation = false) {
       // -----------------------------------------------
       // BRAND NAME - ENGLISH
       // -----------------------------------------------
@@ -24409,13 +24354,10 @@ async function downloadDepartmentSlipPDF(req, res) {
         .font("Helvetica")
         .fontSize(9)
         .fillColor("#000000")
-        .text(
-          department.department_name,
-          {
-            width: CONTENT_WIDTH,
-            align: "center",
-          }
-        );
+        .text(department.department_name, {
+          width: CONTENT_WIDTH,
+          align: "center",
+        });
 
       doc.moveDown(0.5);
 
@@ -24424,14 +24366,8 @@ async function downloadDepartmentSlipPDF(req, res) {
       // -----------------------------------------------
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          doc.y
-        )
-        .lineTo(
-          PAPER_WIDTH - SIDE_MARGIN,
-          doc.y
-        )
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
         .lineWidth(0.7)
         .stroke();
 
@@ -24441,25 +24377,17 @@ async function downloadDepartmentSlipPDF(req, res) {
       // ORDER + SHOP - ENGLISH
       // -----------------------------------------------
 
-      doc
-        .font("Helvetica")
-        .fontSize(7.5);
+      doc.font("Helvetica").fontSize(7.5);
 
-      const orderShopText =
-        `Order : ${orderDisplayId}    Shop : ${
-          order.shop_name || "-"
-        }`;
+      const orderShopText = `Order : ${orderDisplayId}    Shop : ${
+        order.shop_name || "-"
+      }`;
 
-      doc.text(
-        orderShopText,
-        SIDE_MARGIN,
-        doc.y,
-        {
-          width: CONTENT_WIDTH,
-          align: "left",
-          lineBreak: false,
-        }
-      );
+      doc.text(orderShopText, SIDE_MARGIN, doc.y, {
+        width: CONTENT_WIDTH,
+        align: "left",
+        lineBreak: false,
+      });
 
       doc.moveDown(0.2);
 
@@ -24470,15 +24398,13 @@ async function downloadDepartmentSlipPDF(req, res) {
       doc.text(
         `Date  : ${
           order.order_date
-            ? new Date(
-                order.order_date
-              ).toLocaleDateString("en-IN")
+            ? new Date(order.order_date).toLocaleDateString("en-IN")
             : "-"
         }`,
         {
           width: CONTENT_WIDTH,
           lineBreak: false,
-        }
+        },
       );
 
       doc.moveDown(0.35);
@@ -24488,14 +24414,8 @@ async function downloadDepartmentSlipPDF(req, res) {
       // -----------------------------------------------
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          doc.y
-        )
-        .lineTo(
-          PAPER_WIDTH - SIDE_MARGIN,
-          doc.y
-        )
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, doc.y)
         .lineWidth(0.7)
         .stroke();
 
@@ -24510,24 +24430,15 @@ async function downloadDepartmentSlipPDF(req, res) {
       const y = doc.y;
 
       // ENGLISH FONT
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor("#000000");
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
 
       // -----------------------------------------------
       // TOP LINE
       // -----------------------------------------------
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          y
-        )
-        .lineTo(
-          SIDE_MARGIN + TABLE_WIDTH,
-          y
-        )
+        .moveTo(SIDE_MARGIN, y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, y)
         .lineWidth(0.5)
         .stroke();
 
@@ -24535,45 +24446,28 @@ async function downloadDepartmentSlipPDF(req, res) {
       // CATEGORY
       // -----------------------------------------------
 
-      doc.text(
-        "CATEGORY",
-        SIDE_MARGIN,
-        y + 3,
-        {
-          width: CATEGORY_WIDTH,
-          align: "left",
-        }
-      );
+      doc.text("CATEGORY", SIDE_MARGIN, y + 3, {
+        width: CATEGORY_WIDTH,
+        align: "left",
+      });
 
       // -----------------------------------------------
       // SWEET
       // -----------------------------------------------
 
-      doc.text(
-        "SWEET",
-        SIDE_MARGIN + CATEGORY_WIDTH,
-        y + 3,
-        {
-          width: SWEET_WIDTH,
-          align: "left",
-        }
-      );
+      doc.text("SWEET", SIDE_MARGIN + CATEGORY_WIDTH, y + 3, {
+        width: SWEET_WIDTH,
+        align: "left",
+      });
 
       // -----------------------------------------------
       // QTY
       // -----------------------------------------------
 
-      doc.text(
-        "QTY",
-        SIDE_MARGIN +
-          CATEGORY_WIDTH +
-          SWEET_WIDTH,
-        y + 3,
-        {
-          width: QTY_WIDTH,
-          align: "center",
-        }
-      );
+      doc.text("QTY", SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH, y + 3, {
+        width: QTY_WIDTH,
+        align: "center",
+      });
 
       doc.y = y + ROW_HEIGHT;
 
@@ -24582,14 +24476,8 @@ async function downloadDepartmentSlipPDF(req, res) {
       // -----------------------------------------------
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          doc.y
-        )
-        .lineTo(
-          SIDE_MARGIN + TABLE_WIDTH,
-          doc.y
-        )
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
         .lineWidth(0.5)
         .stroke();
     }
@@ -24601,36 +24489,24 @@ async function downloadDepartmentSlipPDF(req, res) {
     function drawItem(item) {
       const y = doc.y;
 
-      const qty = Number(
-        item.quantity || 0
-      );
+      const qty = Number(item.quantity || 0);
 
       // ==========================================
       // CATEGORY - ENGLISH
       // ==========================================
 
-      doc
-        .font("Helvetica")
-        .fontSize(7)
-        .fillColor("#000000");
+      doc.font("Helvetica").fontSize(7).fillColor("#000000");
 
-      doc.text(
-        item.category_name || "-",
-        SIDE_MARGIN,
-        y + 3,
-        {
-          width: CATEGORY_WIDTH - 2,
-          ellipsis: true,
-        }
-      );
+      doc.text(item.category_name || "-", SIDE_MARGIN, y + 3, {
+        width: CATEGORY_WIDTH - 2,
+        ellipsis: true,
+      });
 
       // ==========================================
       // SWEET NAME - HINDI
       // ==========================================
 
-      doc
-        .font("Hindi")
-        .fontSize(7);
+      doc.font("Hindi").fontSize(7);
 
       doc.text(
         item.hindi_sweets_name || "-",
@@ -24639,7 +24515,7 @@ async function downloadDepartmentSlipPDF(req, res) {
         {
           width: SWEET_WIDTH - 2,
           ellipsis: true,
-        }
+        },
       );
 
       // ==========================================
@@ -24647,46 +24523,32 @@ async function downloadDepartmentSlipPDF(req, res) {
       // ==========================================
 
       const quantityText =
-        item.unit &&
-        item.unit !== "-"
-          ? `${qty} ${String(
-              item.unit
-            ).toUpperCase()}`
+        item.unit && item.unit !== "-"
+          ? `${qty} ${String(item.unit).toUpperCase()}`
           : `${qty}`;
 
-      doc
-        .font("Helvetica")
-        .fontSize(7);
+      doc.font("Helvetica").fontSize(7);
 
       doc.text(
         quantityText,
-        SIDE_MARGIN +
-          CATEGORY_WIDTH +
-          SWEET_WIDTH,
+        SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
         y + 3,
         {
           width: QTY_WIDTH,
           align: "center",
           ellipsis: true,
-        }
+        },
       );
 
-      doc.y =
-        y + ROW_HEIGHT;
+      doc.y = y + ROW_HEIGHT;
 
       // ==========================================
       // ROW SEPARATOR
       // ==========================================
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          doc.y
-        )
-        .lineTo(
-          SIDE_MARGIN + TABLE_WIDTH,
-          doc.y
-        )
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
         .lineWidth(0.25)
         .stroke();
     }
@@ -24699,46 +24561,28 @@ async function downloadDepartmentSlipPDF(req, res) {
       const y = doc.y;
 
       // ENGLISH
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor("#000000");
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
 
-      doc.text(
-        "TOTAL",
-        SIDE_MARGIN,
-        y + 4,
-        {
-          width:
-            CATEGORY_WIDTH +
-            SWEET_WIDTH,
-          align: "right",
-        }
-      );
+      doc.text("TOTAL", SIDE_MARGIN, y + 4, {
+        width: CATEGORY_WIDTH + SWEET_WIDTH,
+        align: "right",
+      });
 
       doc.text(
         String(total),
-        SIDE_MARGIN +
-          CATEGORY_WIDTH +
-          SWEET_WIDTH,
+        SIDE_MARGIN + CATEGORY_WIDTH + SWEET_WIDTH,
         y + 4,
         {
           width: QTY_WIDTH,
           align: "center",
-        }
+        },
       );
 
       doc.y = y + 20;
 
       doc
-        .moveTo(
-          SIDE_MARGIN,
-          doc.y
-        )
-        .lineTo(
-          SIDE_MARGIN + TABLE_WIDTH,
-          doc.y
-        )
+        .moveTo(SIDE_MARGIN, doc.y)
+        .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
         .lineWidth(0.7)
         .stroke();
     }
@@ -24781,14 +24625,8 @@ async function downloadDepartmentSlipPDF(req, res) {
         .dash(3, {
           space: 3,
         })
-        .moveTo(
-          SIDE_MARGIN,
-          y
-        )
-        .lineTo(
-          PAPER_WIDTH - SIDE_MARGIN,
-          y
-        )
+        .moveTo(SIDE_MARGIN, y)
+        .lineTo(PAPER_WIDTH - SIDE_MARGIN, y)
         .lineWidth(0.8)
         .stroke()
         .undash()
@@ -24798,54 +24636,30 @@ async function downloadDepartmentSlipPDF(req, res) {
       // SCISSORS ICON - RIGHT SIDE
       // -----------------------------------------------
 
-      const scissorsX =
-        PAPER_WIDTH -
-        SIDE_MARGIN -
-        12;
+      const scissorsX = PAPER_WIDTH - SIDE_MARGIN - 12;
 
-      const scissorsY =
-        y - 1;
+      const scissorsY = y - 1;
 
       doc
         .save()
         .lineWidth(0.8)
 
         // Upper handle
-        .circle(
-          scissorsX - 4,
-          scissorsY - 2,
-          2.5
-        )
+        .circle(scissorsX - 4, scissorsY - 2, 2.5)
         .stroke()
 
         // Lower handle
-        .circle(
-          scissorsX - 4,
-          scissorsY + 5,
-          2.5
-        )
+        .circle(scissorsX - 4, scissorsY + 5, 2.5)
         .stroke()
 
         // Upper blade
-        .moveTo(
-          scissorsX - 2,
-          scissorsY
-        )
-        .lineTo(
-          scissorsX + 7,
-          scissorsY + 7
-        )
+        .moveTo(scissorsX - 2, scissorsY)
+        .lineTo(scissorsX + 7, scissorsY + 7)
         .stroke()
 
         // Lower blade
-        .moveTo(
-          scissorsX - 2,
-          scissorsY + 3
-        )
-        .lineTo(
-          scissorsX + 7,
-          scissorsY - 4
-        )
+        .moveTo(scissorsX - 2, scissorsY + 3)
+        .lineTo(scissorsX + 7, scissorsY - 4)
         .stroke()
 
         .restore();
@@ -24857,149 +24671,108 @@ async function downloadDepartmentSlipPDF(req, res) {
     // PROCESS DEPARTMENTS
     // =====================================================
 
-    departments.forEach(
-      (department, departmentIndex) => {
-        const departmentPages =
-          splitItems(
-            department.items
+    departments.forEach((department, departmentIndex) => {
+      const departmentPages = splitItems(department.items);
+
+      departmentPages.forEach((pageItems, pageIndex) => {
+        // -----------------------------------------
+        // FINAL PAGE CHECK
+        // -----------------------------------------
+
+        const isFinalDepartmentPage = pageIndex === departmentPages.length - 1;
+
+        // -----------------------------------------
+        // NEW PAGE
+        // -----------------------------------------
+
+        if (departmentIndex !== 0 || pageIndex !== 0) {
+          const pageHeight = calculatePageHeight(
+            pageItems.length,
+            isFinalDepartmentPage,
           );
 
-        departmentPages.forEach(
-          (pageItems, pageIndex) => {
-            // -----------------------------------------
-            // FINAL PAGE CHECK
-            // -----------------------------------------
+          doc.addPage({
+            size: [PAPER_WIDTH, pageHeight],
 
-            const isFinalDepartmentPage =
-              pageIndex ===
-              departmentPages.length - 1;
+            margins: {
+              top: 6,
+              bottom: 6,
+              left: SIDE_MARGIN,
+              right: SIDE_MARGIN,
+            },
+          });
+        }
 
-            // -----------------------------------------
-            // NEW PAGE
-            // -----------------------------------------
+        // -----------------------------------------
+        // HEADER
+        // -----------------------------------------
 
-            if (
-              departmentIndex !== 0 ||
-              pageIndex !== 0
-            ) {
-              const pageHeight =
-                calculatePageHeight(
-                  pageItems.length,
-                  isFinalDepartmentPage
-                );
+        drawHeader(department, pageIndex > 0);
 
-              doc.addPage({
-                size: [
-                  PAPER_WIDTH,
-                  pageHeight,
-                ],
+        // -----------------------------------------
+        // TABLE HEADER
+        // -----------------------------------------
 
-                margins: {
-                  top: 6,
-                  bottom: 6,
-                  left: SIDE_MARGIN,
-                  right: SIDE_MARGIN,
-                },
-              });
-            }
+        drawTableHeader();
 
-            // -----------------------------------------
-            // HEADER
-            // -----------------------------------------
+        // -----------------------------------------
+        // ITEMS
+        // -----------------------------------------
 
-            drawHeader(
-              department,
-              pageIndex > 0
-            );
+        let pageTotal = 0;
 
-            // -----------------------------------------
-            // TABLE HEADER
-            // -----------------------------------------
+        pageItems.forEach((item) => {
+          pageTotal += Number(item.quantity || 0);
 
-            drawTableHeader();
+          drawItem(item);
+        });
 
-            // -----------------------------------------
-            // ITEMS
-            // -----------------------------------------
+        // -----------------------------------------
+        // TOTAL
+        // -----------------------------------------
 
-            let pageTotal = 0;
+        if (isFinalDepartmentPage) {
+          const departmentTotal = department.items.reduce(
+            (sum, item) => sum + Number(item.quantity || 0),
+            0,
+          );
 
-            pageItems.forEach(
-              (item) => {
-                pageTotal += Number(
-                  item.quantity || 0
-                );
+          drawTotal(departmentTotal);
+        } else {
+          const y = doc.y;
 
-                drawItem(item);
-              }
-            );
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(7.5)
+            .text(`PAGE TOTAL: ${pageTotal}`, SIDE_MARGIN, y + 4, {
+              width: TABLE_WIDTH,
+              align: "right",
+            });
 
-            // -----------------------------------------
-            // TOTAL
-            // -----------------------------------------
+          doc.y = y + 20;
 
-            if (isFinalDepartmentPage) {
-              const departmentTotal =
-                department.items.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(
-                      item.quantity || 0
-                    ),
-                  0
-                );
+          doc
+            .moveTo(SIDE_MARGIN, doc.y)
+            .lineTo(SIDE_MARGIN + TABLE_WIDTH, doc.y)
+            .lineWidth(0.5)
+            .stroke();
+        }
 
-              drawTotal(
-                departmentTotal
-              );
-            } else {
-              const y = doc.y;
+        // -----------------------------------------
+        // FOOTER
+        // -----------------------------------------
 
-              doc
-                .font("Helvetica-Bold")
-                .fontSize(7.5)
-                .text(
-                  `PAGE TOTAL: ${pageTotal}`,
-                  SIDE_MARGIN,
-                  y + 4,
-                  {
-                    width: TABLE_WIDTH,
-                    align: "right",
-                  }
-                );
+        drawFooter();
 
-              doc.y = y + 20;
+        // -----------------------------------------
+        // CUTTING LINE
+        // -----------------------------------------
 
-              doc
-                .moveTo(
-                  SIDE_MARGIN,
-                  doc.y
-                )
-                .lineTo(
-                  SIDE_MARGIN + TABLE_WIDTH,
-                  doc.y
-                )
-                .lineWidth(0.5)
-                .stroke();
-            }
-
-            // -----------------------------------------
-            // FOOTER
-            // -----------------------------------------
-
-            drawFooter();
-
-            // -----------------------------------------
-            // CUTTING LINE
-            // -----------------------------------------
-
-            if (isFinalDepartmentPage) {
-              drawCuttingLine();
-            }
-          }
-        );
-      }
-    );
+        if (isFinalDepartmentPage) {
+          drawCuttingLine();
+        }
+      });
+    });
 
     // =====================================================
     // END PDF
@@ -25011,56 +24784,30 @@ async function downloadDepartmentSlipPDF(req, res) {
     // SEND RESPONSE AFTER PDF CREATED
     // =====================================================
 
-    writeStream.on(
-      "finish",
-      () => {
-        const fileUrl =
-          `/uploads/DepartmentSlips/${fileName}`;
+    writeStream.on("finish", () => {
+      const fileUrl = `/uploads/DepartmentSlips/${fileName}`;
 
-        const serverUrl =
-          "https://api.joswee.cloud";
+      const serverUrl = "https://api.joswee.cloud";
 
-        return libFunc.sendResponse(
-          res,
-          {
-            status: 0,
-            msg: "Department slip generated successfully",
-            filePath:
-              serverUrl + fileUrl,
-          }
-        );
+      return libFunc.sendResponse(res, {
+        status: 0,
+        msg: "Department slip generated successfully",
+        filePath: serverUrl + fileUrl,
+      });
+    });
+
+    writeStream.on("error", (error) => {
+      console.log("Department PDF write error:", error);
+
+      if (!res.headersSent) {
+        return res.status(500).send("Error writing department slip");
       }
-    );
-
-    writeStream.on(
-      "error",
-      (error) => {
-        console.log(
-          "Department PDF write error:",
-          error
-        );
-
-        if (!res.headersSent) {
-          return res
-            .status(500)
-            .send(
-              "Error writing department slip"
-            );
-        }
-      }
-    );
+    });
   } catch (error) {
-    console.log(
-      "downloadDepartmentSlipPDF error:",
-      error
-    );
+    console.log("downloadDepartmentSlipPDF error:", error);
 
     if (!res.headersSent) {
-      return res
-        .status(500)
-        .send(
-          "Error generating department slip"
-        );
+      return res.status(500).send("Error generating department slip");
     }
   }
 }

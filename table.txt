@@ -428,3 +428,78 @@ ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);
 ALTER TABLE sms.inventory
 ADD COLUMN IF NOT EXISTS unit TEXT,
 ADD COLUMN IF NOT EXISTS basic_quantity NUMERIC(12,3);
+
+
+
+
+BEGIN;
+
+TRUNCATE TABLE
+    sms.audit_logs,
+    sms.notifications,
+    sms.expiry_logs,
+    sms.returns,
+    sms.chalans,
+    sms.order_items,
+    sms.orders,
+    sms.counter_requests,
+    sms.stock_transactions,
+    sms.inventory,
+    sms.counter_sweets,
+    sms.sweets,
+    sms.categories,
+    sms.departments,
+    sms.users,
+    sms.suppliers,
+    sms.counters,
+    sms.shops
+RESTART IDENTITY CASCADE;
+
+COMMIT;
+
+
+INSERT INTO sms.users (
+    row_id,
+    name,
+    email,
+    phone,
+    password,
+    role
+) VALUES (
+    '1790589000776_sJMH',
+    'Mehul vyas',
+    'mvyas@jodhpursweets.com',
+    '9828243452',
+    '123456',
+    'ADMIN'
+);
+
+
+
+INSERT INTO sms.users (
+    row_id,
+    name,
+    email,
+    phone,
+    password,
+    role,
+    counter_id,
+    shop_id,
+    supplier_id
+) VALUES (
+    '1790589000776_sJMH',
+    'Super Admin',
+    'admin@gmail.com',
+    '9999999999',
+    '123456',
+    'ADMIN',
+    NULL,
+    NULL,
+    NULL
+);
+
+
+Mehul vyas
+9828243452
+
+mvyas@jodhpursweets.com

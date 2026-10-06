@@ -2771,6 +2771,11 @@ async function getStockHistory(req, res) {
 
         st.sweet_id,
         s.sweet_name,
+        CONCAT(
+          COALESCE(st.basic_quantity, 0)::numeric::integer,
+          ' ',
+          COALESCE(s.unit, '')
+        ) AS basic_quantity_with_unit,
 
         COALESCE(latest_order_item.order_unit, s.unit) AS unit,
 
@@ -2919,6 +2924,11 @@ async function getInventory(req, res) {
         sh.shop_name,
         i.sweet_id,
         s.sweet_name,
+        CONCAT(
+          COALESCE(i.basic_quantity, 0)::numeric::integer,
+          ' ',
+          COALESCE(s.unit, '')
+        ) AS basic_quantity_with_unit,
 
         /* Counter ne jis unit me order/request kiya tha */
         COALESCE(latest_order_item.order_unit, s.unit) AS unit,
@@ -4675,7 +4685,14 @@ async function getShopOrders(req, res) {
         -- =====================================
 
         s.sweet_name,
-        oi.order_unit AS unit
+        oi.order_unit AS unit,
+
+/* ADDITIONAL: BASIC QUANTITY + SWEET UNIT */
+CONCAT(
+  COALESCE(oi.basic_quantity, 0)::numeric::integer,
+  ' ',
+  COALESCE(s.unit, '')
+) AS basic_quantity_with_unit
         
 
       FROM ${schema}.orders o
@@ -4791,6 +4808,7 @@ async function getShopOrders(req, res) {
 
           // Original requested quantity
           quantity: requestedQuantity,
+          basic_quantity_with_unit: row.basic_quantity_with_unit,
 
           // Current order supplied quantity
           supplied_quantity: suppliedQuantity,
@@ -6070,6 +6088,15 @@ async function getCounterRequests(req, res) {
 
         /* NEW: BASIC QUANTITY */
         r.basic_quantity::numeric AS basic_quantity,
+
+
+        r.basic_quantity::numeric AS basic_quantity,
+
+CONCAT(
+  r.basic_quantity::numeric::integer,
+  ' ',
+  COALESCE(s.unit, '')
+) AS basic_quantity_with_unit,
 
         r.status AS shop_status,
 
@@ -8119,7 +8146,12 @@ async function getAllChalans(req, res) {
         -- Sweet
         s.sweet_name,
         s.hindi_sweets_name,
-        oi.order_unit as unit
+        oi.order_unit as unit,
+        CONCAT(
+  COALESCE(oi.basic_quantity, 0)::numeric::integer,
+  ' ',
+  COALESCE(s.unit, '')
+) AS basic_quantity_with_unit
 
       FROM ${chalanTable} ch
 
@@ -8200,6 +8232,7 @@ async function getAllChalans(req, res) {
           requested_quantity: Number(row.requested_quantity || 0),
 
           supplied_quantity: Number(row.supplied_quantity || 0),
+          basic_quantity_with_unit: row.basic_quantity_with_unit,
 
           item_status: row.item_status || "PENDING",
 
@@ -8366,6 +8399,7 @@ async function getSupplierOrders(req, res) {
         oi.item_status,
         oi.supplied_quantity,
         oi.reject_reason,
+        oi.basic_quantity,
 
         -- =========================
         -- REORDER FIELDS
@@ -8388,6 +8422,12 @@ async function getSupplierOrders(req, res) {
         s.sweet_name,
         s.hindi_sweets_name,
         oi.order_unit as unit,
+
+        CONCAT(
+  COALESCE(oi.basic_quantity, 0)::numeric::integer,
+  ' ',
+  COALESCE(s.unit, '')
+) AS basic_quantity_with_unit,
 
         -- =========================
         -- REORDER SUPPLIED QUANTITY
@@ -8587,6 +8627,7 @@ async function getSupplierOrders(req, res) {
 
           // NEW: BASIC QUANTITY
           basic_quantity: Number(row.basic_quantity || 0),
+          basic_quantity_with_unit: row.basic_quantity_with_unit,
 
           // =========================
           // QUANTITY
@@ -16053,6 +16094,17 @@ async function getAllCounterRequestsByShop(req, res) {
         -- =====================================
 
         r.quantity AS requested_quantity,
+
+        r.quantity AS requested_quantity,
+
+/* ADDITIONAL: BASIC QUANTITY + SWEET UNIT */
+CONCAT(
+  COALESCE(r.basic_quantity, 0)::numeric::integer,
+  ' ',
+  COALESCE(s.unit, '')
+) AS basic_quantity_with_unit,
+
+r.status AS request_status,
 
         r.status AS request_status,
 

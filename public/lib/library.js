@@ -347,6 +347,37 @@ async function createShop(req, res) {
         });
       }
 
+
+            // Check duplicate phone during update
+      const existingPhone = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE phone = '${cleanPhone}'
+        AND shop_id != '${row_id}'
+      `);
+
+      if (existingPhone.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      // Check duplicate email during update
+      const existingEmail = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE LOWER(email) = LOWER('${cleanEmail}')
+        AND shop_id != '${row_id}'
+      `);
+
+      if (existingEmail.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
+        });
+      }
+
       // ✅ CUSTOM UPDATE QUERY (no addData)
       await db_query.customQuery(`
     UPDATE ${shopTable}
@@ -693,6 +724,37 @@ async function createCounter(req, res) {
         });
       }
 
+
+            // Check duplicate phone during update
+      const existingPhone = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE phone = '${phone.trim()}'
+        AND counter_id != '${row_id}'
+      `);
+
+      if (existingPhone.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      // Check duplicate email during update
+      const existingEmail = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE LOWER(email) = LOWER('${email.trim()}')
+        AND counter_id != '${row_id}'
+      `);
+
+      if (existingEmail.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
+        });
+      }
+
       // ✅ CUSTOM UPDATE QUERY (no addData)
       await db_query.customQuery(`
     UPDATE ${counterTable}
@@ -859,6 +921,36 @@ async function createSupplier(req, res) {
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Supplier not found",
+        });
+      }
+
+            // Check duplicate phone during update
+      const existingPhone = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE phone = '${phone.trim()}'
+        AND supplier_id != '${row_id}'
+      `);
+
+      if (existingPhone.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Phone already exists",
+        });
+      }
+
+      // Check duplicate email during update
+      const existingEmail = await db_query.customQuery(`
+        SELECT row_id FROM ${userTable}
+        WHERE LOWER(email) = LOWER('${email.trim()}')
+        AND supplier_id != '${row_id}'
+      `);
+
+      if (existingEmail.data?.length > 0) {
+        await connect_db.query("ROLLBACK");
+        return libFunc.sendResponse(res, {
+          status: 1,
+          msg: "Email already exists",
         });
       }
 
@@ -2184,6 +2276,7 @@ async function fetchAllSweets(req, res) {
 
         -- Basic Unit
         s.unit,
+        s.hsn_code,
 
         -- Basic Price
         s.price,

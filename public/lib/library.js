@@ -926,9 +926,15 @@ async function createSupplier(req, res) {
 
             // Check duplicate phone during update
       const existingPhone = await db_query.customQuery(`
+        SELECT row_id FROM ${supplierTable}
+        WHERE phone = '${phone.trim()}'
+        AND row_id != '${row_id}'
+
+        UNION
+
         SELECT row_id FROM ${userTable}
         WHERE phone = '${phone.trim()}'
-        AND supplier_id != '${row_id}'
+        AND (supplier_id IS NULL OR supplier_id != '${row_id}')
       `);
 
       if (existingPhone.data?.length > 0) {
@@ -941,9 +947,15 @@ async function createSupplier(req, res) {
 
       // Check duplicate email during update
       const existingEmail = await db_query.customQuery(`
+        SELECT row_id FROM ${supplierTable}
+        WHERE LOWER(email) = LOWER('${email.trim()}')
+        AND row_id != '${row_id}'
+
+        UNION
+
         SELECT row_id FROM ${userTable}
         WHERE LOWER(email) = LOWER('${email.trim()}')
-        AND supplier_id != '${row_id}'
+        AND (supplier_id IS NULL OR supplier_id != '${row_id}')
       `);
 
       if (existingEmail.data?.length > 0) {
@@ -953,6 +965,8 @@ async function createSupplier(req, res) {
           msg: "Email already exists",
         });
       }
+
+       
 
       // ✅ CUSTOM UPDATE QUERY (no addData)
       await db_query.customQuery(`

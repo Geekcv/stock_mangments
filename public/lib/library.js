@@ -347,8 +347,7 @@ async function createShop(req, res) {
         });
       }
 
-
-            // Check duplicate phone during update
+      // Check duplicate phone during update
       const existingPhone = await db_query.customQuery(`
         SELECT row_id FROM ${userTable}
         WHERE phone = '${cleanPhone}'
@@ -724,8 +723,7 @@ async function createCounter(req, res) {
         });
       }
 
-
-            // Check duplicate phone during update
+      // Check duplicate phone during update
       const existingPhone = await db_query.customQuery(`
         SELECT row_id FROM ${userTable}
         WHERE phone = '${phone.trim()}'
@@ -878,14 +876,17 @@ async function createCounter(req, res) {
 }
 
 async function createSupplier(req, res) {
+  const debugId = `SUPPLIER_${Date.now()}`;
+  let transactionStarted = false;
+
   try {
-    console.log("request", req.data);
+    console.log(`\n========== ${debugId} START ==========`);
 
     const supplierTable = schema + ".suppliers";
     const userTable = schema + ".users";
 
     const {
-      row_id, // ✅ NEW
+      row_id,
       supplier_name,
       phone,
       email,
@@ -893,38 +894,75 @@ async function createSupplier(req, res) {
       password,
     } = req.data || {};
 
-    // Validation
+    // 1. REQUEST DEBUG
+    console.log(`[${debugId}] Request received`, {
+      row_id,
+      supplier_name,
+      phone,
+      email,
+      address,
+      passwordProvided: !!password,
+    });
+
+    console.log(`[${debugId}] Tables`, {
+      supplierTable,
+      userTable,
+    });
+
+    // 2. VALIDATION
     if (!supplier_name || !email || !phone) {
+      console.log(`[${debugId}] VALIDATION FAILED: Required fields missing`);
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Required fields missing",
       });
     }
 
-    // ================================
-    // BEGIN TRANSACTION
-    // ================================
+    console.log(`[${debugId}] Validation passed`);
+
+    // 3. BEGIN TRANSACTION
+    console.log(`[${debugId}] Starting transaction`);
+
     await connect_db.query("BEGIN TRANSACTION");
+    transactionStarted = true;
+
+    console.log(`[${debugId}] Transaction started successfully`);
 
     // =====================================
-    // 🔵 UPDATE FLOW (CUSTOM QUERY ONLY)
+    // UPDATE FLOW
     // =====================================
     if (row_id) {
-      // check supplier exists
+      console.log(`[${debugId}] UPDATE FLOW STARTED`, { row_id });
+
+      // 4. CHECK SUPPLIER EXISTS
+      console.log(`[${debugId}] Checking supplier existence`);
+
       const supplierCheck = await db_query.customQuery(`
-    SELECT row_id FROM ${supplierTable}
-    WHERE row_id = '${row_id}'
-  `);
+        SELECT row_id FROM ${supplierTable}
+        WHERE row_id = '${row_id}'
+      `);
+
+      console.log(`[${debugId}] Supplier check result`, {
+        status: supplierCheck.status,
+        count: supplierCheck.data?.length || 0,
+      });
 
       if (!supplierCheck.data?.length) {
+        console.log(`[${debugId}] Supplier not found`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Supplier not found",
         });
       }
 
-            // Check duplicate phone during update
+      // 5. CHECK DUPLICATE PHONE
+      console.log(`[${debugId}] Checking duplicate phone`);
+
       const existingPhone = await db_query.customQuery(`
         SELECT row_id FROM ${supplierTable}
         WHERE phone = '${phone.trim()}'
@@ -937,15 +975,29 @@ async function createSupplier(req, res) {
         AND (supplier_id IS NULL OR supplier_id != '${row_id}')
       `);
 
+      console.log(`[${debugId}] Phone duplicate check result`, {
+        status: existingPhone.status,
+        count: existingPhone.data?.length || 0,
+        matches: existingPhone.data?.map((item) => item.row_id),
+      });
+
       if (existingPhone.data?.length > 0) {
+        console.log(`[${debugId}] DUPLICATE PHONE FOUND`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
         });
       }
 
-      // Check duplicate email during update
+      console.log(`[${debugId}] Phone is available`);
+
+      // 6. CHECK DUPLICATE EMAIL
+      console.log(`[${debugId}] Checking duplicate email`);
+
       const existingEmail = await db_query.customQuery(`
         SELECT row_id FROM ${supplierTable}
         WHERE LOWER(email) = LOWER('${email.trim()}')
@@ -958,42 +1010,73 @@ async function createSupplier(req, res) {
         AND (supplier_id IS NULL OR supplier_id != '${row_id}')
       `);
 
+      console.log(`[${debugId}] Email duplicate check result`, {
+        status: existingEmail.status,
+        count: existingEmail.data?.length || 0,
+        matches: existingEmail.data?.map((item) => item.row_id),
+      });
+
       if (existingEmail.data?.length > 0) {
+        console.log(`[${debugId}] DUPLICATE EMAIL FOUND`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
         });
       }
 
-       
+      console.log(`[${debugId}] Email is available`);
 
-      // ✅ CUSTOM UPDATE QUERY (no addData)
-      await db_query.customQuery(`
-    UPDATE ${supplierTable}
-    SET 
-      supplier_name = '${supplier_name.trim().replaceAll("'", "`")}',
-      phone = '${phone.trim()}',
-      email = '${email.trim()}',
-      address = '${address.trim()}',
-      up_on = now()
-    WHERE row_id = '${row_id}'
-  `);
+      // 7. UPDATE SUPPLIER
+      console.log(`[${debugId}] Updating supplier table`);
 
-      // update supplier user
-      await db_query.customQuery(`
-    UPDATE ${userTable}
-    SET 
-      name = '${supplier_name}',
-      email = '${email}',
-      phone = '${phone}',
-      ${password ? `password = '${password}',` : ""}
-      up_on = now()
-    WHERE supplier_id = '${row_id}'
-    AND role = 'SUPPLIER'
-  `);
+      const supplierUpdate = await db_query.customQuery(`
+        UPDATE ${supplierTable}
+        SET
+          supplier_name = '${supplier_name.trim().replaceAll("'", "`")}',
+          phone = '${phone.trim()}',
+          email = '${email.trim()}',
+          address = '${address.trim()}',
+          up_on = now()
+        WHERE row_id = '${row_id}'
+      `);
+
+      console.log(`[${debugId}] Supplier update query completed`, {
+        status: supplierUpdate.status,
+        data: supplierUpdate.data,
+      });
+
+      // 8. UPDATE SUPPLIER USER
+      console.log(`[${debugId}] Updating supplier user`);
+
+      const userUpdate = await db_query.customQuery(`
+        UPDATE ${userTable}
+        SET
+          name = '${supplier_name}',
+          email = '${email}',
+          phone = '${phone}',
+          ${password ? `password = '${password}',` : ""}
+          up_on = now()
+        WHERE supplier_id = '${row_id}'
+        AND role = 'SUPPLIER'
+      `);
+
+      console.log(`[${debugId}] Supplier user update query completed`, {
+        status: userUpdate.status,
+        data: userUpdate.data,
+      });
+
+      // 9. COMMIT
+      console.log(`[${debugId}] Committing update transaction`);
 
       await connect_db.query("COMMIT");
+      transactionStarted = false;
+
+      console.log(`[${debugId}] UPDATE SUCCESS`);
+      console.log(`========== ${debugId} END ==========\n`);
 
       return libFunc.sendResponse(res, {
         status: 0,
@@ -1002,29 +1085,50 @@ async function createSupplier(req, res) {
     }
 
     // =====================================
-    // 🟢 EXISTING CREATE FLOW (UNCHANGED)
+    // CREATE FLOW
     // =====================================
+    console.log(`[${debugId}] CREATE FLOW STARTED`);
 
+    // 10. PASSWORD VALIDATION
     if (!password) {
+      console.log(`[${debugId}] CREATE FAILED: Password missing`);
+
       await connect_db.query("ROLLBACK");
+      transactionStarted = false;
+
       return libFunc.sendResponse(res, {
         status: 1,
         msg: "Password is required",
       });
     }
 
-    // Duplicate check
+    // 11. CHECK DUPLICATE PHONE / EMAIL IN USERS
+    console.log(`[${debugId}] Checking existing user phone/email`);
+
     const existingUser = await db_query.customQuery(`
       SELECT phone, email FROM ${userTable}
       WHERE phone = '${phone.trim()}'
       OR email = '${email.trim()}'
     `);
 
+    console.log(`[${debugId}] Existing user check result`, {
+      status: existingUser.status,
+      count: existingUser.data?.length || 0,
+      matches: existingUser.data?.map((item) => ({
+        phone: item.phone,
+        email: item.email,
+      })),
+    });
+
     if (existingUser.data && existingUser.data.length > 0) {
       const user = existingUser.data[0];
 
       if (user.phone === phone.trim()) {
+        console.log(`[${debugId}] CREATE FAILED: Phone already exists`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Phone already exists",
@@ -1032,7 +1136,11 @@ async function createSupplier(req, res) {
       }
 
       if (user.email === email.trim()) {
+        console.log(`[${debugId}] CREATE FAILED: Email already exists`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, {
           status: 1,
           msg: "Email already exists",
@@ -1040,9 +1148,14 @@ async function createSupplier(req, res) {
       }
     }
 
+    // 12. GENERATE SUPPLIER ID
     const supplierRowId = libFunc.randomid();
 
-    // Insert Supplier
+    console.log(`[${debugId}] Generated supplier ID`, {
+      supplierRowId,
+    });
+
+    // 13. INSERT SUPPLIER
     const supplierColumns = {
       row_id: supplierRowId,
       supplier_name: supplier_name.trim().replaceAll("'", "`"),
@@ -1051,10 +1164,20 @@ async function createSupplier(req, res) {
       address: address.trim(),
     };
 
+    console.log(`[${debugId}] Inserting supplier record`, {
+      ...supplierColumns,
+    });
+
     const supplierResp = await db_query.addData(supplierTable, supplierColumns);
 
+    console.log(`[${debugId}] Supplier insert response`, {
+      status: supplierResp.status,
+      msg: supplierResp.msg,
+      data: supplierResp.data,
+    });
+
     if (supplierResp.status === 0) {
-      // Insert User
+      // 14. INSERT SUPPLIER USER
       const userColumns = {
         row_id: libFunc.randomid(),
         name: supplier_name.trim(),
@@ -1065,10 +1188,36 @@ async function createSupplier(req, res) {
         supplier_id: supplierRowId,
       };
 
+      // Do not log password or userColumns directly.
+      console.log(`[${debugId}] Inserting supplier user`, {
+        row_id: userColumns.row_id,
+        name: userColumns.name,
+        email: userColumns.email,
+        phone: userColumns.phone,
+        role: userColumns.role,
+        supplier_id: userColumns.supplier_id,
+      });
+
       const userResp = await db_query.addData(userTable, userColumns);
 
+      console.log(`[${debugId}] Supplier user insert response`, {
+        status: userResp.status,
+        msg: userResp.msg,
+        data: userResp.data,
+      });
+
       if (userResp.status === 0) {
+        // 15. COMMIT
+        console.log(`[${debugId}] Committing create transaction`);
+
         await connect_db.query("COMMIT");
+        transactionStarted = false;
+
+        console.log(`[${debugId}] CREATE SUCCESS`, {
+          supplier_id: supplierRowId,
+        });
+
+        console.log(`========== ${debugId} END ==========\n`);
 
         return libFunc.sendResponse(res, {
           status: 0,
@@ -1078,17 +1227,47 @@ async function createSupplier(req, res) {
           },
         });
       } else {
+        console.log(`[${debugId}] Supplier user insert failed; rolling back`);
+
         await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
         return libFunc.sendResponse(res, userResp);
       }
     } else {
+      console.log(`[${debugId}] Supplier insert failed; rolling back`);
+
       await connect_db.query("ROLLBACK");
+      transactionStarted = false;
+
       return libFunc.sendResponse(res, supplierResp);
     }
   } catch (error) {
-    console.log("createSupplier error:", error);
+    console.error(`\n========== ${debugId} ERROR ==========`);
+    console.error(`[${debugId}] Error name:`, error.name);
+    console.error(`[${debugId}] Error code:`, error.code);
+    console.error(`[${debugId}] Error message:`, error.message);
+    console.error(`[${debugId}] Error detail:`, error.detail);
+    console.error(`[${debugId}] Error constraint:`, error.constraint);
+    console.error(`[${debugId}] Error stack:`, error.stack);
 
-    await connect_db.query("ROLLBACK");
+    if (transactionStarted) {
+      try {
+        console.log(`[${debugId}] Rolling back transaction`);
+
+        await connect_db.query("ROLLBACK");
+        transactionStarted = false;
+
+        console.log(`[${debugId}] Rollback successful`);
+      } catch (rollbackError) {
+        console.error(`[${debugId}] Rollback failed`, {
+          message: rollbackError.message,
+          code: rollbackError.code,
+        });
+      }
+    }
+
+    console.error(`========== ${debugId} END WITH ERROR ==========\n`);
 
     return libFunc.sendResponse(res, {
       status: 1,
@@ -18336,9 +18515,7 @@ async function updateOrderItemsBySupplier(req, res) {
       // DUPLICATE ITEM CHECK
       // ===================================================
 
-      const itemIds = items
-        .map((item) => item.order_item_id)
-        .filter(Boolean);
+      const itemIds = items.map((item) => item.order_item_id).filter(Boolean);
 
       const uniqueItemIds = [...new Set(itemIds)];
 
@@ -18547,7 +18724,9 @@ async function updateOrderItemsBySupplier(req, res) {
         // CALCULATE BASIC QUANTITY
         // ===============================================
 
-        const orderUnit = String(orderItem.order_unit || "").trim().toUpperCase();
+        const orderUnit = String(orderItem.order_unit || "")
+          .trim()
+          .toUpperCase();
 
         const bulkConversion = Number(orderItem.bulk_conversion || 0);
 
@@ -18623,7 +18802,6 @@ async function updateOrderItemsBySupplier(req, res) {
           root_order_id: rootOrderId,
         },
       });
-
     } catch (transactionError) {
       try {
         await connect_db.query("ROLLBACK");
@@ -18633,7 +18811,6 @@ async function updateOrderItemsBySupplier(req, res) {
 
       throw transactionError;
     }
-
   } catch (error) {
     console.log("updateOrderItemsBySupplier error:", error);
 
